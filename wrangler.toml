@@ -1,0 +1,9 @@
+name = "sub-api-generator"
+main = "_worker.js"
+compatibility_date = "2026-06-15"
+keep_vars = true
+
+[[kv_namespaces]]
+binding = "KV"
+id = "2bd991e430a34cc597cc437d50ec1eb5"
+preview_id = "59c0f629c30b44059a42b12417823d8e"
