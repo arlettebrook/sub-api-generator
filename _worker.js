@@ -547,7 +547,7 @@ async function loginPage(message = "") {
     </form>
 
     <div class="footer">© 优选API生成器  • Designed with 💜 by
-      <a href="https://github.com/arlettebrook/sub-api-generator" target="_blank" rel="noopener noreferrer">Arlettebrook</a></div>
+      <a href="https://arlettebrook.github.io" target="_blank" rel="noopener noreferrer">Arlettebrook</a></div>
   </div>
 </body>
 </html>`;
