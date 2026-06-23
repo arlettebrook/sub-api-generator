@@ -30,6 +30,7 @@ const _LOWER_BLACKLIST = [
   "提供",
   "联系",
   "tg",
+  "云"
 ].map((k) => k.toLowerCase());
 
 const FIXED_UUID = "00000000-0000-4000-8000-000000000000";
