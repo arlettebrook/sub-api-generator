@@ -15,10 +15,15 @@
 [[kv_namespaces]]
 binding = "KV"
 id = "生产环境 Namespace ID"
-preview_id = "预览环境 Namespace ID"
+
+[[env.preview.kv_namespaces]]
+binding = "KV"
+id = "预览环境 Namespace ID"
 ```
 
-生产和预览可以使用同一个 Namespace，但建议使用两个 Namespace，避免预览环境修改生产数据。
+生产和预览的 ID 不需要相同，但必须是同一个 Cloudflare 账户下真实存在的 KV Namespace。
+Pages 使用 `env.preview.kv_namespaces` 配置预览绑定，不使用 Worker 配置中的 `preview_id` 字段。
+建议使用两个 Namespace，避免预览环境修改生产数据。
 
 ### 2. 配置环境变量
 

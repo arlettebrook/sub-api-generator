@@ -6,4 +6,7 @@ compatibility_date = "2026-06-15"
 [[kv_namespaces]]
 binding = "KV"
 id = "0ebd2e056a5547a1b13c4ba4c83d50a7"
-preview_id = "f9be09f1bf7341c69550598802068448"
+
+[[env.preview.kv_namespaces]]
+binding = "KV"
+id = "f9be09f1bf7341c69550598802068448"
