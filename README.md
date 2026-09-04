@@ -29,6 +29,8 @@ Production 和 Preview 配置：
 - `PASSWORD`：后台登录密码，建议添加为 Secret
 
 不要依赖代码中的默认值；未配置变量时会回退到公开的默认密码和路径。
+Pages 不支持 Worker 的 `keep_vars` 配置；环境变量和 Secret 以 Dashboard 中的 Production/Preview
+设置为准。
 
 ### 3. 部署
 
