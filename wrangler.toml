@@ -1,5 +1,6 @@
 name = "sub-api-generator"
-main = "_worker.js"
+# Pages Advanced Mode uses _worker.js from this directory as the Functions entry.
+pages_build_output_dir = "."
 compatibility_date = "2026-06-15"
 keep_vars = true
 
