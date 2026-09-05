@@ -35,7 +35,9 @@ function parsePreferredIpLine(line) {
   let result = addressMatch[1];
   const remarkMatch = NODE_REMARK_REGEX.exec(line);
   if (remarkMatch) {
-    const remark = decodeURIComponent(remarkMatch[1])
+    let remark = remarkMatch[1];
+    try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
+    remark = remark
       .split(" ")[0]
       .split("【")[0]
       .split("|")[0]
@@ -45,6 +47,18 @@ function parsePreferredIpLine(line) {
   return result;
 }
 
+function decodeSubscriptionBody(content) {
+  const text = content.replace(/^\uFEFF/, "").trim();
+  if (!text) return "";
+  try {
+    const decoded = atob(text.replace(/\s+/g, ""));
+    if (decoded.includes("://") || decoded.includes("\n")) return decoded;
+  } catch {
+    // Some providers return plain text instead of Base64.
+  }
+  return text;
+}
+
 async function fetchPreferredSubs(host) {
   const baseHost = HTTP_PROTOCOL_REGEX.test(host) ? host : `https://${host}`;
   const response = await fetchWithTimeout(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
@@ -52,7 +66,7 @@ async function fetchPreferredSubs(host) {
   });
   if (!response.ok) return [];
 
-  const rawContent = atob(await response.text());
+  const rawContent = decodeSubscriptionBody(await response.text());
   return rawContent
     .split(/\r?\n/)
     .map((line) => parsePreferredIpLine(line))
@@ -137,4 +151,4 @@ export async function handleRoot(env, sourceSelection) {
   }
 }
 
-export { fetchWithTimeout, filterPreferredIps, normalizeKvData };
+export { decodeSubscriptionBody, fetchWithTimeout, fetchPreferredSubs, filterPreferredIps, normalizeKvData, parsePreferredIpLine };
