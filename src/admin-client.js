@@ -585,8 +585,8 @@ async function loadCustomApis(loadSources = false) {
 
 function sourceEntries() {
   return [
-    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, label: '订阅源 · ' + (value.remark || key) })),
-    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, label: 'API 源 · ' + (value.remark || key) })),
+    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, enabled: value?.enabled === true, label: '订阅源 · ' + (value.remark || key) })),
+    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, enabled: value?.enabled === true, label: 'API 源 · ' + (value.remark || key) })),
   ];
 }
 
@@ -675,7 +675,10 @@ function readSourcePicker(picker) {
 function renderNewCustomApiSources() {
   const container = $('newCustomApiSources');
   if (!container) return;
-  const picker = sourcePicker([], '选择此 API 使用的数据源');
+  const defaultSources = sourceEntries()
+    .filter((source) => source.enabled)
+    .map(({ type, key }) => ({ type, key }));
+  const picker = sourcePicker(defaultSources, '选择此 API 使用的数据源');
   container.innerHTML = '';
   container.appendChild(picker);
 }
@@ -856,13 +859,7 @@ function addCustomApi() {
   customApis[path] = { enabled: true, remark, sources: getNewCustomApiSources() };
   pathInput.value = '';
   remarkInput.value = '';
-  const sourceOptions = $('newCustomApiSources')?.querySelector('.source-options');
-  if (sourceOptions) {
-    sourceOptions.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
-      checkbox.checked = false;
-    });
-    sourceOptions.dispatchEvent(new Event('change', { bubbles: true }));
-  }
+  renderNewCustomApiSources();
   setCustomApisDirty();
   renderCustomApis();
   renderCustomApiSelect();

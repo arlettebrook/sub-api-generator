@@ -89,7 +89,9 @@ async function handleCustomApiPath(path, env) {
   const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
   const configured = normalizeCustomApiData(data);
   if (!configured[apiPath]?.enabled) return null;
-  return subscriptions.handleRoot(env, configured[apiPath].sources);
+  const sources = configured[apiPath].sources;
+  // Empty source selections from older configurations should continue to use enabled sources.
+  return subscriptions.handleRoot(env, Array.isArray(sources) && sources.length ? sources : null);
 }
 
 async function handleGetUuid(env) {

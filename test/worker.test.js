@@ -131,6 +131,7 @@ test("keeps multiple custom API paths independently usable", async () => {
     body: JSON.stringify({
       first: { enabled: true, remark: "订阅 API", sources: [{ type: "subs", key: "one.example" }] },
       second: { enabled: true, remark: "普通 API", sources: [{ type: "apis", key: "https://api.example/source" }] },
+      auto: { enabled: true, remark: "自动选择", sources: [] },
     }),
   }), runtime);
   assert.equal(saveResponse.status, 200);
@@ -149,6 +150,11 @@ test("keeps multiple custom API paths independently usable", async () => {
     assert.equal(secondResponse.status, 200);
     assert.match(await firstResponse.text(), /1\.2\.3\.4:443#one/);
     assert.match(await secondResponse.text(), /trojan:\/\/example\.com:443#api/);
+    const autoResponse = await worker.fetch(new Request("https://example.test/auto"), runtime);
+    assert.equal(autoResponse.status, 200);
+    const autoText = await autoResponse.text();
+    assert.match(autoText, /1\.2\.3\.4:443#one/);
+    assert.match(autoText, /trojan:\/\/example\.com:443#api/);
   } finally {
     globalThis.fetch = originalFetch;
   }
