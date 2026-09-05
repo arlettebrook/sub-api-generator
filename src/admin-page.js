@@ -906,8 +906,8 @@ export const adminHTML = `
     <h2>优选API•生成器•管理面板</h2>
   </div>
   <div class="header-right">
-    <button class="theme-switch" type="button" onclick="toggleTheme()" title="切换主题" aria-label="切换主题" aria-pressed="true"></button>
-    <button class="btn-outline btn-logout" type="button" onclick="logout()" title="退出登录">
+    <button id="themeSwitch" class="theme-switch" type="button" title="切换主题" aria-label="切换主题" aria-pressed="true"></button>
+    <button id="logoutButton" class="btn-outline btn-logout" type="button" title="退出登录">
       <span>🚪</span> 退出登录
     </button>
   </div>
@@ -928,10 +928,10 @@ export const adminHTML = `
   <div class="toolbar">
     <select id="previewApiSelect" onchange="fetchNodes()" aria-label="选择优选API"></select>
     <button class="btn-primary" onclick="fetchNodes()">🔄 刷新数据</button>
-    <button class="btn-outline" onclick="copySubUrl()" title="复制优选API">
+    <button class="btn-outline" onclick="copySubUrl(event)" title="复制优选API">
       <span>📋</span> 复制优选API
     </button>
-    <button class="btn-outline" onclick="copyNodeData()" title="复制全部优选API数据">
+    <button class="btn-outline" onclick="copyNodeData(event)" title="复制全部优选API数据">
       <span>📝</span> 复制优选API数据
     </button>
     <span class="nodes-count" id="nodesCount">共 0 个节点</span>
@@ -1108,8 +1108,8 @@ async function logout() {
 }
 
 // ======================== 复制订阅地址功能 ========================
-async function copySubUrl() {
-  const btn = event.currentTarget;
+async function copySubUrl(event) {
+    const btn = event?.currentTarget;
   const originalText = btn.innerHTML;
   
   try {
@@ -1128,8 +1128,8 @@ async function copySubUrl() {
 }
 
 // ======================== 复制全部节点数据 ========================
-async function copyNodeData() {
-  const btn = event.currentTarget;
+async function copyNodeData(event) {
+    const btn = event?.currentTarget;
   const originalText = btn.innerHTML;
   
   if (currentNodes.length === 0) {
@@ -1910,6 +1910,9 @@ window.addEventListener('DOMContentLoaded', () => {
   nodesContainer = $('nodesContainer');
   paginationEl = $('pagination');
   nodesCountEl = $('nodesCount');
+
+  $('themeSwitch')?.addEventListener('click', toggleTheme);
+  $('logoutButton')?.addEventListener('click', logout);
   
   initTheme();
   if (page === 'subs') loadSubs();
