@@ -88,6 +88,7 @@ npm test
 
 - `/`、`/admin`：数据预览页，需要登录
 - `/admin/manage`：优选订阅源和 API 源统一管理页，需要登录
+- `/admin/custom-apis`：优选 API 访问路径管理页，需要登录
 - `/admin/subs`、`/admin/apis`：兼容保留的独立管理页，需要登录
 - `/<UUID>`：公开订阅聚合接口
 - `/api/subs`、`/api/apis`：后台配置接口，需要登录

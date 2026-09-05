@@ -1,7 +1,11 @@
 export const KV_KEY_SUBS = "subs";
 export const KV_KEY_APIS = "apis";
+export const KV_KEY_CUSTOM_APIS = "custom_apis";
 export const MAX_CONFIG_ENTRIES = 200;
 export const MAX_CONFIG_KEY_LENGTH = 2048;
+
+const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
+const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);
 
 export function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -71,6 +75,26 @@ export function validateConfigPayload(body) {
   return normalized;
 }
 
+export function validateApiPathPayload(body) {
+  const config = validateConfigPayload(body);
+  const normalized = {};
+  for (const [rawPath, value] of Object.entries(config)) {
+    const path = rawPath.trim().replace(/^\/+/, "");
+    if (!API_PATH_REGEX.test(path) || RESERVED_API_PATHS.has(path.toLowerCase())) {
+      throw new Error(`API 访问路径无效: ${rawPath}`);
+    }
+    if (normalized[path]) {
+      throw new Error(`API 访问路径重复: ${path}`);
+    }
+    normalized[path] = value;
+  }
+  return normalized;
+}
+
+export function isAllowedApiPath(path) {
+  return API_PATH_REGEX.test(path) && !RESERVED_API_PATHS.has(path.toLowerCase());
+}
+
 export async function readJsonObject(request) {
   try {
     return validateConfigPayload(await request.json());
@@ -78,4 +102,3 @@ export async function readJsonObject(request) {
     throw new Error(`请求 JSON 无效: ${error.message}`);
   }
 }
-

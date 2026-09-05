@@ -108,7 +108,7 @@ export const adminHTML = `
 
   .admin-nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     align-items: center;
     gap: 4px;
     width: 100%;
@@ -178,18 +178,27 @@ export const adminHTML = `
 
   body[data-page="overview"] #subsSection,
   body[data-page="overview"] #apisSection,
+  body[data-page="overview"] #customApiSection,
   body[data-page="overview"] #settingsSection,
   body[data-page="subs"] #previewSection,
   body[data-page="subs"] #apisSection,
+  body[data-page="subs"] #customApiSection,
   body[data-page="subs"] #settingsSection,
   body[data-page="apis"] #previewSection,
   body[data-page="apis"] #subsSection,
+  body[data-page="apis"] #customApiSection,
   body[data-page="apis"] #settingsSection,
   body[data-page="manage"] #previewSection,
+  body[data-page="manage"] #customApiSection,
   body[data-page="manage"] #settingsSection,
+  body[data-page="customApis"] #previewSection,
+  body[data-page="customApis"] #subsSection,
+  body[data-page="customApis"] #apisSection,
+  body[data-page="customApis"] #settingsSection,
   body[data-page="settings"] #previewSection,
   body[data-page="settings"] #subsSection,
-  body[data-page="settings"] #apisSection {
+  body[data-page="settings"] #apisSection,
+  body[data-page="settings"] #customApiSection {
     display: none;
   }
 
@@ -842,16 +851,17 @@ export const adminHTML = `
     <h2>优选API•生成器•管理面板</h2>
   </div>
   <div class="header-right">
+    <div class="theme-switch" onclick="toggleTheme()" title="切换主题"></div>
     <button class="btn-outline btn-logout" onclick="logout()" title="退出登录">
       <span>🚪</span> 退出登录
     </button>
-    <div class="theme-switch" onclick="toggleTheme()" title="切换主题"></div>
   </div>
 </div>
 
 <nav class="admin-nav" aria-label="管理导航">
   <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
   <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
+  <a href="/admin/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-label">优选API</span></a>
   <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
 </nav>
 
@@ -874,6 +884,20 @@ export const adminHTML = `
     <div class="nodes-loading">加载中...</div>
   </div>
   <div id="pagination" class="pagination"></div>
+</div>
+
+<!-- ==================== 优选 API ==================== -->
+<div class="card" id="customApiSection">
+  <h3>🚀 优选API</h3>
+  <div class="add-row">
+    <input id="newCustomApiPath" placeholder="访问路径，例如 my-api" style="max-width: 260px;" />
+    <input id="newCustomApiRemark" placeholder="备注（可选）" style="max-width: 200px;" />
+    <button class="btn-primary" onclick="addCustomApi()">➕ 新建 API</button>
+  </div>
+  <div class="toolbar">
+    <button class="btn-primary" onclick="saveCustomApis()">💾 保存配置</button>
+  </div>
+  <div id="customApisList"></div>
 </div>
 
 <!-- ==================== 订阅源管理 ==================== -->
@@ -1290,6 +1314,113 @@ function goToPage(page) {
   document.querySelector('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// ======================== 优选 API 管理 ========================
+let customApis = {};
+
+async function loadCustomApis() {
+  const res = await fetch('/api/custom-apis');
+  customApis = await res.json();
+  renderCustomApis();
+}
+
+function renderCustomApis() {
+  const el = $('customApisList');
+  el.innerHTML = '';
+  Object.entries(customApis).forEach(([path, entry]) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const pathInput = document.createElement('input');
+    pathInput.className = 'host-input';
+    pathInput.value = path;
+    pathInput.placeholder = '访问路径';
+
+    const remarkInput = document.createElement('input');
+    remarkInput.className = 'remark-input';
+    remarkInput.value = entry.remark || '';
+    remarkInput.placeholder = '备注（可选）';
+    remarkInput.style.maxWidth = '200px';
+
+    const statusBtn = document.createElement('button');
+    statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
+    statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
+    statusBtn.onclick = () => {
+      customApis[path].enabled = !customApis[path].enabled;
+      renderCustomApis();
+    };
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del-btn';
+    delBtn.textContent = '删除';
+    delBtn.onclick = () => {
+      delete customApis[path];
+      renderCustomApis();
+      showToast('已删除优选 API', 'success');
+    };
+
+    pathInput.onchange = () => {
+      const newPath = pathInput.value.trim().replace(/^\/+/, '');
+      if (!newPath || newPath === path) return;
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(newPath) || ['admin', 'api', 'login', 'logout'].includes(newPath.toLowerCase())) {
+        showToast('访问路径格式无效', 'error');
+        pathInput.value = path;
+        return;
+      }
+      if (customApis[newPath]) {
+        showToast('访问路径已存在', 'error');
+        pathInput.value = path;
+        return;
+      }
+      customApis[newPath] = customApis[path];
+      delete customApis[path];
+      renderCustomApis();
+    };
+
+    remarkInput.onchange = () => {
+      customApis[path].remark = remarkInput.value;
+    };
+
+    row.appendChild(pathInput);
+    row.appendChild(remarkInput);
+    row.appendChild(statusBtn);
+    row.appendChild(delBtn);
+    el.appendChild(row);
+  });
+}
+
+function addCustomApi() {
+  const pathInput = $('newCustomApiPath');
+  const remarkInput = $('newCustomApiRemark');
+  const path = pathInput.value.trim().replace(/^\/+/, '');
+  const remark = remarkInput.value.trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(path) || ['admin', 'api', 'login', 'logout'].includes(path.toLowerCase())) {
+    showToast('请输入有效的访问路径', 'error');
+    return;
+  }
+  if (customApis[path]) {
+    showToast('访问路径已存在', 'error');
+    return;
+  }
+  customApis[path] = { enabled: true, remark };
+  pathInput.value = '';
+  remarkInput.value = '';
+  renderCustomApis();
+  showToast('优选 API 创建成功', 'success');
+}
+
+async function saveCustomApis() {
+  const response = await fetch('/api/custom-apis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(customApis)
+  });
+  if (!response.ok) {
+    showToast('优选 API 配置保存失败', 'error');
+    return;
+  }
+  showToast('优选 API 配置已保存', 'success');
+}
+
 // ======================== Subs 管理 ========================
 let subs = {};
 
@@ -1587,6 +1718,7 @@ window.addEventListener('DOMContentLoaded', () => {
     subs: '管理优选订阅源，控制启用状态并维护备注。',
     apis: '管理额外 API 源，控制启用状态并维护备注。',
     manage: '统一管理优选订阅源和 API 源。',
+    customApis: '创建并管理优选 API 的访问路径。',
     settings: '调整管理面板的界面显示设置。'
   };
   if (intro) intro.textContent = intros[page] || intros.overview;
@@ -1609,6 +1741,7 @@ window.addEventListener('DOMContentLoaded', () => {
     loadSubs();
     loadApis();
   }
+  else if (page === 'customApis') loadCustomApis();
   else if (page !== 'settings') fetchNodes();
 });
 </script>

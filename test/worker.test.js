@@ -41,7 +41,7 @@ test("serves the login page and authenticated UUID endpoint", async () => {
 
 test("serves separate responsive admin pages", async () => {
   const hash = await sha256Hex("secret");
-  for (const [path, page] of [["/admin", "overview"], ["/admin/manage", "manage"], ["/admin/settings", "settings"], ["/admin/subs", "subs"], ["/admin/apis", "apis"]]) {
+  for (const [path, page] of [["/admin", "overview"], ["/admin/manage", "manage"], ["/admin/custom-apis", "customApis"], ["/admin/settings", "settings"], ["/admin/subs", "subs"], ["/admin/apis", "apis"]]) {
     const response = await worker.fetch(new Request(`https://example.test${path}`, {
       headers: { Cookie: `auth=${hash}` },
     }), env());
@@ -56,7 +56,34 @@ test("serves separate responsive admin pages", async () => {
       assert.match(html, /id="apisSection"/);
       assert.match(html, /data-nav-page="manage"/);
     }
+    if (page === "customApis") {
+      assert.match(html, /id="customApiSection"/);
+      assert.match(html, /data-nav-page="customApis"/);
+    }
   }
+});
+
+test("creates and serves custom API access paths", async () => {
+  const runtime = env();
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const saveResponse = await worker.fetch(new Request("https://example.test/api/custom-apis", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ "/my-api": true }),
+  }), runtime);
+  assert.equal(saveResponse.status, 200);
+
+  const configResponse = await worker.fetch(new Request("https://example.test/api/custom-apis", {
+    headers: { Cookie: `auth=${hash}` },
+  }), runtime);
+  assert.deepEqual(await configResponse.json(), {
+    "my-api": { enabled: true, remark: "" },
+  });
+
+  const publicResponse = await worker.fetch(new Request("https://example.test/my-api"), runtime);
+  assert.equal(publicResponse.status, 500);
+  assert.match(await publicResponse.text(), /KV 未配置 subs/);
 });
 
 test("rejects unsupported methods", async () => {

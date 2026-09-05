@@ -4,6 +4,7 @@ import {
   getRuntimeConfig,
   normalizeKvData,
   readJsonObject,
+  validateApiPathPayload,
   validateConfigPayload,
 } from "../src/config.js";
 
@@ -30,6 +31,14 @@ test("validates and normalizes configuration payloads", () => {
   });
   assert.throws(() => validateConfigPayload([]), /配置必须是 JSON 对象/);
   assert.throws(() => validateConfigPayload({ bad: null }), /配置项无效/);
+});
+
+test("validates custom API access paths", () => {
+  assert.deepEqual(validateApiPathPayload({ "/my-api": true }), {
+    "my-api": { enabled: true, remark: "" },
+  });
+  assert.throws(() => validateApiPathPayload({ "admin": true }), /访问路径无效/);
+  assert.throws(() => validateApiPathPayload({ "bad/path": true }), /访问路径无效/);
 });
 
 test("reads and validates JSON request bodies", async () => {

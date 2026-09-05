@@ -1,9 +1,12 @@
 import {
+  KV_KEY_CUSTOM_APIS,
   KV_KEY_APIS,
   KV_KEY_SUBS,
   getRuntimeConfig as getPagesRuntimeConfig,
+  isAllowedApiPath,
   normalizeKvData,
   readJsonObject as readPagesJsonObject,
+  validateApiPathPayload,
 } from "./config.js";
 import {
   jsonResponse as pagesJsonResponse,
@@ -36,6 +39,26 @@ async function handlePostApis(request, env) {
   const body = await readPagesJsonObject(request);
   await env.KV.put(KV_KEY_APIS, JSON.stringify(body));
   return pagesJsonResponse({ ok: true });
+}
+
+async function handleGetCustomApis(env) {
+  const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
+  return pagesJsonResponse(normalizeKvData(data));
+}
+
+async function handlePostCustomApis(request, env) {
+  const body = validateApiPathPayload(await readPagesJsonObject(request));
+  await env.KV.put(KV_KEY_CUSTOM_APIS, JSON.stringify(body));
+  return pagesJsonResponse({ ok: true });
+}
+
+async function handleCustomApiPath(path, env) {
+  const apiPath = path.slice(1);
+  if (!isAllowedApiPath(apiPath)) return null;
+  const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
+  const configured = normalizeKvData(data);
+  if (!configured[apiPath]?.enabled) return null;
+  return subscriptions.handleRoot(env);
 }
 
 async function handleGetUuid(env) {
@@ -82,6 +105,10 @@ export default {
       if (method !== "GET") return pagesMethodNotAllowed("GET");
       return await subscriptions.handleRoot(env);
     }
+    if (method === "GET") {
+      const customApiResponse = await handleCustomApiPath(path, env);
+      if (customApiResponse) return customApiResponse;
+    }
 
     // ========== 未认证统一返回登录页 ==========
     if (!auth.isAuthenticated(request, validPwdHash)) {
@@ -104,6 +131,10 @@ export default {
           if (method === "GET") return await handleGetApis(env);
           if (method === "POST") return await handlePostApis(request, env);
           return pagesMethodNotAllowed("GET, POST");
+        case "/api/custom-apis":
+          if (method === "GET") return await handleGetCustomApis(env);
+          if (method === "POST") return await handlePostCustomApis(request, env);
+          return pagesMethodNotAllowed("GET, POST");
         case "/api/uuid":
           if (method === "GET") return await handleGetUuid(env);
           return pagesMethodNotAllowed("GET");
@@ -120,6 +151,9 @@ export default {
         case "/admin/manage":
           if (method !== "GET") return pagesMethodNotAllowed("GET");
           return handleAdmin("manage");
+        case "/admin/custom-apis":
+          if (method !== "GET") return pagesMethodNotAllowed("GET");
+          return handleAdmin("customApis");
         case "/admin/settings":
           if (method !== "GET") return pagesMethodNotAllowed("GET");
           return handleAdmin("settings");
