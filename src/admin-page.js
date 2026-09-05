@@ -1423,8 +1423,10 @@ async function loadCustomApis(loadSources = false) {
     requests.push(fetch('/api/subs'), fetch('/api/apis'));
   }
   const [customRes, subsRes, apisRes] = await Promise.all(requests);
+  if (!customRes.ok) throw new Error('优选 API 配置加载失败');
   customApis = await customRes.json();
   if (loadSources) {
+    if (!subsRes.ok || !apisRes.ok) throw new Error('数据源配置加载失败');
     subs = await subsRes.json();
     apis = await apisRes.json();
   }
@@ -1934,7 +1936,12 @@ window.addEventListener('DOMContentLoaded', () => {
     loadApis();
   }
   else if (page === 'customApis') loadCustomApis();
-  else if (page === 'overview') loadCustomApis().then(() => fetchNodes());
+  else if (page === 'overview') {
+    fetchNodes();
+    loadCustomApis().catch(() => {
+      renderCustomApiSelect();
+    });
+  }
 });
 </script>
 </body>
