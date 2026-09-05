@@ -107,28 +107,35 @@ export const adminHTML = `
   }
 
   .admin-nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     width: 100%;
     position: sticky;
     top: 12px;
     z-index: 1000;
-    padding: 6px;
+    padding: 5px;
     margin-top: -20px;
     margin-bottom: 28px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-md);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
 
   .admin-nav a {
-    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     min-width: 0;
-    padding: 10px 14px;
-    border-radius: 8px;
+    min-height: 42px;
+    padding: 9px 14px;
+    border-radius: 9px;
     color: var(--text-secondary);
     text-align: center;
     text-decoration: none;
@@ -138,10 +145,54 @@ export const adminHTML = `
     transition: var(--transition);
   }
 
-  .admin-nav a:hover,
+  .admin-nav a::after {
+    content: '';
+    position: absolute;
+    right: 20%;
+    bottom: 3px;
+    left: 20%;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--accent-primary);
+    opacity: 0;
+    transform: scaleX(0.35);
+    transition: var(--transition);
+  }
+
+  .admin-nav a:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    transform: translateY(-1px);
+  }
+
   .admin-nav a.active {
     color: var(--text-primary);
     background: var(--accent-light);
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.16), 0 3px 10px rgba(99, 102, 241, 0.08);
+  }
+
+  .admin-nav a.active:hover {
+    background: var(--accent-light);
+  }
+
+  .admin-nav a.active::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  .admin-nav a:focus-visible {
+    outline: 3px solid var(--accent-light);
+    outline-offset: 1px;
+  }
+
+  .nav-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .nav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   body[data-page="overview"] #subsSection,
@@ -682,7 +733,7 @@ export const adminHTML = `
   @media screen and (max-width: 768px), screen and (max-device-width: 768px) {
     body {
       margin: 12px auto;
-      padding: 0 12px 92px;
+      padding: 0 12px calc(102px + env(safe-area-inset-bottom, 0px));
     }
     .page-header {
       margin-bottom: 18px;
@@ -709,7 +760,7 @@ export const adminHTML = `
       bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
       left: 12px;
       width: auto;
-      flex-direction: row;
+      display: flex;
       align-items: center;
       justify-content: flex-start;
       gap: 4px;
@@ -724,9 +775,21 @@ export const adminHTML = `
     .admin-nav::-webkit-scrollbar { display: none; }
     .admin-nav a {
       flex: 0 0 auto;
-      padding: 8px 11px;
+      min-height: 48px;
+      min-width: 96px;
+      flex-direction: column;
+      gap: 3px;
+      padding: 7px 11px 8px;
       text-align: center;
-      font-size: 13px;
+      font-size: 12px;
+    }
+    .admin-nav a::after {
+      right: 28%;
+      bottom: 4px;
+      left: 28%;
+    }
+    .nav-icon {
+      font-size: 17px;
     }
     .page-intro {
       margin: -4px 0 16px;
@@ -767,9 +830,9 @@ export const adminHTML = `
 </div>
 
 <nav class="admin-nav" aria-label="管理导航">
-  <a href="/admin" data-nav-page="overview">🌐 数据预览</a>
-  <a href="/admin/subs" data-nav-page="subs">📡 优选订阅源</a>
-  <a href="/admin/apis" data-nav-page="apis">🔗 API 源</a>
+  <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
+  <a href="/admin/subs" data-nav-page="subs"><span class="nav-icon" aria-hidden="true">📡</span><span class="nav-label">优选订阅源</span></a>
+  <a href="/admin/apis" data-nav-page="apis"><span class="nav-icon" aria-hidden="true">🔗</span><span class="nav-label">API 源</span></a>
 </nav>
 
 <p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
@@ -1492,7 +1555,10 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   if (intro) intro.textContent = intros[page] || intros.overview;
   document.querySelectorAll('[data-nav-page]').forEach((link) => {
-    link.classList.toggle('active', link.dataset.navPage === page);
+    const isActive = link.dataset.navPage === page;
+    link.classList.toggle('active', isActive);
+    if (isActive) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
   });
 
   // 缓存核心DOM元素
