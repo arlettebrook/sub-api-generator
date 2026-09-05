@@ -111,6 +111,9 @@ export const adminHTML = `
     align-items: center;
     gap: 6px;
     width: 100%;
+    position: sticky;
+    top: 12px;
+    z-index: 1000;
     padding: 6px;
     margin-top: -20px;
     margin-bottom: 28px;
@@ -679,7 +682,7 @@ export const adminHTML = `
   @media (max-width: 768px) {
     body {
       margin: 12px auto;
-      padding: 0 12px;
+      padding: 0 12px 92px;
     }
     .page-header {
       margin-bottom: 18px;
@@ -700,16 +703,21 @@ export const adminHTML = `
       justify-content: space-between;
     }
     .admin-nav {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      width: auto;
       flex-direction: row;
       align-items: center;
       justify-content: flex-start;
       gap: 4px;
       overflow-x: auto;
-      margin-top: -8px;
-      margin-bottom: 18px;
+      margin: 0;
       padding: 4px;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
+      box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
     }
     .admin-nav::-webkit-scrollbar { display: none; }
     .admin-nav a {
