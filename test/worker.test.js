@@ -41,7 +41,7 @@ test("serves the login page and authenticated UUID endpoint", async () => {
 
 test("serves separate responsive admin pages", async () => {
   const hash = await sha256Hex("secret");
-  for (const [path, page] of [["/admin", "overview"], ["/admin/subs", "subs"], ["/admin/apis", "apis"], ["/admin/settings", "settings"]]) {
+  for (const [path, page] of [["/admin", "overview"], ["/admin/manage", "manage"], ["/admin/settings", "settings"], ["/admin/subs", "subs"], ["/admin/apis", "apis"]]) {
     const response = await worker.fetch(new Request(`https://example.test${path}`, {
       headers: { Cookie: `auth=${hash}` },
     }), env());
@@ -51,6 +51,11 @@ test("serves separate responsive admin pages", async () => {
     assert.match(html, /class="admin-nav"/);
     assert.match(html, /@media screen and \(max-width: 768px\)/);
     assert.match(html, /body > \.admin-nav \{\s*position: fixed !important;/);
+    if (page === "manage") {
+      assert.match(html, /id="subsSection"/);
+      assert.match(html, /id="apisSection"/);
+      assert.match(html, /data-nav-page="manage"/);
+    }
   }
 });
 

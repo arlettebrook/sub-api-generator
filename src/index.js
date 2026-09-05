@@ -117,6 +117,9 @@ export default {
         case "/admin/apis":
           if (method !== "GET") return pagesMethodNotAllowed("GET");
           return handleAdmin("apis");
+        case "/admin/manage":
+          if (method !== "GET") return pagesMethodNotAllowed("GET");
+          return handleAdmin("manage");
         case "/admin/settings":
           if (method !== "GET") return pagesMethodNotAllowed("GET");
           return handleAdmin("settings");

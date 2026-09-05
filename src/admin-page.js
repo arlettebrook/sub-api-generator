@@ -108,7 +108,7 @@ export const adminHTML = `
 
   .admin-nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
     gap: 4px;
     width: 100%;
@@ -185,6 +185,8 @@ export const adminHTML = `
   body[data-page="apis"] #previewSection,
   body[data-page="apis"] #subsSection,
   body[data-page="apis"] #settingsSection,
+  body[data-page="manage"] #previewSection,
+  body[data-page="manage"] #settingsSection,
   body[data-page="settings"] #previewSection,
   body[data-page="settings"] #subsSection,
   body[data-page="settings"] #apisSection {
@@ -849,8 +851,7 @@ export const adminHTML = `
 
 <nav class="admin-nav" aria-label="管理导航">
   <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
-  <a href="/admin/subs" data-nav-page="subs"><span class="nav-icon" aria-hidden="true">📡</span><span class="nav-label">优选订阅源</span></a>
-  <a href="/admin/apis" data-nav-page="apis"><span class="nav-icon" aria-hidden="true">🔗</span><span class="nav-label">API 源</span></a>
+  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
   <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
 </nav>
 
@@ -1585,6 +1586,7 @@ window.addEventListener('DOMContentLoaded', () => {
     overview: '集中查看订阅聚合结果和节点状态。',
     subs: '管理优选订阅源，控制启用状态并维护备注。',
     apis: '管理额外 API 源，控制启用状态并维护备注。',
+    manage: '统一管理优选订阅源和 API 源。',
     settings: '调整管理面板的界面显示设置。'
   };
   if (intro) intro.textContent = intros[page] || intros.overview;
@@ -1603,6 +1605,10 @@ window.addEventListener('DOMContentLoaded', () => {
   initTheme();
   if (page === 'subs') loadSubs();
   else if (page === 'apis') loadApis();
+  else if (page === 'manage') {
+    loadSubs();
+    loadApis();
+  }
   else if (page !== 'settings') fetchNodes();
 });
 </script>
