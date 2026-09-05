@@ -125,13 +125,6 @@ export const adminHTML = `
 <div class="card" id="settingsSection">
   <h3>⚙️ 界面设置</h3>
   <div class="settings-list">
-    <div class="setting-row">
-      <div class="setting-copy">
-        <strong>主题模式</strong>
-        <small>在深色和浅色界面之间切换。</small>
-      </div>
-      <button class="btn-outline" type="button" onclick="toggleTheme()">切换主题</button>
-    </div>
     <div class="setting-block" id="blacklistSettings">
       <div class="setting-block-heading">
         <div class="setting-copy">
