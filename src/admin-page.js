@@ -131,6 +131,7 @@ export const adminHTML = `
     text-decoration: none;
     font-size: 14px;
     font-weight: 600;
+    white-space: nowrap;
     transition: var(--transition);
   }
 
@@ -677,8 +678,12 @@ export const adminHTML = `
   /* 响应式适配 */
   @media (max-width: 768px) {
     body {
-      margin: 20px auto;
-      padding: 0 16px;
+      margin: 12px auto;
+      padding: 0 12px;
+    }
+    .page-header {
+      margin-bottom: 18px;
+      gap: 10px;
     }
     .card {
       padding: 20px;
@@ -695,12 +700,27 @@ export const adminHTML = `
       justify-content: space-between;
     }
     .admin-nav {
-      flex-direction: column;
-      align-items: stretch;
-      margin-top: -12px;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 4px;
+      overflow-x: auto;
+      margin-top: -8px;
+      margin-bottom: 18px;
+      padding: 4px;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
     }
+    .admin-nav::-webkit-scrollbar { display: none; }
     .admin-nav a {
-      text-align: left;
+      flex: 0 0 auto;
+      padding: 8px 11px;
+      text-align: center;
+      font-size: 13px;
+    }
+    .page-intro {
+      margin: -4px 0 16px;
+      font-size: 13px;
     }
     .row .del-btn {
       opacity: 1;
