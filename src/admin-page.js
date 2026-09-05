@@ -916,8 +916,8 @@ export const adminHTML = `
 
 <nav class="admin-nav" aria-label="管理导航">
   <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
-  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
   <a href="/admin/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-label">优选API</span></a>
+  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
   <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
 </nav>
 
