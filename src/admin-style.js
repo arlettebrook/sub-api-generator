@@ -1132,18 +1132,29 @@ export const adminStyle = `
   /* 响应式适配 */
   @media screen and (max-width: 768px), screen and (max-device-width: 768px) {
     body {
-      margin: 12px auto;
-      padding: 0 12px calc(102px + env(safe-area-inset-bottom, 0px));
+      margin: 8px auto;
+      padding: 0 8px calc(84px + env(safe-area-inset-bottom, 0px));
     }
     .page-header {
-      margin-bottom: 18px;
-      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 8px;
     }
     .card {
-      padding: 20px;
+      padding: 14px;
+      margin-bottom: 12px;
+      border-radius: 14px;
     }
     h2 {
-      font-size: 22px;
+      max-width: 190px;
+      font-size: 20px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    h3 {
+      margin-bottom: 12px;
+      font-size: 16px;
+      gap: 7px;
     }
     .add-row input,
     .add-row button {
@@ -1151,6 +1162,12 @@ export const adminStyle = `
     }
     .form-grid {
       grid-template-columns: 1fr;
+    }
+    .custom-api-create {
+      padding: 12px;
+    }
+    .custom-api-toolbar {
+      margin-top: 12px;
     }
     .custom-api-row-main {
       grid-template-columns: 1fr;
@@ -1167,8 +1184,29 @@ export const adminStyle = `
       pointer-events: auto;
     }
     .header-right {
-      width: 100%;
-      justify-content: space-between;
+      width: auto;
+      margin-left: auto;
+      gap: 6px;
+    }
+    .theme-switch {
+      width: 46px;
+      height: 26px;
+    }
+    .theme-switch::before {
+      width: 19px;
+      height: 19px;
+      font-size: 10px;
+    }
+    .dark .theme-switch::before {
+      left: calc(100% - 22px);
+    }
+    .btn-logout {
+      height: 36px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+    .btn-logout span {
+      font-size: 13px;
     }
     body > .admin-nav {
       position: fixed !important;
@@ -1194,15 +1232,15 @@ export const adminStyle = `
     .admin-nav a {
       width: 100%;
       min-width: 0;
-      min-height: 48px;
+      min-height: 44px;
       flex-direction: column;
       gap: 3px;
-      padding: 7px 4px 8px;
+      padding: 5px 3px 6px;
       text-align: center;
       font-size: 11px;
     }
     .nav-icon {
-      font-size: 17px;
+      font-size: 15px;
     }
     .setting-row {
       align-items: flex-start;
@@ -1210,8 +1248,80 @@ export const adminStyle = `
       gap: 12px;
     }
     .page-intro {
-      margin: -4px 0 16px;
+      margin: 0 0 10px;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .toolbar {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+    }
+    .toolbar > select {
+      grid-column: 1 / -1;
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+    }
+    .toolbar > button {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+    .toolbar > .nodes-count {
+      grid-column: 1 / -1;
+      width: auto;
+      margin: 0;
+      text-align: right;
+      font-size: 12px;
+    }
+    .nodes-grid {
+      gap: 6px;
+    }
+    .node-item {
+      min-width: 0;
+      min-height: 56px;
+      padding: 9px 10px;
+      gap: 6px;
+      border-radius: 10px;
+    }
+    .node-host {
+      min-width: 0;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .node-tag {
+      max-width: 58px;
+      padding: 3px 7px;
+      font-size: 10px;
+    }
+    .nodes-empty,
+    .nodes-loading,
+    .nodes-error {
+      padding: 24px 10px;
       font-size: 13px;
+    }
+    .pagination {
+      gap: 4px;
+      margin-top: 12px;
+      row-gap: 6px;
+    }
+    .pagination button {
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+    .pagination .page-info {
+      margin: 0 4px;
+      font-size: 12px;
+    }
+    .pagination .jump-box {
+      margin-top: 2px;
     }
     .section-heading {
       align-items: flex-start;
@@ -1247,6 +1357,22 @@ export const adminStyle = `
     .source-error-notice button,
     .data-source-error button {
       margin-left: 0;
+    }
+  }
+
+  @media screen and (min-width: 380px) and (max-width: 768px), screen and (min-device-width: 380px) and (max-device-width: 768px) {
+    .nodes-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media screen and (max-width: 379px), screen and (max-device-width: 379px) {
+    .section-heading {
+      gap: 8px;
+    }
+    .section-summary {
+      padding-inline: 7px;
+      font-size: 11px;
     }
   }
 `;
