@@ -236,6 +236,261 @@ export const adminStyle = `
     background: var(--bg-tertiary);
   }
 
+  .source-picker-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 24px;
+  }
+
+  .source-picker-head .source-count {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .source-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .source-action {
+    height: 28px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-primary);
+    font-size: 12px;
+  }
+
+  .source-action:hover {
+    transform: none;
+    box-shadow: none;
+    background: var(--accent-light);
+    color: var(--accent-hover);
+  }
+
+  .source-search {
+    width: 100%;
+    height: 34px;
+    font-size: 13px;
+  }
+
+  .source-options {
+    max-height: 180px;
+    overflow: auto;
+    padding: 2px;
+  }
+
+  .source-option {
+    min-height: 30px;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+
+  .source-option:hover {
+    background: var(--bg-secondary);
+  }
+
+  .source-empty {
+    width: 100%;
+    padding: 10px 4px;
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .section-heading h3 {
+    margin-bottom: 3px;
+  }
+
+  .section-caption {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .section-summary {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .custom-api-create {
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.8fr);
+    gap: 12px;
+  }
+
+  .form-field {
+    display: grid;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .form-field input {
+    width: 100%;
+  }
+
+  .form-field small {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .form-field small.input-hint.error {
+    color: var(--danger);
+  }
+
+  .path-input {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    overflow: hidden;
+  }
+
+  .path-input b {
+    padding-left: 13px;
+    color: var(--text-tertiary);
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .path-input input {
+    height: 38px;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .path-input:focus-within {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--accent-light);
+  }
+
+  .create-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+
+  .custom-api-toolbar {
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  .save-status {
+    margin-right: auto;
+    color: var(--success);
+    font-size: 13px;
+  }
+
+  .save-status.dirty {
+    color: var(--accent-primary);
+  }
+
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .custom-api-row {
+    align-items: stretch;
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .custom-api-row-main {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(150px, 0.8fr) minmax(180px, 1.2fr);
+    align-items: end;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .form-field.compact {
+    min-width: 0;
+  }
+
+  .custom-api-url {
+    align-self: end;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .custom-api-actions {
+    display: flex;
+    align-items: end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .custom-api-actions .del-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .icon-action {
+    height: 34px;
+    padding: 0 10px;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .custom-api-row .source-picker {
+    flex: 1 1 100%;
+    margin: 0;
+  }
+
+  .custom-api-empty {
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+    padding: 32px 16px;
+    border: 1px dashed var(--border-hover);
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+
+  .custom-api-empty strong {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
   .source-picker-title {
     color: var(--text-secondary);
     font-size: 13px;
@@ -282,7 +537,7 @@ export const adminStyle = `
   h2 {
     font-size: 30px;
     font-weight: 700;
-    letter-spacing: -0.6px;
+    letter-spacing: 0;
     background: var(--accent-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -711,7 +966,7 @@ export const adminStyle = `
   .node-tag.region-NL { background: rgba(234, 88, 12, 0.15); color: #ea580c; }
   .node-tag.region-CH { background: rgba(220, 38, 38, 0.15); color: #dc2626; }
   .node-tag.region-SE { background: rgba(2, 132, 199, 0.15); color: #0284c7; }
-  .node-tag.region-NO { background: rgba(30, 64, 连续175, 0.15); color: #1e40af; }
+  .node-tag.region-NO { background: rgba(30, 64, 175, 0.15); color: #1e40af; }
   .node-tag.region-DK { background: rgba(190, 18, 60, 0.15); color: #be123c; }
   .node-tag.region-FI { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
   .node-tag.region-PL { background: rgba(185, 28, 28, 0.15); color: #b91c1c; }
@@ -826,6 +1081,23 @@ export const adminStyle = `
     .add-row button {
       flex: 1 1 100%;
     }
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+    .custom-api-row-main {
+      grid-template-columns: 1fr;
+    }
+    .custom-api-actions {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .custom-api-actions button {
+      flex: 1;
+    }
+    .custom-api-row .del-btn {
+      opacity: 1;
+      pointer-events: auto;
+    }
     .header-right {
       width: 100%;
       justify-content: space-between;
@@ -872,6 +1144,12 @@ export const adminStyle = `
     .page-intro {
       margin: -4px 0 16px;
       font-size: 13px;
+    }
+    .section-heading {
+      align-items: flex-start;
+    }
+    .section-summary {
+      white-space: nowrap;
     }
     .row .del-btn {
       opacity: 1;

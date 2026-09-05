@@ -406,6 +406,30 @@ function goToPage(page) {
 
 // ======================== 优选 API 管理 ========================
 let customApis = {};
+let customApisDirty = false;
+
+function setCustomApisDirty(dirty = true) {
+  customApisDirty = dirty;
+  const status = $('customApiSaveStatus');
+  const button = $('saveCustomApisButton');
+  if (status) {
+    status.textContent = dirty ? '有未保存的修改' : '配置已保存';
+    status.className = 'save-status' + (dirty ? ' dirty' : '');
+  }
+  if (button) button.disabled = !dirty;
+}
+
+function normalizeCustomApiPath(value) {
+  return String(value || '').trim().replace(/^\\/+/, '');
+}
+
+function validateCustomApiPath(path, currentPath = '') {
+  if (!path) return '请输入访问路径';
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(path)) return '仅支持字母、数字、短横线和下划线，最长 128 个字符';
+  if (['admin', 'api', 'login', 'logout'].includes(path.toLowerCase())) return '该路径为系统保留路径';
+  if (path !== currentPath && customApis[path]) return '访问路径已存在';
+  return '';
+}
 
 async function loadCustomApis(loadSources = false) {
   const requests = [fetch('/api/custom-apis')];
@@ -420,6 +444,7 @@ async function loadCustomApis(loadSources = false) {
     subs = await subsRes.json();
     apis = await apisRes.json();
   }
+  setCustomApisDirty(false);
   if ($('customApisList')) renderCustomApis();
   renderCustomApiSelect();
   renderNewCustomApiSources();
@@ -436,19 +461,44 @@ function sourcePicker(selectedSources = [], title = '选择数据源') {
   const selected = new Set(selectedSources.map((source) => source.type + ':' + source.key));
   const picker = document.createElement('div');
   picker.className = 'source-picker';
+  const head = document.createElement('div');
+  head.className = 'source-picker-head';
   const titleEl = document.createElement('div');
   titleEl.className = 'source-picker-title';
   titleEl.textContent = title;
-  picker.appendChild(titleEl);
+  const count = document.createElement('span');
+  count.className = 'source-count';
+  const actions = document.createElement('div');
+  actions.className = 'source-actions';
+  [['all', '全选'], ['clear', '清空']].forEach(([action, text]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'source-action';
+    button.dataset.sourceAction = action;
+    button.textContent = text;
+    actions.appendChild(button);
+  });
+  head.append(titleEl, count, actions);
+  picker.appendChild(head);
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'source-search';
+  search.placeholder = '搜索数据源';
+  search.setAttribute('aria-label', '搜索数据源');
+  picker.appendChild(search);
   const options = document.createElement('div');
   options.className = 'source-options';
   const entries = sourceEntries();
   if (!entries.length) {
-    options.textContent = '暂无可用数据源，请先在优选管理中添加。';
+    const empty = document.createElement('div');
+    empty.className = 'source-empty';
+    empty.textContent = '暂无可用数据源，请先在优选管理中添加。';
+    options.appendChild(empty);
   }
   entries.forEach((source) => {
     const label = document.createElement('label');
     label.className = 'source-option';
+    label.dataset.sourceSearch = source.label.toLowerCase();
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.dataset.sourceType = source.type;
@@ -458,6 +508,27 @@ function sourcePicker(selectedSources = [], title = '选择数据源') {
     options.appendChild(label);
   });
   picker.appendChild(options);
+  const updateCount = () => {
+    const checked = picker.querySelectorAll('input[type="checkbox"]:checked').length;
+    const total = picker.querySelectorAll('input[type="checkbox"]').length;
+    count.textContent = total ? checked + '/' + total : '0 个';
+  };
+  options.addEventListener('change', updateCount);
+  actions.addEventListener('click', (event) => {
+    const action = event.target.dataset.sourceAction;
+    if (!action) return;
+    options.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+      checkbox.checked = action === 'all';
+    });
+    options.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  search.addEventListener('input', () => {
+    const query = search.value.trim().toLowerCase();
+    options.querySelectorAll('.source-option').forEach((option) => {
+      option.hidden = Boolean(query) && !option.dataset.sourceSearch.includes(query);
+    });
+  });
+  updateCount();
   return picker;
 }
 
@@ -473,7 +544,7 @@ function renderNewCustomApiSources() {
   if (!container) return;
   const picker = sourcePicker([], '选择此 API 使用的数据源');
   container.innerHTML = '';
-  container.append(...picker.querySelector('.source-options').childNodes);
+  container.appendChild(picker);
 }
 
 function getNewCustomApiSources() {
@@ -500,106 +571,207 @@ function renderCustomApiSelect() {
 
 function renderCustomApis() {
   const el = $('customApisList');
+  const summary = $('customApiSummary');
+  if (summary) {
+    const count = Object.keys(customApis).length;
+    const enabled = Object.values(customApis).filter((entry) => entry.enabled).length;
+    summary.textContent = count + ' 个 API · ' + enabled + ' 个启用';
+  }
   el.innerHTML = '';
+  if (!Object.keys(customApis).length) {
+    const empty = document.createElement('div');
+    empty.className = 'custom-api-empty';
+    empty.innerHTML = '<strong>还没有优选 API</strong>';
+    el.appendChild(empty);
+    return;
+  }
   Object.entries(customApis).forEach(([path, entry]) => {
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = 'row custom-api-row';
+    row.dataset.path = path;
+
+    const main = document.createElement('div');
+    main.className = 'custom-api-row-main';
+
+    const pathField = document.createElement('label');
+    pathField.className = 'form-field compact';
+    const pathLabel = document.createElement('span');
+    pathLabel.textContent = '访问路径';
 
     const pathInput = document.createElement('input');
     pathInput.className = 'host-input';
     pathInput.value = path;
     pathInput.placeholder = '访问路径';
+    pathInput.setAttribute('aria-label', '访问路径');
+    pathField.append(pathLabel, pathInput);
 
+    const url = document.createElement('code');
+    url.className = 'custom-api-url';
+    url.textContent = window.location.origin + '/' + path;
+
+    const remarkField = document.createElement('label');
+    remarkField.className = 'form-field compact';
+    const remarkLabel = document.createElement('span');
+    remarkLabel.textContent = '备注';
     const remarkInput = document.createElement('input');
     remarkInput.className = 'remark-input';
     remarkInput.value = entry.remark || '';
     remarkInput.placeholder = '备注（可选）';
-    remarkInput.style.maxWidth = '200px';
+    remarkInput.setAttribute('aria-label', '备注');
+    remarkField.append(remarkLabel, remarkInput);
+
+    main.append(pathField, remarkField, url);
+
+    const actions = document.createElement('div');
+    actions.className = 'custom-api-actions';
 
     const statusBtn = document.createElement('button');
     statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
     statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
+    statusBtn.type = 'button';
+    statusBtn.title = '切换启用状态';
     statusBtn.onclick = () => {
       customApis[path].enabled = !customApis[path].enabled;
+      setCustomApisDirty();
       renderCustomApis();
+      renderCustomApiSelect();
     };
+
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'btn-outline icon-action';
+    copyBtn.textContent = '📋 复制地址';
+    copyBtn.onclick = () => copyCustomApiUrl(path);
+
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'btn-outline icon-action';
+    openBtn.textContent = '↗ 打开';
+    openBtn.onclick = () => window.open(window.location.origin + '/' + path, '_blank', 'noopener');
 
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn';
     delBtn.textContent = '删除';
+    delBtn.type = 'button';
     delBtn.onclick = () => {
       delete customApis[path];
+      setCustomApisDirty();
       renderCustomApis();
+      renderCustomApiSelect();
       showToast('已删除优选 API', 'success');
     };
+    actions.append(statusBtn, copyBtn, openBtn, delBtn);
 
     pathInput.onchange = () => {
-      const newPath = pathInput.value.trim().replace(/^\\/+/, '');
+      const newPath = normalizeCustomApiPath(pathInput.value);
       if (!newPath || newPath === path) return;
-      if (!/^[A-Za-z0-9_-]{1,128}$/.test(newPath) || ['admin', 'api', 'login', 'logout'].includes(newPath.toLowerCase())) {
-        showToast('访问路径格式无效', 'error');
-        pathInput.value = path;
-        return;
-      }
-      if (customApis[newPath]) {
-        showToast('访问路径已存在', 'error');
+      const error = validateCustomApiPath(newPath, path);
+      if (error) {
+        showToast(error, 'error');
         pathInput.value = path;
         return;
       }
       customApis[newPath] = customApis[path];
       delete customApis[path];
+      setCustomApisDirty();
       renderCustomApis();
+      renderCustomApiSelect();
     };
 
-    remarkInput.onchange = () => {
+    remarkInput.oninput = () => {
       customApis[path].remark = remarkInput.value;
+      setCustomApisDirty();
+      renderCustomApiSelect();
     };
 
-    const picker = sourcePicker(entry.sources || []);
+    const selectedSources = Array.isArray(entry.sources)
+      ? entry.sources
+      : sourceEntries().map((source) => ({ type: source.type, key: source.key }));
+    const picker = sourcePicker(selectedSources);
     picker.addEventListener('change', () => {
       customApis[path].sources = readSourcePicker(picker);
+      setCustomApisDirty();
     });
 
-    row.appendChild(pathInput);
-    row.appendChild(remarkInput);
-    row.appendChild(statusBtn);
-    row.appendChild(delBtn);
+    row.append(main, actions);
     row.appendChild(picker);
     el.appendChild(row);
   });
 }
 
+async function copyCustomApiUrl(path) {
+  const url = window.location.origin + '/' + path;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('访问地址已复制', 'success');
+  } catch (error) {
+    showToast('复制失败：' + error.message, 'error');
+  }
+}
+
 function addCustomApi() {
   const pathInput = $('newCustomApiPath');
   const remarkInput = $('newCustomApiRemark');
-  const path = pathInput.value.trim().replace(/^\\/+/, '');
+  const path = normalizeCustomApiPath(pathInput.value);
   const remark = remarkInput.value.trim();
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(path) || ['admin', 'api', 'login', 'logout'].includes(path.toLowerCase())) {
-    showToast('请输入有效的访问路径', 'error');
-    return;
-  }
-  if (customApis[path]) {
-    showToast('访问路径已存在', 'error');
+  const error = validateCustomApiPath(path);
+  if (error) {
+    showToast(error, 'error');
+    pathInput.focus();
     return;
   }
   customApis[path] = { enabled: true, remark, sources: getNewCustomApiSources() };
   pathInput.value = '';
   remarkInput.value = '';
+  const sourceOptions = $('newCustomApiSources')?.querySelector('.source-options');
+  if (sourceOptions) {
+    sourceOptions.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+      checkbox.checked = false;
+    });
+    sourceOptions.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  setCustomApisDirty();
   renderCustomApis();
+  renderCustomApiSelect();
   showToast('优选 API 创建成功', 'success');
 }
 
 async function saveCustomApis() {
-  const response = await fetch('/api/custom-apis', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(customApis)
-  });
-  if (!response.ok) {
+  const button = $('saveCustomApisButton');
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch('/api/custom-apis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(customApis)
+    });
+    if (!response.ok) throw new Error('请求失败');
+    setCustomApisDirty(false);
+    showToast('优选 API 配置已保存', 'success');
+  } catch (error) {
+    setCustomApisDirty(true);
     showToast('优选 API 配置保存失败', 'error');
-    return;
   }
-  showToast('优选 API 配置已保存', 'success');
+}
+
+function initCustomApiForm() {
+  const pathInput = $('newCustomApiPath');
+  const hint = $('newCustomApiPathHint');
+  if (!pathInput || !hint) return;
+  const updateHint = () => {
+    const path = normalizeCustomApiPath(pathInput.value);
+    const error = path ? validateCustomApiPath(path) : '';
+    pathInput.setAttribute('aria-invalid', error ? 'true' : 'false');
+    hint.textContent = error || '仅支持字母、数字、短横线和下划线。';
+    hint.className = error ? 'input-hint error' : '';
+  };
+  pathInput.addEventListener('input', updateHint);
+  pathInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addCustomApi();
+    }
+  });
 }
 
 // ======================== Subs 管理 ========================
@@ -919,6 +1091,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('logoutButton')?.addEventListener('click', logout);
   
   initTheme();
+  if (page === 'customApis') initCustomApiForm();
   if (page === 'subs') loadSubs();
   else if (page === 'apis') loadApis();
   else if (page === 'manage') {

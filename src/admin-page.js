@@ -55,18 +55,32 @@ export const adminHTML = `
 
 <!-- ==================== 优选 API ==================== -->
 <div class="card" id="customApiSection">
-  <h3>🚀 优选API</h3>
-  <div class="add-row">
-    <input id="newCustomApiPath" placeholder="访问路径，例如 my-api" style="max-width: 260px;" />
-    <input id="newCustomApiRemark" placeholder="备注（可选）" style="max-width: 200px;" />
-    <button class="btn-primary" onclick="addCustomApi()">➕ 新建 API</button>
+  <div class="section-heading">
+    <div>
+      <h3>🚀 优选 API</h3>
+    </div>
+    <span class="section-summary" id="customApiSummary">0 个 API</span>
   </div>
-  <div class="source-picker">
-    <div class="source-picker-title">选择此 API 使用的数据源</div>
-    <div class="source-options" id="newCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
+  <div class="custom-api-create">
+    <div class="form-grid">
+      <label class="form-field">
+        <span>访问路径</span>
+        <span class="path-input"><b>/</b><input id="newCustomApiPath" placeholder="例如 my-api" autocomplete="off" /></span>
+        <small id="newCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
+      </label>
+      <label class="form-field">
+        <span>备注</span>
+        <input id="newCustomApiRemark" placeholder="可选" autocomplete="off" />
+      </label>
+    </div>
+    <div id="newCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
+    <div class="create-actions">
+      <button class="btn-primary" type="button" onclick="addCustomApi()">➕ 新建 API</button>
+    </div>
   </div>
-  <div class="toolbar">
-    <button class="btn-primary" onclick="saveCustomApis()">💾 保存配置</button>
+  <div class="toolbar custom-api-toolbar">
+    <span class="save-status" id="customApiSaveStatus">配置已保存</span>
+    <button class="btn-primary" type="button" id="saveCustomApisButton" onclick="saveCustomApis()">💾 保存配置</button>
   </div>
   <div id="customApisList"></div>
 </div>
