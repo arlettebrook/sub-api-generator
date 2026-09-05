@@ -675,10 +675,7 @@ function readSourcePicker(picker) {
 function renderNewCustomApiSources() {
   const container = $('newCustomApiSources');
   if (!container) return;
-  const defaultSources = sourceEntries()
-    .filter((source) => source.enabled)
-    .map(({ type, key }) => ({ type, key }));
-  const picker = sourcePicker(defaultSources, '选择此 API 使用的数据源');
+  const picker = sourcePicker([], '选择此 API 使用的数据源（不选择则使用全部启用源）');
   container.innerHTML = '';
   container.appendChild(picker);
 }
@@ -692,6 +689,7 @@ function getNewCustomApiSources() {
 
 function getNewCustomApiSourceSelection() {
   const selected = getNewCustomApiSources();
+  if (!selected.length) return null;
   const enabled = sourceEntries()
     .filter((source) => source.enabled)
     .map(({ type, key }) => ({ type, key }));
