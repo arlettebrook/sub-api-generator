@@ -12,6 +12,7 @@ const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
 const LINE_CLEAN_REGEX = /(\s*@.*|加入.*|telegram.*)$/i;
 const AGGREGATE_CACHE_TTL_MS = 15000;
+const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
 const LOWER_BLACKLIST = [
   "问题", "每日", "重置", "官网", "群组", "流量", "到期", "客服", "kefu", "加入",
@@ -63,12 +64,11 @@ function decodeSubscriptionBody(content) {
 
 async function fetchPreferredSubs(host) {
   const baseHost = HTTP_PROTOCOL_REGEX.test(host) ? host : `https://${host}`;
-  const response = await fetchWithTimeout(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
+  const content = await fetchSourceText(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
     headers: { "User-Agent": UA_SUBS_FETCH },
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  }, "订阅源");
 
-  const rawContent = decodeSubscriptionBody(await response.text());
+  const rawContent = decodeSubscriptionBody(content);
   return rawContent
     .split(/\r?\n/)
     .map((line) => parsePreferredIpLine(line))
@@ -76,11 +76,34 @@ async function fetchPreferredSubs(host) {
 }
 
 async function fetchApiSubs(apiUrl) {
-  const response = await fetchWithTimeout(apiUrl, {
+  const content = await fetchSourceText(apiUrl, {
     headers: { "User-Agent": UA_APIS_FETCH },
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return (await response.text()).split(/\r?\n/).filter((line) => line.trim() !== "");
+  }, "API 源");
+  return content.split(/\r?\n/).filter((line) => line.trim() !== "");
+}
+
+async function fetchSourceText(resource, options, label) {
+  let lastError = new Error(`${label}返回空数据`);
+  for (let attempt = 0; attempt <= UPSTREAM_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(resource, options);
+      if (!response.ok) {
+        lastError = new Error(`${label} HTTP ${response.status}`);
+        const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+        if (!retryable) break;
+      } else {
+        const content = await response.text();
+        if (content.trim()) return content;
+        lastError = new Error(`${label}返回空数据`);
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    if (attempt < UPSTREAM_RETRY_DELAYS_MS.length) {
+      await new Promise((resolve) => setTimeout(resolve, UPSTREAM_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+  throw lastError;
 }
 
 function filterPreferredIps(lines) {

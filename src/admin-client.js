@@ -304,7 +304,8 @@ async function fetchNodes(emptyRetry = 0) {
     // 请求节点原始数据
     const nodeRes = await fetch(apiUrl, { signal: controller.signal, cache: 'no-store' });
     if (!nodeRes.ok) throw new Error('请求失败: ' + nodeRes.status);
-    renderPreviewSourceErrors(parseSourceErrors(nodeRes.headers.get('x-source-errors')));
+    const sourceErrors = parseSourceErrors(nodeRes.headers.get('x-source-errors'));
+    renderPreviewSourceErrors(sourceErrors);
     const text = await nodeRes.text();
     
     // 高性能解析节点
@@ -326,7 +327,7 @@ async function fetchNodes(emptyRetry = 0) {
     
     currentNodes = nodes;
     currentPage = 1;
-    if (nodes.length === 0 && emptyRetry < emptyNodeRetryDelays.length) {
+    if (nodes.length === 0 && sourceErrors.length === 0 && emptyRetry < emptyNodeRetryDelays.length) {
       nodesContainer.innerHTML = '<div class="nodes-loading">暂未获取到节点，正在重试...</div>';
       nodesCountEl.textContent = '正在获取节点';
       window.setTimeout(() => {

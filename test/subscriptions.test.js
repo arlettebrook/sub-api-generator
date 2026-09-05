@@ -32,6 +32,22 @@ test("parses Base64 responses from preferred subscription providers", async () =
   }
 });
 
+test("retries an empty preferred subscription response", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#CN";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(calls === 1 ? "" : btoa(source), { status: 200 });
+  };
+  try {
+    assert.deepEqual(await fetchPreferredSubs("e.ye.gs"), ["43.129.217.38:443#CN"]);
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reports failed sources without discarding healthy source output", async () => {
   const originalFetch = globalThis.fetch;
   const values = {
@@ -59,7 +75,7 @@ test("reports failed sources without discarding healthy source output", async ()
 
     const cachedResponse = await handleRoot(runtime);
     assert.match(decodeURIComponent(cachedResponse.headers.get("x-source-errors")), /HTTP 503/);
-    assert.equal(fetchCount, 2, "empty results should not be cached");
+    assert.equal(fetchCount, 6, "failed empty results should not be cached and each request retries upstream");
   } finally {
     clearAggregateCache();
     globalThis.fetch = originalFetch;
