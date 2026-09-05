@@ -74,6 +74,16 @@ UUID=my-subscription
 PASSWORD=change-this-password
 ```
 
+### 5. 运行测试
+
+项目使用 Node.js 内置测试框架，不需要安装额外依赖：
+
+```powershell
+npm test
+```
+
+测试覆盖配置校验、认证 Cookie、登录登出、订阅过滤、Pages 路由和 HTTP 方法限制。
+
 ## 路由
 
 - `/`、`/admin`：后台管理页面，需要登录

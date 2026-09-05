@@ -1,0 +1,8 @@
+{
+  "name": "sub-api-generator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
