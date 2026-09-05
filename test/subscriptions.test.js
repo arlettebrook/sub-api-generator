@@ -40,7 +40,11 @@ test("reports failed sources without discarding healthy source output", async ()
     },
     apis: {},
   };
-  globalThis.fetch = async () => new Response("upstream unavailable", { status: 503 });
+  let fetchCount = 0;
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return new Response("upstream unavailable", { status: 503 });
+  };
   const runtime = {
     KV: {
       async get(key) { return values[key] ?? null; },
@@ -55,6 +59,7 @@ test("reports failed sources without discarding healthy source output", async ()
 
     const cachedResponse = await handleRoot(runtime);
     assert.match(decodeURIComponent(cachedResponse.headers.get("x-source-errors")), /HTTP 503/);
+    assert.equal(fetchCount, 2, "empty results should not be cached");
   } finally {
     clearAggregateCache();
     globalThis.fetch = originalFetch;

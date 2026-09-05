@@ -276,6 +276,8 @@ let currentPage = 1;
 const pageSize = 12; // 每页显示12个节点
 let previewUuid = null;
 let activeNodeRequest = null;
+let nodeLoadSequence = 0;
+const emptyNodeRetryDelays = [500, 1200];
 
 async function getPreviewApiUrl(signal) {
   const selectedPath = $('previewApiSelect')?.value || '';
@@ -287,7 +289,8 @@ async function getPreviewApiUrl(signal) {
   return window.location.origin + '/' + previewUuid;
 }
 
-async function fetchNodes() {
+async function fetchNodes(emptyRetry = 0) {
+  const sequence = ++nodeLoadSequence;
   if (activeNodeRequest) activeNodeRequest.abort();
   const controller = new AbortController();
   activeNodeRequest = controller;
@@ -323,6 +326,14 @@ async function fetchNodes() {
     
     currentNodes = nodes;
     currentPage = 1;
+    if (nodes.length === 0 && emptyRetry < emptyNodeRetryDelays.length) {
+      nodesContainer.innerHTML = '<div class="nodes-loading">暂未获取到节点，正在重试...</div>';
+      nodesCountEl.textContent = '正在获取节点';
+      window.setTimeout(() => {
+        if (sequence === nodeLoadSequence) fetchNodes(emptyRetry + 1);
+      }, emptyNodeRetryDelays[emptyRetry]);
+      return;
+    }
     renderNodes(nodes);
     nodesCountEl.textContent = \`共 \${nodes.length} 个节点\`;
   } catch (err) {
