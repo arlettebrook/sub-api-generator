@@ -116,6 +116,44 @@ test("creates and serves custom API access paths", async () => {
   assert.match(await publicResponse.text(), /KV 未配置 subs/);
 });
 
+test("keeps multiple custom API paths independently usable", async () => {
+  const values = {
+    subs: { "one.example": { enabled: true, remark: "one" } },
+    apis: { "https://api.example/source": { enabled: true, remark: "api" } },
+    custom_apis: {},
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const authHeaders = { Cookie: `auth=${hash}` };
+  const saveResponse = await worker.fetch(new Request("https://example.test/api/custom-apis", {
+    method: "POST",
+    headers: { ...authHeaders, "content-type": "application/json" },
+    body: JSON.stringify({
+      first: { enabled: true, remark: "订阅 API", sources: [{ type: "subs", key: "one.example" }] },
+      second: { enabled: true, remark: "普通 API", sources: [{ type: "apis", key: "https://api.example/source" }] },
+    }),
+  }), runtime);
+  assert.equal(saveResponse.status, 200);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sub?")) {
+      return new Response(btoa("vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#one"), { status: 200 });
+    }
+    return new Response("trojan://example.com:443#api", { status: 200 });
+  };
+  try {
+    const firstResponse = await worker.fetch(new Request("https://example.test/first"), runtime);
+    const secondResponse = await worker.fetch(new Request("https://example.test/second"), runtime);
+    assert.equal(firstResponse.status, 200);
+    assert.equal(secondResponse.status, 200);
+    assert.match(await firstResponse.text(), /1\.2\.3\.4:443#one/);
+    assert.match(await secondResponse.text(), /trojan:\/\/example\.com:443#api/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reads and updates blacklist configuration", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

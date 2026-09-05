@@ -64,6 +64,13 @@ test("validates custom API access paths", () => {
   });
   assert.throws(() => validateApiPathPayload({ "admin": true }), /访问路径无效/);
   assert.throws(() => validateApiPathPayload({ "bad/path": true }), /访问路径无效/);
+  assert.deepEqual(validateApiPathPayload({
+    first: { enabled: true },
+    second: { enabled: true, sources: null },
+  }), {
+    first: { enabled: true, remark: "", sources: null },
+    second: { enabled: true, remark: "", sources: null },
+  });
 });
 
 test("reads and validates JSON request bodies", async () => {

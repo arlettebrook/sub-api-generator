@@ -135,7 +135,8 @@ export function validateApiPathPayload(body) {
     }
     const value = typeof rawValue === "boolean" ? { enabled: rawValue, remark: "" } : rawValue;
     if (!isPlainObject(value)) throw new Error(`配置项无效: ${rawPath}`);
-    const sources = Array.isArray(value.sources) ? value.sources : null;
+    const hasSources = Array.isArray(value.sources);
+    const sources = hasSources ? value.sources : [];
     const normalizedSources = [];
     for (const source of sources) {
       if (!isPlainObject(source) || !["subs", "apis"].includes(source.type) || typeof source.key !== "string") {
@@ -150,7 +151,7 @@ export function validateApiPathPayload(body) {
     normalized[path] = {
       enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
-      sources: sources === null ? null : normalizedSources,
+      sources: hasSources ? normalizedSources : null,
     };
   }
   return normalized;
