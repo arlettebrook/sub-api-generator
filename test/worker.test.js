@@ -61,6 +61,7 @@ test("serves separate responsive admin pages", async () => {
     if (page === "customApis") {
       assert.match(html, /id="customApiSection"/);
       assert.match(html, /data-nav-page="customApis"/);
+      assert.match(html, /page === 'customApis'\) loadCustomApis\(true\)/);
     }
   }
 });

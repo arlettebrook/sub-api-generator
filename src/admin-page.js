@@ -1936,7 +1936,7 @@ window.addEventListener('DOMContentLoaded', () => {
     loadSubs();
     loadApis();
   }
-  else if (page === 'customApis') loadCustomApis();
+  else if (page === 'customApis') loadCustomApis(true);
   else if (page === 'overview') {
     fetchNodes();
     loadCustomApis().catch(() => {
