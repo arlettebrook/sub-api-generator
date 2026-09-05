@@ -300,6 +300,70 @@ export const adminStyle = `
     font-size: 13px;
   }
 
+  .source-load-status,
+  .source-error-notice,
+  .data-source-error {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: var(--radius-md);
+    background: rgba(245, 158, 11, 0.08);
+    color: #b45309;
+    font-size: 13px;
+  }
+
+  .source-load-status[hidden],
+  .source-error-notice[hidden] {
+    display: none;
+  }
+
+  .source-load-status strong,
+  .source-error-notice strong {
+    color: #92400e;
+    max-width: 100%;
+  }
+
+  .source-load-status ul,
+  .source-error-notice ul {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    margin: 0;
+    padding-left: 18px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .source-load-status button,
+  .source-error-notice button {
+    flex-shrink: 0;
+    margin-left: auto;
+    height: 30px;
+    padding: 0 10px;
+    color: #92400e;
+    border-color: rgba(180, 83, 9, 0.35);
+    background: transparent;
+  }
+
+  .data-source-error {
+    justify-content: space-between;
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.28);
+    background: var(--danger-light);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .data-source-error button {
+    height: 30px;
+    padding: 0 12px;
+  }
+
   .section-heading {
     display: flex;
     align-items: flex-start;
@@ -991,6 +1055,10 @@ export const adminStyle = `
     cursor: pointer;
   }
 
+  .nodes-error button {
+    margin-top: 12px;
+  }
+
   .nodes-count {
     margin-left: auto;
     color: var(--text-secondary);
@@ -1163,6 +1231,21 @@ export const adminStyle = `
     .pagination .jump-box {
       width: 100%;
       justify-content: center;
+      margin-left: 0;
+    }
+    .source-load-status,
+    .source-error-notice,
+    .data-source-error {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .source-load-status ul,
+    .source-error-notice ul {
+      width: 100%;
+    }
+    .source-load-status button,
+    .source-error-notice button,
+    .data-source-error button {
       margin-left: 0;
     }
   }

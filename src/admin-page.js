@@ -47,6 +47,7 @@ export const adminHTML = `
     </button>
     <span class="nodes-count" id="nodesCount">共 0 个节点</span>
   </div>
+  <div id="sourceErrorNotice" class="source-error-notice" role="status" hidden></div>
   <div id="nodesContainer">
     <div class="nodes-loading">加载中...</div>
   </div>
@@ -74,6 +75,7 @@ export const adminHTML = `
       </label>
     </div>
     <div id="newCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
+    <div id="customApiSourceStatus" class="source-load-status" role="status" hidden></div>
     <div class="create-actions">
       <button class="btn-primary" type="button" onclick="addCustomApi()">➕ 新建 API</button>
     </div>

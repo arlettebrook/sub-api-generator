@@ -66,7 +66,7 @@ async function fetchPreferredSubs(host) {
   const response = await fetchWithTimeout(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
     headers: { "User-Agent": UA_SUBS_FETCH },
   });
-  if (!response.ok) return [];
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
   const rawContent = decodeSubscriptionBody(await response.text());
   return rawContent
@@ -79,7 +79,7 @@ async function fetchApiSubs(apiUrl) {
   const response = await fetchWithTimeout(apiUrl, {
     headers: { "User-Agent": UA_APIS_FETCH },
   });
-  if (!response.ok) return [];
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return (await response.text()).split(/\r?\n/).filter((line) => line.trim() !== "");
 }
 
@@ -117,11 +117,13 @@ export async function handleRoot(env, sourceSelection) {
       : "__all__";
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
+      const headers = {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+      };
+      setSourceErrorHeaders(headers, cached.sourceErrors || []);
       return new Response(cached.output, {
-        headers: withSecurityHeaders({
-          "content-type": "text/plain; charset=utf-8",
-          "cache-control": "no-store",
-        }),
+        headers: withSecurityHeaders(headers),
       });
     }
     const [subsConfig, apisConfig] = await Promise.all([
@@ -137,33 +139,68 @@ export async function handleRoot(env, sourceSelection) {
       return selected === null || selected.some((source) => source?.type === type && source.key === key);
     });
     const [subsResults, apiResults] = await Promise.all([
-      Promise.allSettled(selectedEntries(subsConfig, "subs").map(([host]) => fetchPreferredSubs(host))),
-      Promise.allSettled(selectedEntries(apisConfig, "apis").map(([apiUrl]) => fetchApiSubs(apiUrl))),
+      Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
+        try {
+          return { key: host, values: await fetchPreferredSubs(host) };
+        } catch (error) {
+          const failure = error instanceof Error ? error : new Error(String(error));
+          failure.sourceKey = host;
+          throw failure;
+        }
+      })),
+      Promise.allSettled(selectedEntries(apisConfig, "apis").map(async ([apiUrl]) => {
+        try {
+          return { key: apiUrl, values: await fetchApiSubs(apiUrl) };
+        } catch (error) {
+          const failure = error instanceof Error ? error : new Error(String(error));
+          failure.sourceKey = apiUrl;
+          throw failure;
+        }
+      })),
     ]);
 
     const preferred = [];
+    const sourceErrors = [];
+    if (selected && selected.length === 0) {
+      sourceErrors.push({ type: "config", key: "", message: "未选择任何数据源" });
+    }
     for (const result of subsResults) {
-      if (result.status === "fulfilled") preferred.push(...result.value);
+      if (result.status === "fulfilled") preferred.push(...result.value.values);
+      else sourceErrors.push({ type: "subs", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
     const extra = [];
     for (const result of apiResults) {
-      if (result.status === "fulfilled") extra.push(...result.value);
+      if (result.status === "fulfilled") extra.push(...result.value.values);
+      else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
 
     const filtered = filterPreferredIps(preferred);
     const output = filtered.join("\n") + (extra.length ? `\n${extra.join("\n")}` : "");
-    aggregateCache.set(cacheKey, { output, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
+    aggregateCache.set(cacheKey, { output, sourceErrors, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
+    const headers = {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    };
+    setSourceErrorHeaders(headers, sourceErrors);
     return new Response(output, {
-      headers: withSecurityHeaders({
-        "content-type": "text/plain; charset=utf-8",
-        "cache-control": "no-store",
-      }),
+      headers: withSecurityHeaders(headers),
     });
   } catch (error) {
     return textResponse("！！！！！优选订阅生成器异常：" + error.message, 500, {
       "cache-control": "no-store",
     });
   }
+}
+
+function sourceErrorMessage(error) {
+  if (!error) return "未知错误";
+  if (error.name === "AbortError") return "请求超时（15 秒）";
+  return typeof error.message === "string" && error.message ? error.message.slice(0, 160) : "请求失败";
+}
+
+function setSourceErrorHeaders(headers, errors) {
+  if (!errors.length) return;
+  headers["x-source-errors"] = encodeURIComponent(JSON.stringify(errors.slice(0, 50)));
 }
 
 export function clearAggregateCache() {

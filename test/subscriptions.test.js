@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchPreferredSubs, filterPreferredIps } from "../src/subscriptions.js";
+import { clearAggregateCache, fetchPreferredSubs, filterPreferredIps, handleRoot } from "../src/subscriptions.js";
 
 test("filters invalid, blacklisted, and duplicate nodes", () => {
   assert.deepEqual(filterPreferredIps([
@@ -28,6 +28,35 @@ test("parses Base64 responses from preferred subscription providers", async () =
       "43.161.236.173:8443#HK",
     ]);
   } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reports failed sources without discarding healthy source output", async () => {
+  const originalFetch = globalThis.fetch;
+  const values = {
+    subs: {
+      "broken.example.com": { enabled: true, remark: "故障订阅源" },
+    },
+    apis: {},
+  };
+  globalThis.fetch = async () => new Response("upstream unavailable", { status: 503 });
+  const runtime = {
+    KV: {
+      async get(key) { return values[key] ?? null; },
+    },
+  };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime);
+    assert.equal(response.status, 200);
+    assert.match(decodeURIComponent(response.headers.get("x-source-errors")), /broken\.example\.com/);
+    assert.equal(await response.text(), "");
+
+    const cachedResponse = await handleRoot(runtime);
+    assert.match(decodeURIComponent(cachedResponse.headers.get("x-source-errors")), /HTTP 503/);
+  } finally {
+    clearAggregateCache();
     globalThis.fetch = originalFetch;
   }
 });

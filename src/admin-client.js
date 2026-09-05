@@ -77,6 +77,102 @@ function showToast(message, type = 'default') {
   }, 2000);
 }
 
+function responseError(label, response) {
+  return new Error(label + '失败（HTTP ' + response.status + '）');
+}
+
+async function readJsonResponse(url, label) {
+  let response;
+  try {
+    response = await fetch(url, { cache: 'no-store' });
+  } catch (error) {
+    throw new Error(label + '连接失败：' + (error.message || '网络异常'));
+  }
+  if (!response.ok) throw responseError(label, response);
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(label + '返回的数据格式无效');
+  }
+}
+
+function renderLoadError(containerId, message, retry) {
+  const container = $(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  const notice = document.createElement('div');
+  notice.className = 'data-source-error';
+  const text = document.createElement('span');
+  text.textContent = message;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn-outline';
+  button.textContent = '重试';
+  button.onclick = retry;
+  notice.append(text, button);
+  container.appendChild(notice);
+}
+
+function renderSourceLoadStatus(errors = []) {
+  const notice = $('customApiSourceStatus');
+  if (!notice) return;
+  notice.innerHTML = '';
+  notice.hidden = errors.length === 0;
+  if (!errors.length) return;
+  const title = document.createElement('strong');
+  title.textContent = '部分数据源配置加载失败';
+  notice.appendChild(title);
+  const list = document.createElement('ul');
+  errors.forEach((error) => {
+    const item = document.createElement('li');
+    const sourceName = error.type === 'apis' ? 'API 源' : error.type === 'config' ? '配置' : '订阅源';
+    item.textContent = sourceName + '：' + error.message;
+    list.appendChild(item);
+  });
+  notice.appendChild(list);
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'btn-outline';
+  retry.textContent = '重新加载数据源';
+  retry.onclick = () => loadCustomApis(true).catch((error) => showToast(error.message, 'error'));
+  notice.appendChild(retry);
+}
+
+function parseSourceErrors(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function renderPreviewSourceErrors(errors = []) {
+  const notice = $('sourceErrorNotice');
+  if (!notice) return;
+  notice.innerHTML = '';
+  notice.hidden = errors.length === 0;
+  if (!errors.length) return;
+  const title = document.createElement('strong');
+  title.textContent = '部分数据源暂时不可用，已展示其他来源的数据';
+  notice.appendChild(title);
+  const list = document.createElement('ul');
+  errors.forEach((error) => {
+    const item = document.createElement('li');
+    const sourceName = error.key || (error.type === 'apis' ? 'API 源' : error.type === 'config' ? '配置' : '订阅源');
+    item.textContent = sourceName + '：' + error.message;
+    list.appendChild(item);
+  });
+  notice.appendChild(list);
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'btn-outline';
+  retry.textContent = '重试';
+  retry.onclick = fetchNodes;
+  notice.appendChild(retry);
+}
+
 // ======================== 登出功能 ========================
 async function logout() {
   const button = document.querySelector('.btn-logout');
@@ -197,6 +293,7 @@ async function fetchNodes() {
   activeNodeRequest = controller;
   nodesContainer.innerHTML = '<div class="nodes-loading">正在获取节点数据...</div>';
   paginationEl.innerHTML = '';
+  renderPreviewSourceErrors();
   
   try {
     const apiUrl = await getPreviewApiUrl(controller.signal);
@@ -204,6 +301,7 @@ async function fetchNodes() {
     // 请求节点原始数据
     const nodeRes = await fetch(apiUrl, { signal: controller.signal, cache: 'no-store' });
     if (!nodeRes.ok) throw new Error('请求失败: ' + nodeRes.status);
+    renderPreviewSourceErrors(parseSourceErrors(nodeRes.headers.get('x-source-errors')));
     const text = await nodeRes.text();
     
     // 高性能解析节点
@@ -229,7 +327,17 @@ async function fetchNodes() {
     nodesCountEl.textContent = \`共 \${nodes.length} 个节点\`;
   } catch (err) {
     if (err.name === 'AbortError') return;
-    nodesContainer.innerHTML = \`<div class="nodes-error" onclick="fetchNodes()">加载失败：\${err.message}<br>点击重试</div>\`;
+    nodesContainer.innerHTML = '';
+    const error = document.createElement('div');
+    error.className = 'nodes-error';
+    error.textContent = '加载失败：' + err.message;
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn-outline';
+    retry.textContent = '重试';
+    retry.onclick = fetchNodes;
+    error.appendChild(retry);
+    nodesContainer.appendChild(error);
     nodesCountEl.textContent = '共 0 个节点';
   } finally {
     if (activeNodeRequest === controller) activeNodeRequest = null;
@@ -432,17 +540,30 @@ function validateCustomApiPath(path, currentPath = '') {
 }
 
 async function loadCustomApis(loadSources = false) {
-  const requests = [fetch('/api/custom-apis')];
+  const requests = [readJsonResponse('/api/custom-apis', '优选 API 配置')];
   if (loadSources) {
-    requests.push(fetch('/api/subs'), fetch('/api/apis'));
+    requests.push(readJsonResponse('/api/subs', '订阅源配置'), readJsonResponse('/api/apis', 'API 源配置'));
   }
-  const [customRes, subsRes, apisRes] = await Promise.all(requests);
-  if (!customRes.ok) throw new Error('优选 API 配置加载失败');
-  customApis = await customRes.json();
+  const results = await Promise.allSettled(requests);
+  if (results[0].status === 'rejected') {
+    renderLoadError('customApisList', results[0].reason.message, () => loadCustomApis(loadSources));
+    showToast(results[0].reason.message, 'error');
+    return;
+  }
+  customApis = results[0].value;
+  const sourceErrors = [];
   if (loadSources) {
-    if (!subsRes.ok || !apisRes.ok) throw new Error('数据源配置加载失败');
-    subs = await subsRes.json();
-    apis = await apisRes.json();
+    if (results[1].status === 'fulfilled') subs = results[1].value;
+    else {
+      subs = {};
+      sourceErrors.push({ type: 'subs', message: results[1].reason.message });
+    }
+    if (results[2].status === 'fulfilled') apis = results[2].value;
+    else {
+      apis = {};
+      sourceErrors.push({ type: 'apis', message: results[2].reason.message });
+    }
+    renderSourceLoadStatus(sourceErrors);
   }
   setCustomApisDirty(false);
   if ($('customApisList')) renderCustomApis();
@@ -778,15 +899,19 @@ function initCustomApiForm() {
 let subs = {};
 
 async function loadSubs() {
-  const res = await fetch('/api/subs');
-  let data = await res.json();
-  for (let key in data) {
-    if (typeof data[key] === 'boolean') {
-      data[key] = { enabled: data[key], remark: '' };
+  try {
+    let data = await readJsonResponse('/api/subs', '订阅源配置');
+    for (let key in data) {
+      if (typeof data[key] === 'boolean') {
+        data[key] = { enabled: data[key], remark: '' };
+      }
     }
+    subs = data;
+    renderSubs();
+  } catch (error) {
+    renderLoadError('subsList', error.message, loadSubs);
+    showToast(error.message, 'error');
   }
-  subs = data;
-  renderSubs();
 }
 
 function renderSubs() {
@@ -870,14 +995,18 @@ function addSub() {
 }
 
 async function saveSubs() {
-  await fetch('/api/subs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(subs)
-  });
-  showToast('Subs 配置已保存', 'success');
-  // 保存后自动刷新节点
-  fetchNodes();
+  try {
+    const response = await fetch('/api/subs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(subs)
+    });
+    if (!response.ok) throw responseError('订阅源配置保存', response);
+    showToast('订阅源配置已保存', 'success');
+    fetchNodes();
+  } catch (error) {
+    showToast(error.message || '订阅源配置保存失败', 'error');
+  }
 }
 
 function exportSubs() {
@@ -925,15 +1054,19 @@ function importSubs(event) {
 let apis = {};
 
 async function loadApis() {
-  const res = await fetch('/api/apis');
-  let data = await res.json();
-  for (let key in data) {
-    if (typeof data[key] === 'boolean') {
-      data[key] = { enabled: data[key], remark: '' };
+  try {
+    let data = await readJsonResponse('/api/apis', 'API 源配置');
+    for (let key in data) {
+      if (typeof data[key] === 'boolean') {
+        data[key] = { enabled: data[key], remark: '' };
+      }
     }
+    apis = data;
+    renderApis();
+  } catch (error) {
+    renderLoadError('apisList', error.message, loadApis);
+    showToast(error.message, 'error');
   }
-  apis = data;
-  renderApis();
 }
 
 function renderApis() {
@@ -1011,14 +1144,18 @@ function addApi() {
 }
 
 async function saveApis() {
-  await fetch('/api/apis', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(apis)
-  });
-  showToast('APIs 配置已保存', 'success');
-  // 保存后自动刷新节点
-  fetchNodes();
+  try {
+    const response = await fetch('/api/apis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(apis)
+    });
+    if (!response.ok) throw responseError('API 源配置保存', response);
+    showToast('API 源配置已保存', 'success');
+    fetchNodes();
+  } catch (error) {
+    showToast(error.message || 'API 源配置保存失败', 'error');
+  }
 }
 
 function exportApis() {
