@@ -317,6 +317,8 @@ export const adminHTML = `
     cursor: pointer;
     transition: var(--transition);
     flex-shrink: 0;
+    padding: 0;
+    font: inherit;
   }
 
   .theme-switch:hover {
@@ -904,8 +906,8 @@ export const adminHTML = `
     <h2>优选API•生成器•管理面板</h2>
   </div>
   <div class="header-right">
-    <div class="theme-switch" onclick="toggleTheme()" title="切换主题"></div>
-    <button class="btn-outline btn-logout" onclick="logout()" title="退出登录">
+    <button class="theme-switch" type="button" onclick="toggleTheme()" title="切换主题" aria-label="切换主题" aria-pressed="true"></button>
+    <button class="btn-outline btn-logout" type="button" onclick="logout()" title="退出登录">
       <span>🚪</span> 退出登录
     </button>
   </div>
@@ -1087,8 +1089,22 @@ function showToast(message, type = 'default') {
 
 // ======================== 登出功能 ========================
 async function logout() {
-  await fetch('/logout', { method: 'POST' });
-  window.location.reload();
+  const button = document.querySelector('.btn-logout');
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch('/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      redirect: 'follow',
+    });
+    if (!response.ok) throw new Error('退出登录请求失败');
+  } catch (error) {
+    if (button) button.disabled = false;
+    showToast(error.message, 'error');
+    return;
+  }
+  window.location.replace('/');
 }
 
 // ======================== 复制订阅地址功能 ========================
@@ -1143,16 +1159,29 @@ async function copyNodeData() {
 function toggleTheme() {
   document.body.classList.toggle('dark');
   const isDark = document.body.classList.contains('dark');
-  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  const switcher = document.querySelector('.theme-switch');
+  if (switcher) switcher.setAttribute('aria-pressed', String(isDark));
+  try {
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  } catch {
+    // Theme switching should still work when storage is unavailable.
+  }
 }
 
 function initTheme() {
-  const savedTheme = localStorage.getItem('theme');
+  let savedTheme = null;
+  try {
+    savedTheme = localStorage.getItem('theme');
+  } catch {
+    // Fall back to the default dark theme when storage is unavailable.
+  }
   if (savedTheme === 'light') {
     document.body.classList.remove('dark');
   } else if (savedTheme === 'dark') {
     document.body.classList.add('dark');
   }
+  const switcher = document.querySelector('.theme-switch');
+  if (switcher) switcher.setAttribute('aria-pressed', String(document.body.classList.contains('dark')));
 }
 
 // ======================== 优选节点展示与增强分页 ========================

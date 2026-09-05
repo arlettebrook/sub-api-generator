@@ -103,3 +103,13 @@ test("rejects unsupported methods", async () => {
   assert.equal(response.status, 405);
   assert.equal(response.headers.get("allow"), "GET");
 });
+
+test("logs out authenticated sessions", async () => {
+  const hash = await sha256Hex("secret");
+  const response = await worker.fetch(new Request("https://example.test/logout", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}` },
+  }), env());
+  assert.equal(response.status, 303);
+  assert.match(response.headers.get("set-cookie"), /auth=;.*Max-Age=0/);
+});
