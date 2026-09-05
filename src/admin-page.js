@@ -679,7 +679,7 @@ export const adminHTML = `
   }
 
   /* 响应式适配 */
-  @media (max-width: 768px) {
+  @media screen and (max-width: 768px), screen and (max-device-width: 768px) {
     body {
       margin: 12px auto;
       padding: 0 12px 92px;
@@ -702,11 +702,12 @@ export const adminHTML = `
       width: 100%;
       justify-content: space-between;
     }
-    .admin-nav {
-      position: fixed;
-      left: 12px;
+    body > .admin-nav {
+      position: fixed !important;
+      top: auto !important;
       right: 12px;
-      bottom: calc(12px + env(safe-area-inset-bottom));
+      bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+      left: 12px;
       width: auto;
       flex-direction: row;
       align-items: center;
@@ -718,6 +719,7 @@ export const adminHTML = `
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
       box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
+      isolation: isolate;
     }
     .admin-nav::-webkit-scrollbar { display: none; }
     .admin-nav a {

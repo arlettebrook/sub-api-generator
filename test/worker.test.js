@@ -49,6 +49,8 @@ test("serves separate responsive admin pages", async () => {
     assert.equal(response.status, 200);
     assert.match(html, new RegExp(`data-page="${page}"`));
     assert.match(html, /class="admin-nav"/);
+    assert.match(html, /@media screen and \(max-width: 768px\)/);
+    assert.match(html, /body > \.admin-nav \{\s*position: fixed !important;/);
   }
 });
 
