@@ -18,6 +18,8 @@ import {
 import * as auth from "./auth.js";
 import * as subscriptions from "./subscriptions.js";
 import { adminHTML } from "./admin-page.js";
+import { adminClientScript } from "./admin-client.js";
+import { adminStyle } from "./admin-style.js";
 import { loginPage } from "./login-page.js";
 
 async function handleGetSubs(env) {
@@ -84,12 +86,29 @@ function handleAdmin(page = "overview") {
   });
 }
 
+function assetResponse(content, contentType) {
+  return new Response(content, {
+    headers: pagesSecurityHeaders({
+      "content-type": contentType,
+      "cache-control": "public, max-age=300, must-revalidate",
+    }),
+  });
+}
+
 // ========================= 主入口 =========================
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    if (path === "/admin.css") {
+      if (method !== "GET") return pagesMethodNotAllowed("GET");
+      return assetResponse(adminStyle, "text/css; charset=utf-8");
+    }
+    if (path === "/admin-client.js") {
+      if (method !== "GET") return pagesMethodNotAllowed("GET");
+      return assetResponse(adminClientScript, "application/javascript; charset=utf-8");
+    }
     const config = getPagesRuntimeConfig(env);
 
     if (config.error) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import worker from "../src/index.js";
 import { adminHTML } from "../src/admin-page.js";
+import { adminClientScript } from "../src/admin-client.js";
 import { sha256Hex } from "../src/auth.js";
 
 function createKv(values = {}) {
@@ -51,8 +52,8 @@ test("serves separate responsive admin pages", async () => {
     assert.equal(response.status, 200);
     assert.match(html, new RegExp(`data-page="${page}"`));
     assert.match(html, /class="admin-nav"/);
-    assert.match(html, /@media screen and \(max-width: 768px\)/);
-    assert.match(html, /body > \.admin-nav \{\s*position: fixed !important;/);
+    assert.match(html, /href="\/admin\.css"/);
+    assert.match(html, /src="\/admin-client\.js"/);
     if (page === "manage") {
       assert.match(html, /id="subsSection"/);
       assert.match(html, /id="apisSection"/);
@@ -61,15 +62,27 @@ test("serves separate responsive admin pages", async () => {
     if (page === "customApis") {
       assert.match(html, /id="customApiSection"/);
       assert.match(html, /data-nav-page="customApis"/);
-      assert.match(html, /page === 'customApis'\) loadCustomApis\(true\)/);
+      assert.match(adminClientScript, /page === 'customApis'\) loadCustomApis\(true\)/);
     }
   }
 });
 
 test("keeps the generated admin script valid JavaScript", () => {
-  const start = adminHTML.indexOf("<script>") + "<script>".length;
-  const end = adminHTML.lastIndexOf("</script>");
-  assert.doesNotThrow(() => new vm.Script(adminHTML.slice(start, end)));
+  assert.doesNotThrow(() => new vm.Script(adminClientScript));
+});
+
+test("serves admin frontend assets", async () => {
+  const css = await worker.fetch(new Request("https://example.test/admin.css"));
+  assert.equal(css.status, 200);
+  assert.match(css.headers.get("content-type"), /text\/css/);
+  const cssText = await css.text();
+  assert.match(cssText, /--accent-primary/);
+  assert.match(cssText, /@media screen and \(max-width: 768px\)/);
+
+  const script = await worker.fetch(new Request("https://example.test/admin-client.js"));
+  assert.equal(script.status, 200);
+  assert.match(script.headers.get("content-type"), /javascript/);
+  assert.match(await script.text(), /DOMContentLoaded/);
 });
 
 test("creates and serves custom API access paths", async () => {
