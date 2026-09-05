@@ -106,6 +106,55 @@ export const adminHTML = `
     gap: 16px;
   }
 
+  .admin-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px;
+    margin-top: -20px;
+    margin-bottom: 28px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(12px);
+  }
+
+  .admin-nav a {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    text-align: center;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: var(--transition);
+  }
+
+  .admin-nav a:hover,
+  .admin-nav a.active {
+    color: var(--text-primary);
+    background: var(--accent-light);
+  }
+
+  body[data-page="overview"] #subsSection,
+  body[data-page="overview"] #apisSection,
+  body[data-page="subs"] #previewSection,
+  body[data-page="subs"] #apisSection,
+  body[data-page="apis"] #previewSection,
+  body[data-page="apis"] #subsSection {
+    display: none;
+  }
+
+  .page-intro {
+    margin: -12px 0 24px;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
   .header-right {
     display: flex;
     align-items: center;
@@ -645,6 +694,14 @@ export const adminHTML = `
       width: 100%;
       justify-content: space-between;
     }
+    .admin-nav {
+      flex-direction: column;
+      align-items: stretch;
+      margin-top: -12px;
+    }
+    .admin-nav a {
+      text-align: left;
+    }
     .row .del-btn {
       opacity: 1;
       pointer-events: auto;
@@ -662,7 +719,7 @@ export const adminHTML = `
   }
 </style>
 </head>
-<body class="dark">
+<body class="dark" data-page="__PAGE__">
 
 <!-- Toast 提示容器 -->
 <div id="toast" class="toast"></div>
@@ -679,8 +736,16 @@ export const adminHTML = `
   </div>
 </div>
 
+<nav class="admin-nav" aria-label="管理导航">
+  <a href="/admin" data-nav-page="overview">🌐 数据预览</a>
+  <a href="/admin/subs" data-nav-page="subs">📡 优选订阅源</a>
+  <a href="/admin/apis" data-nav-page="apis">🔗 API 源</a>
+</nav>
+
+<p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
+
 <!-- ==================== 优选节点预览 ==================== -->
-<div class="card">
+<div class="card" id="previewSection">
   <h3>🌐 优选API数据预览</h3>
   <div class="toolbar">
     <button class="btn-primary" onclick="fetchNodes()">🔄 刷新数据</button>
@@ -699,7 +764,7 @@ export const adminHTML = `
 </div>
 
 <!-- ==================== 订阅源管理 ==================== -->
-<div class="card">
+<div class="card" id="subsSection">
   <h3>📡 优选订阅器管理</h3>
   <div class="add-row">
     <input id="newHost" placeholder="sub.example.com" style="max-width: 220px;" />
@@ -716,7 +781,7 @@ export const adminHTML = `
 </div>
 
 <!-- ==================== API 管理 ==================== -->
-<div class="card">
+<div class="card" id="apisSection">
   <h3>🔗 优选 API 管理</h3>
   <div class="add-row">
     <input id="newApiUrl" placeholder="https://api.example.com/v1" style="max-width: 320px;" />
@@ -1388,18 +1453,29 @@ function importApis(event) {
 
 // 页面初始化
 window.addEventListener('DOMContentLoaded', () => {
+  const page = document.body.dataset.page || 'overview';
+  const intro = $('pageIntro');
+  const intros = {
+    overview: '集中查看订阅聚合结果和节点状态。',
+    subs: '管理优选订阅源，控制启用状态并维护备注。',
+    apis: '管理额外 API 源，控制启用状态并维护备注。'
+  };
+  if (intro) intro.textContent = intros[page] || intros.overview;
+  document.querySelectorAll('[data-nav-page]').forEach((link) => {
+    link.classList.toggle('active', link.dataset.navPage === page);
+  });
+
   // 缓存核心DOM元素
   nodesContainer = $('nodesContainer');
   paginationEl = $('pagination');
   nodesCountEl = $('nodesCount');
   
   initTheme();
-  loadSubs();
-  loadApis();
-  fetchNodes();
+  if (page === 'subs') loadSubs();
+  else if (page === 'apis') loadApis();
+  else fetchNodes();
 });
 </script>
 </body>
 </html>
 `;
-

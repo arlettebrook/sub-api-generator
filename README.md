@@ -86,7 +86,9 @@ npm test
 
 ## 路由
 
-- `/`、`/admin`：后台管理页面，需要登录
+- `/`、`/admin`：数据预览页，需要登录
+- `/admin/subs`：优选订阅源管理页，需要登录
+- `/admin/apis`：API 源管理页，需要登录
 - `/<UUID>`：公开订阅聚合接口
 - `/api/subs`、`/api/apis`：后台配置接口，需要登录
 - `/api/uuid`：读取订阅 UUID，需要登录

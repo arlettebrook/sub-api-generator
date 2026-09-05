@@ -39,6 +39,19 @@ test("serves the login page and authenticated UUID endpoint", async () => {
   assert.deepEqual(await response.json(), { uuid: "test-sub" });
 });
 
+test("serves separate responsive admin pages", async () => {
+  const hash = await sha256Hex("secret");
+  for (const [path, page] of [["/admin", "overview"], ["/admin/subs", "subs"], ["/admin/apis", "apis"]]) {
+    const response = await worker.fetch(new Request(`https://example.test${path}`, {
+      headers: { Cookie: `auth=${hash}` },
+    }), env());
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, new RegExp(`data-page="${page}"`));
+    assert.match(html, /class="admin-nav"/);
+  }
+});
+
 test("rejects unsupported methods", async () => {
   const hash = await sha256Hex("secret");
   const response = await worker.fetch(new Request("https://example.test/api/uuid", {

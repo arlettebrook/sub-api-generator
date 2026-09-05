@@ -42,8 +42,9 @@ async function handleGetUuid(env) {
   return pagesJsonResponse({ uuid: env.UUID.trim() });
 }
 
-function handleAdmin() {
-  return new Response(adminHTML, {
+function handleAdmin(page = "overview") {
+  const html = adminHTML.replace('data-page="__PAGE__"', `data-page="${page}"`);
+  return new Response(html, {
     headers: pagesSecurityHeaders({
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
@@ -109,7 +110,13 @@ export default {
         case "/":
         case "/admin":
           if (method !== "GET") return pagesMethodNotAllowed("GET");
-          return handleAdmin();
+          return handleAdmin("overview");
+        case "/admin/subs":
+          if (method !== "GET") return pagesMethodNotAllowed("GET");
+          return handleAdmin("subs");
+        case "/admin/apis":
+          if (method !== "GET") return pagesMethodNotAllowed("GET");
+          return handleAdmin("apis");
         default:
           return pagesTextResponse("Not Found", 404);
       }
