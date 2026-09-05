@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import worker from "../src/index.js";
+import { adminHTML } from "../src/admin-page.js";
 import { sha256Hex } from "../src/auth.js";
 
 function createKv(values = {}) {
@@ -61,6 +63,12 @@ test("serves separate responsive admin pages", async () => {
       assert.match(html, /data-nav-page="customApis"/);
     }
   }
+});
+
+test("keeps the generated admin script valid JavaScript", () => {
+  const start = adminHTML.indexOf("<script>") + "<script>".length;
+  const end = adminHTML.lastIndexOf("</script>");
+  assert.doesNotThrow(() => new vm.Script(adminHTML.slice(start, end)));
 });
 
 test("creates and serves custom API access paths", async () => {

@@ -1530,7 +1530,7 @@ function renderCustomApis() {
     };
 
     pathInput.onchange = () => {
-      const newPath = pathInput.value.trim().replace(/^\/+/, '');
+      const newPath = pathInput.value.trim().replace(/^\\/+/, '');
       if (!newPath || newPath === path) return;
       if (!/^[A-Za-z0-9_-]{1,128}$/.test(newPath) || ['admin', 'api', 'login', 'logout'].includes(newPath.toLowerCase())) {
         showToast('访问路径格式无效', 'error');
@@ -1568,7 +1568,7 @@ function renderCustomApis() {
 function addCustomApi() {
   const pathInput = $('newCustomApiPath');
   const remarkInput = $('newCustomApiRemark');
-  const path = pathInput.value.trim().replace(/^\/+/, '');
+  const path = pathInput.value.trim().replace(/^\\/+/, '');
   const remark = remarkInput.value.trim();
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(path) || ['admin', 'api', 'login', 'logout'].includes(path.toLowerCase())) {
     showToast('请输入有效的访问路径', 'error');
