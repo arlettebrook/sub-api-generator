@@ -87,7 +87,7 @@ async function fetchApiSubs(apiUrl) {
   const content = await fetchSourceText(apiUrl, {
     headers: { "User-Agent": UA_APIS_FETCH },
   }, "API 源");
-  return content.split(/\r?\n/).filter((line) => line.trim() !== "");
+  return decodeSubscriptionBody(content).split(/\r?\n/).filter((line) => line.trim() !== "");
 }
 
 async function fetchSourceText(resource, options, label) {

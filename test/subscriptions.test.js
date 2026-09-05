@@ -32,6 +32,29 @@ test("parses Base64 responses from preferred subscription providers", async () =
   }
 });
 
+test("decodes Base64 responses from API sources", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#API";
+  globalThis.fetch = async () => new Response(btoa(source), { status: 200 });
+  const runtime = {
+    KV: {
+      async get(key) {
+        if (key === "subs") return {};
+        if (key === "apis") return { "https://api.example/source": { enabled: true } };
+        return null;
+      },
+    },
+  };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime, [{ type: "apis", key: "https://api.example/source" }]);
+    assert.match(await response.text(), /vless:\/\/00000000-0000-4000-8000-000000000000@43\.129\.217\.38:443/);
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("retries an empty preferred subscription response", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#CN";

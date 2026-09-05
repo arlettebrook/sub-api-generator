@@ -82,6 +82,7 @@ test("serves admin frontend assets", async () => {
   const script = await worker.fetch(new Request("https://example.test/admin-client.js"));
   assert.equal(script.status, 200);
   assert.match(script.headers.get("content-type"), /javascript/);
+  assert.equal(script.headers.get("cache-control"), "no-store");
   assert.match(await script.text(), /DOMContentLoaded/);
 });
 

@@ -108,11 +108,11 @@ function handleAdmin(page = "overview") {
   });
 }
 
-function assetResponse(content, contentType) {
+function assetResponse(content, contentType, cacheControl = "public, max-age=300, must-revalidate") {
   return new Response(content, {
     headers: pagesSecurityHeaders({
       "content-type": contentType,
-      "cache-control": "public, max-age=300, must-revalidate",
+      "cache-control": cacheControl,
     }),
   });
 }
@@ -129,7 +129,7 @@ export default {
     }
     if (path === "/admin-client.js") {
       if (method !== "GET") return pagesMethodNotAllowed("GET");
-      return assetResponse(adminClientScript, "application/javascript; charset=utf-8");
+      return assetResponse(adminClientScript, "application/javascript; charset=utf-8", "no-store");
     }
     const config = getPagesRuntimeConfig(env);
 
