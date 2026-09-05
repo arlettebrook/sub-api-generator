@@ -28,6 +28,7 @@ async function handleGetSubs(env) {
 async function handlePostSubs(request, env) {
   const body = await readPagesJsonObject(request);
   await env.KV.put(KV_KEY_SUBS, JSON.stringify(body));
+  subscriptions.clearAggregateCache();
   return pagesJsonResponse({ ok: true });
 }
 
@@ -39,6 +40,7 @@ async function handleGetApis(env) {
 async function handlePostApis(request, env) {
   const body = await readPagesJsonObject(request);
   await env.KV.put(KV_KEY_APIS, JSON.stringify(body));
+  subscriptions.clearAggregateCache();
   return pagesJsonResponse({ ok: true });
 }
 
@@ -55,6 +57,7 @@ async function handlePostCustomApis(request, env) {
     throw new Error(`请求 JSON 无效: ${error.message}`);
   }
   await env.KV.put(KV_KEY_CUSTOM_APIS, JSON.stringify(body));
+  subscriptions.clearAggregateCache();
   return pagesJsonResponse({ ok: true });
 }
 

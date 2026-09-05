@@ -11,6 +11,8 @@ const NODE_ADDRESS_REGEX = /:\/\/[^@]+@([^?]+)/;
 const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
 const LINE_CLEAN_REGEX = /(\s*@.*|加入.*|telegram.*)$/i;
+const AGGREGATE_CACHE_TTL_MS = 15000;
+const aggregateCache = new Map();
 const LOWER_BLACKLIST = [
   "问题", "每日", "重置", "官网", "群组", "流量", "到期", "客服", "kefu", "加入",
   "t.me", "免费", "telegram", "channel", "premium", "nodes", "进群", "获取", "频道",
@@ -110,6 +112,18 @@ function enabledEntries(config) {
 
 export async function handleRoot(env, sourceSelection) {
   try {
+    const cacheKey = Array.isArray(sourceSelection)
+      ? JSON.stringify(sourceSelection)
+      : "__all__";
+    const cached = aggregateCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return new Response(cached.output, {
+        headers: withSecurityHeaders({
+          "content-type": "text/plain; charset=utf-8",
+          "cache-control": "no-store",
+        }),
+      });
+    }
     const [subsConfig, apisConfig] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
@@ -138,6 +152,7 @@ export async function handleRoot(env, sourceSelection) {
 
     const filtered = filterPreferredIps(preferred);
     const output = filtered.join("\n") + (extra.length ? `\n${extra.join("\n")}` : "");
+    aggregateCache.set(cacheKey, { output, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
     return new Response(output, {
       headers: withSecurityHeaders({
         "content-type": "text/plain; charset=utf-8",
@@ -149,6 +164,10 @@ export async function handleRoot(env, sourceSelection) {
       "cache-control": "no-store",
     });
   }
+}
+
+export function clearAggregateCache() {
+  aggregateCache.clear();
 }
 
 export { decodeSubscriptionBody, fetchWithTimeout, fetchPreferredSubs, filterPreferredIps, normalizeKvData, parsePreferredIpLine };

@@ -1188,24 +1188,31 @@ function initTheme() {
 let currentNodes = [];
 let currentPage = 1;
 const pageSize = 12; // 每页显示12个节点
+let previewUuid = null;
+let activeNodeRequest = null;
 
-async function getPreviewApiUrl() {
+async function getPreviewApiUrl(signal) {
   const selectedPath = $('previewApiSelect')?.value || '';
   if (selectedPath) return window.location.origin + '/' + selectedPath;
-  const res = await fetch('/api/uuid');
+  if (previewUuid) return window.location.origin + '/' + previewUuid;
+  const res = await fetch('/api/uuid', { signal, cache: 'no-store' });
   const data = await res.json();
-  return window.location.origin + '/' + data.uuid;
+  previewUuid = data.uuid;
+  return window.location.origin + '/' + previewUuid;
 }
 
 async function fetchNodes() {
+  if (activeNodeRequest) activeNodeRequest.abort();
+  const controller = new AbortController();
+  activeNodeRequest = controller;
   nodesContainer.innerHTML = '<div class="nodes-loading">正在获取节点数据...</div>';
   paginationEl.innerHTML = '';
   
   try {
-    const apiUrl = await getPreviewApiUrl();
+    const apiUrl = await getPreviewApiUrl(controller.signal);
     
     // 请求节点原始数据
-    const nodeRes = await fetch(apiUrl);
+    const nodeRes = await fetch(apiUrl, { signal: controller.signal, cache: 'no-store' });
     if (!nodeRes.ok) throw new Error('请求失败: ' + nodeRes.status);
     const text = await nodeRes.text();
     
@@ -1231,8 +1238,11 @@ async function fetchNodes() {
     renderNodes(nodes);
     nodesCountEl.textContent = \`共 \${nodes.length} 个节点\`;
   } catch (err) {
+    if (err.name === 'AbortError') return;
     nodesContainer.innerHTML = \`<div class="nodes-error" onclick="fetchNodes()">加载失败：\${err.message}<br>点击重试</div>\`;
     nodesCountEl.textContent = '共 0 个节点';
+  } finally {
+    if (activeNodeRequest === controller) activeNodeRequest = null;
   }
 }
 
@@ -1407,15 +1417,17 @@ function goToPage(page) {
 // ======================== 优选 API 管理 ========================
 let customApis = {};
 
-async function loadCustomApis() {
-  const [customRes, subsRes, apisRes] = await Promise.all([
-    fetch('/api/custom-apis'),
-    fetch('/api/subs'),
-    fetch('/api/apis'),
-  ]);
+async function loadCustomApis(loadSources = false) {
+  const requests = [fetch('/api/custom-apis')];
+  if (loadSources) {
+    requests.push(fetch('/api/subs'), fetch('/api/apis'));
+  }
+  const [customRes, subsRes, apisRes] = await Promise.all(requests);
   customApis = await customRes.json();
-  subs = await subsRes.json();
-  apis = await apisRes.json();
+  if (loadSources) {
+    subs = await subsRes.json();
+    apis = await apisRes.json();
+  }
   if ($('customApisList')) renderCustomApis();
   renderCustomApiSelect();
   renderNewCustomApiSources();
