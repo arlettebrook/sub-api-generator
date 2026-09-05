@@ -34,8 +34,23 @@ test("validates and normalizes configuration payloads", () => {
 });
 
 test("validates custom API access paths", () => {
-  assert.deepEqual(validateApiPathPayload({ "/my-api": true }), {
-    "my-api": { enabled: true, remark: "" },
+  assert.deepEqual(validateApiPathPayload({ "/my-api": {
+    enabled: true,
+    remark: "测试",
+    sources: [
+      { type: "subs", key: "sub.example.com" },
+      { type: "apis", key: "https://api.example.com" },
+      { type: "subs", key: "sub.example.com" },
+    ],
+  } }), {
+    "my-api": {
+      enabled: true,
+      remark: "测试",
+      sources: [
+        { type: "subs", key: "sub.example.com" },
+        { type: "apis", key: "https://api.example.com" },
+      ],
+    },
   });
   assert.throws(() => validateApiPathPayload({ "admin": true }), /访问路径无效/);
   assert.throws(() => validateApiPathPayload({ "bad/path": true }), /访问路径无效/);

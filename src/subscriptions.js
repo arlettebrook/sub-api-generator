@@ -94,7 +94,7 @@ function enabledEntries(config) {
   });
 }
 
-export async function handleRoot(env) {
+export async function handleRoot(env, sourceSelection) {
   try {
     const [subsConfig, apisConfig] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
@@ -104,9 +104,13 @@ export async function handleRoot(env) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
+    const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
+    const selectedEntries = (config, type) => enabledEntries(config).filter(([key]) => {
+      return selected === null || selected.some((source) => source?.type === type && source.key === key);
+    });
     const [subsResults, apiResults] = await Promise.all([
-      Promise.allSettled(enabledEntries(subsConfig).map(([host]) => fetchPreferredSubs(host))),
-      Promise.allSettled(enabledEntries(apisConfig).map(([apiUrl]) => fetchApiSubs(apiUrl))),
+      Promise.allSettled(selectedEntries(subsConfig, "subs").map(([host]) => fetchPreferredSubs(host))),
+      Promise.allSettled(selectedEntries(apisConfig, "apis").map(([apiUrl]) => fetchApiSubs(apiUrl))),
     ]);
 
     const preferred = [];
@@ -134,4 +138,3 @@ export async function handleRoot(env) {
 }
 
 export { fetchWithTimeout, filterPreferredIps, normalizeKvData };
-

@@ -233,6 +233,47 @@ export const adminHTML = `
     font-size: 13px;
   }
 
+  .source-picker {
+    display: grid;
+    gap: 8px;
+    margin: 4px 0 12px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .source-picker-title {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .source-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .source-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .source-option input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+  }
+
+  .row .source-picker {
+    flex: 1 1 100%;
+    margin: 2px 0 0;
+  }
+
   .page-intro {
     margin: -12px 0 24px;
     color: var(--text-secondary);
@@ -447,6 +488,18 @@ export const adminHTML = `
 
   input::placeholder {
     color: var(--text-tertiary);
+  }
+
+  select {
+    height: 40px;
+    min-width: 180px;
+    padding: 0 34px 0 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font: inherit;
+    cursor: pointer;
   }
 
   /* 列表行 */
@@ -871,6 +924,7 @@ export const adminHTML = `
 <div class="card" id="previewSection">
   <h3>🌐 优选API数据预览</h3>
   <div class="toolbar">
+    <select id="previewApiSelect" onchange="fetchNodes()" aria-label="选择优选API"></select>
     <button class="btn-primary" onclick="fetchNodes()">🔄 刷新数据</button>
     <button class="btn-outline" onclick="copySubUrl()" title="复制优选API">
       <span>📋</span> 复制优选API
@@ -893,6 +947,10 @@ export const adminHTML = `
     <input id="newCustomApiPath" placeholder="访问路径，例如 my-api" style="max-width: 260px;" />
     <input id="newCustomApiRemark" placeholder="备注（可选）" style="max-width: 200px;" />
     <button class="btn-primary" onclick="addCustomApi()">➕ 新建 API</button>
+  </div>
+  <div class="source-picker">
+    <div class="source-picker-title">选择此 API 使用的数据源</div>
+    <div class="source-options" id="newCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
   </div>
   <div class="toolbar">
     <button class="btn-primary" onclick="saveCustomApis()">💾 保存配置</button>
@@ -1039,9 +1097,7 @@ async function copySubUrl() {
   const originalText = btn.innerHTML;
   
   try {
-    const res = await fetch('/api/uuid');
-    const data = await res.json();
-    const fullSubUrl = window.location.origin + '/' + data.uuid;
+    const fullSubUrl = await getPreviewApiUrl();
     await navigator.clipboard.writeText(fullSubUrl);
     
     btn.innerHTML = '<span>✅</span> 已复制';
@@ -1104,15 +1160,20 @@ let currentNodes = [];
 let currentPage = 1;
 const pageSize = 12; // 每页显示12个节点
 
+async function getPreviewApiUrl() {
+  const selectedPath = $('previewApiSelect')?.value || '';
+  if (selectedPath) return window.location.origin + '/' + selectedPath;
+  const res = await fetch('/api/uuid');
+  const data = await res.json();
+  return window.location.origin + '/' + data.uuid;
+}
+
 async function fetchNodes() {
   nodesContainer.innerHTML = '<div class="nodes-loading">正在获取节点数据...</div>';
   paginationEl.innerHTML = '';
   
   try {
-    // 获取优选API地址
-    const res = await fetch('/api/uuid');
-    const data = await res.json();
-    const apiUrl = window.location.origin + '/' + data.uuid;
+    const apiUrl = await getPreviewApiUrl();
     
     // 请求节点原始数据
     const nodeRes = await fetch(apiUrl);
@@ -1318,9 +1379,90 @@ function goToPage(page) {
 let customApis = {};
 
 async function loadCustomApis() {
-  const res = await fetch('/api/custom-apis');
-  customApis = await res.json();
-  renderCustomApis();
+  const [customRes, subsRes, apisRes] = await Promise.all([
+    fetch('/api/custom-apis'),
+    fetch('/api/subs'),
+    fetch('/api/apis'),
+  ]);
+  customApis = await customRes.json();
+  subs = await subsRes.json();
+  apis = await apisRes.json();
+  if ($('customApisList')) renderCustomApis();
+  renderCustomApiSelect();
+  renderNewCustomApiSources();
+}
+
+function sourceEntries() {
+  return [
+    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, label: '订阅源 · ' + (value.remark || key) })),
+    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, label: 'API 源 · ' + (value.remark || key) })),
+  ];
+}
+
+function sourcePicker(selectedSources = [], title = '选择数据源') {
+  const selected = new Set(selectedSources.map((source) => source.type + ':' + source.key));
+  const picker = document.createElement('div');
+  picker.className = 'source-picker';
+  const titleEl = document.createElement('div');
+  titleEl.className = 'source-picker-title';
+  titleEl.textContent = title;
+  picker.appendChild(titleEl);
+  const options = document.createElement('div');
+  options.className = 'source-options';
+  const entries = sourceEntries();
+  if (!entries.length) {
+    options.textContent = '暂无可用数据源，请先在优选管理中添加。';
+  }
+  entries.forEach((source) => {
+    const label = document.createElement('label');
+    label.className = 'source-option';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.sourceType = source.type;
+    checkbox.dataset.sourceKey = source.key;
+    checkbox.checked = selected.has(source.type + ':' + source.key);
+    label.append(checkbox, document.createTextNode(source.label));
+    options.appendChild(label);
+  });
+  picker.appendChild(options);
+  return picker;
+}
+
+function readSourcePicker(picker) {
+  return [...picker.querySelectorAll('input[type="checkbox"]:checked')].map((checkbox) => ({
+    type: checkbox.dataset.sourceType,
+    key: checkbox.dataset.sourceKey,
+  }));
+}
+
+function renderNewCustomApiSources() {
+  const container = $('newCustomApiSources');
+  if (!container) return;
+  const picker = sourcePicker([], '选择此 API 使用的数据源');
+  container.innerHTML = '';
+  container.append(...picker.querySelector('.source-options').childNodes);
+}
+
+function getNewCustomApiSources() {
+  return [...document.querySelectorAll('#newCustomApiSources input[type="checkbox"]:checked')].map((checkbox) => ({
+    type: checkbox.dataset.sourceType,
+    key: checkbox.dataset.sourceKey,
+  }));
+}
+
+function renderCustomApiSelect() {
+  const select = $('previewApiSelect');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="">默认优选API</option>';
+  Object.entries(customApis).forEach(([path, entry]) => {
+    if (!entry.enabled) return;
+    const option = document.createElement('option');
+    option.value = path;
+    option.textContent = entry.remark ? entry.remark + ' (' + path + ')' : '/' + path;
+    select.appendChild(option);
+  });
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
 function renderCustomApis() {
@@ -1380,10 +1522,16 @@ function renderCustomApis() {
       customApis[path].remark = remarkInput.value;
     };
 
+    const picker = sourcePicker(entry.sources || []);
+    picker.addEventListener('change', () => {
+      customApis[path].sources = readSourcePicker(picker);
+    });
+
     row.appendChild(pathInput);
     row.appendChild(remarkInput);
     row.appendChild(statusBtn);
     row.appendChild(delBtn);
+    row.appendChild(picker);
     el.appendChild(row);
   });
 }
@@ -1401,7 +1549,7 @@ function addCustomApi() {
     showToast('访问路径已存在', 'error');
     return;
   }
-  customApis[path] = { enabled: true, remark };
+  customApis[path] = { enabled: true, remark, sources: getNewCustomApiSources() };
   pathInput.value = '';
   remarkInput.value = '';
   renderCustomApis();
@@ -1742,7 +1890,7 @@ window.addEventListener('DOMContentLoaded', () => {
     loadApis();
   }
   else if (page === 'customApis') loadCustomApis();
-  else if (page !== 'settings') fetchNodes();
+  else if (page === 'overview') loadCustomApis().then(() => fetchNodes());
 });
 </script>
 </body>

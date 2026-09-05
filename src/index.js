@@ -4,6 +4,7 @@ import {
   KV_KEY_SUBS,
   getRuntimeConfig as getPagesRuntimeConfig,
   isAllowedApiPath,
+  normalizeCustomApiData,
   normalizeKvData,
   readJsonObject as readPagesJsonObject,
   validateApiPathPayload,
@@ -43,11 +44,16 @@ async function handlePostApis(request, env) {
 
 async function handleGetCustomApis(env) {
   const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
-  return pagesJsonResponse(normalizeKvData(data));
+  return pagesJsonResponse(normalizeCustomApiData(data));
 }
 
 async function handlePostCustomApis(request, env) {
-  const body = validateApiPathPayload(await readPagesJsonObject(request));
+  let body;
+  try {
+    body = validateApiPathPayload(await request.json());
+  } catch (error) {
+    throw new Error(`请求 JSON 无效: ${error.message}`);
+  }
   await env.KV.put(KV_KEY_CUSTOM_APIS, JSON.stringify(body));
   return pagesJsonResponse({ ok: true });
 }
@@ -56,9 +62,9 @@ async function handleCustomApiPath(path, env) {
   const apiPath = path.slice(1);
   if (!isAllowedApiPath(apiPath)) return null;
   const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
-  const configured = normalizeKvData(data);
+  const configured = normalizeCustomApiData(data);
   if (!configured[apiPath]?.enabled) return null;
-  return subscriptions.handleRoot(env);
+  return subscriptions.handleRoot(env, configured[apiPath].sources);
 }
 
 async function handleGetUuid(env) {

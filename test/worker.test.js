@@ -70,7 +70,11 @@ test("creates and serves custom API access paths", async () => {
   const saveResponse = await worker.fetch(new Request("https://example.test/api/custom-apis", {
     method: "POST",
     headers,
-    body: JSON.stringify({ "/my-api": true }),
+    body: JSON.stringify({ "/my-api": {
+      enabled: true,
+      remark: "测试 API",
+      sources: [{ type: "subs", key: "sub.example.com" }],
+    } }),
   }), runtime);
   assert.equal(saveResponse.status, 200);
 
@@ -78,7 +82,11 @@ test("creates and serves custom API access paths", async () => {
     headers: { Cookie: `auth=${hash}` },
   }), runtime);
   assert.deepEqual(await configResponse.json(), {
-    "my-api": { enabled: true, remark: "" },
+    "my-api": {
+      enabled: true,
+      remark: "测试 API",
+      sources: [{ type: "subs", key: "sub.example.com" }],
+    },
   });
 
   const publicResponse = await worker.fetch(new Request("https://example.test/my-api"), runtime);

@@ -92,6 +92,7 @@ npm test
 - `/admin/subs`、`/admin/apis`：兼容保留的独立管理页，需要登录
 - `/<UUID>`：公开订阅聚合接口
 - `/api/subs`、`/api/apis`：后台配置接口，需要登录
+- `/api/custom-apis`：优选 API 路径和数据源配置接口，需要登录
 - `/api/uuid`：读取订阅 UUID，需要登录
 
 认证、订阅抓取和 KV 读写全部运行在 Pages Functions 的 Worker 运行时中，不需要额外的服务器。

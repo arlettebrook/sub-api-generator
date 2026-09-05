@@ -76,9 +76,13 @@ export function validateConfigPayload(body) {
 }
 
 export function validateApiPathPayload(body) {
-  const config = validateConfigPayload(body);
+  if (!isPlainObject(body)) throw new Error("配置必须是 JSON 对象");
+  const entries = Object.entries(body);
+  if (entries.length > MAX_CONFIG_ENTRIES) {
+    throw new Error(`配置条目不能超过 ${MAX_CONFIG_ENTRIES} 个`);
+  }
   const normalized = {};
-  for (const [rawPath, value] of Object.entries(config)) {
+  for (const [rawPath, rawValue] of entries) {
     const path = rawPath.trim().replace(/^\/+/, "");
     if (!API_PATH_REGEX.test(path) || RESERVED_API_PATHS.has(path.toLowerCase())) {
       throw new Error(`API 访问路径无效: ${rawPath}`);
@@ -86,7 +90,45 @@ export function validateApiPathPayload(body) {
     if (normalized[path]) {
       throw new Error(`API 访问路径重复: ${path}`);
     }
-    normalized[path] = value;
+    const value = typeof rawValue === "boolean" ? { enabled: rawValue, remark: "" } : rawValue;
+    if (!isPlainObject(value)) throw new Error(`配置项无效: ${rawPath}`);
+    const sources = Array.isArray(value.sources) ? value.sources : null;
+    const normalizedSources = [];
+    for (const source of sources) {
+      if (!isPlainObject(source) || !["subs", "apis"].includes(source.type) || typeof source.key !== "string") {
+        throw new Error(`数据源配置无效: ${rawPath}`);
+      }
+      const key = source.key.trim();
+      if (!key || key.length > MAX_CONFIG_KEY_LENGTH) throw new Error(`数据源配置无效: ${rawPath}`);
+      if (!normalizedSources.some((item) => item.type === source.type && item.key === key)) {
+        normalizedSources.push({ type: source.type, key });
+      }
+    }
+    normalized[path] = {
+      enabled: value.enabled === true,
+      remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
+      sources: sources === null ? null : normalizedSources,
+    };
+  }
+  return normalized;
+}
+
+export function normalizeCustomApiData(data) {
+  if (!isPlainObject(data)) return {};
+  const normalized = {};
+  for (const [path, value] of Object.entries(data)) {
+    if (typeof value === "boolean") {
+      normalized[path] = { enabled: value, remark: "", sources: null };
+    } else if (isPlainObject(value)) {
+      normalized[path] = {
+        enabled: value.enabled === true,
+        remark: typeof value.remark === "string" ? value.remark : "",
+        sources: Array.isArray(value.sources)
+          ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis"].includes(source.type) && typeof source.key === "string")
+              .map((source) => ({ type: source.type, key: source.key }))
+          : null,
+      };
+    }
   }
   return normalized;
 }
