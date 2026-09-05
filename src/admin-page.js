@@ -840,32 +840,33 @@ export const adminHTML = `
     body > .admin-nav {
       position: fixed !important;
       top: auto !important;
-      right: 12px;
-      bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
-      left: 12px;
+      right: 8px;
+      bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+      left: 8px;
       width: auto;
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       align-items: center;
-      justify-content: flex-start;
-      gap: 4px;
-      overflow-x: auto;
+      gap: 2px;
+      overflow: hidden;
       margin: 0;
       padding: 4px;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
       box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
       isolation: isolate;
+      touch-action: manipulation;
     }
     .admin-nav::-webkit-scrollbar { display: none; }
     .admin-nav a {
-      flex: 0 0 auto;
+      width: 100%;
+      min-width: 0;
       min-height: 48px;
-      min-width: 96px;
       flex-direction: column;
       gap: 3px;
-      padding: 7px 11px 8px;
+      padding: 7px 4px 8px;
       text-align: center;
-      font-size: 12px;
+      font-size: 11px;
     }
     .nav-icon {
       font-size: 17px;
