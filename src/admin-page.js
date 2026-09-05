@@ -108,7 +108,7 @@ export const adminHTML = `
 
   .admin-nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     align-items: center;
     gap: 4px;
     width: 100%;
@@ -145,20 +145,6 @@ export const adminHTML = `
     transition: var(--transition);
   }
 
-  .admin-nav a::after {
-    content: '';
-    position: absolute;
-    right: 20%;
-    bottom: 3px;
-    left: 20%;
-    height: 2px;
-    border-radius: 999px;
-    background: var(--accent-primary);
-    opacity: 0;
-    transform: scaleX(0.35);
-    transition: var(--transition);
-  }
-
   .admin-nav a:hover {
     color: var(--text-primary);
     background: var(--bg-tertiary);
@@ -173,11 +159,6 @@ export const adminHTML = `
 
   .admin-nav a.active:hover {
     background: var(--accent-light);
-  }
-
-  .admin-nav a.active::after {
-    opacity: 1;
-    transform: scaleX(1);
   }
 
   .admin-nav a:focus-visible {
@@ -197,11 +178,48 @@ export const adminHTML = `
 
   body[data-page="overview"] #subsSection,
   body[data-page="overview"] #apisSection,
+  body[data-page="overview"] #settingsSection,
   body[data-page="subs"] #previewSection,
   body[data-page="subs"] #apisSection,
+  body[data-page="subs"] #settingsSection,
   body[data-page="apis"] #previewSection,
-  body[data-page="apis"] #subsSection {
+  body[data-page="apis"] #subsSection,
+  body[data-page="apis"] #settingsSection,
+  body[data-page="settings"] #previewSection,
+  body[data-page="settings"] #subsSection,
+  body[data-page="settings"] #apisSection {
     display: none;
+  }
+
+  .settings-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 16px 18px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .setting-copy {
+    display: grid;
+    gap: 3px;
+  }
+
+  .setting-copy strong {
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+
+  .setting-copy small {
+    color: var(--text-secondary);
+    font-size: 13px;
   }
 
   .page-intro {
@@ -783,13 +801,13 @@ export const adminHTML = `
       text-align: center;
       font-size: 12px;
     }
-    .admin-nav a::after {
-      right: 28%;
-      bottom: 4px;
-      left: 28%;
-    }
     .nav-icon {
       font-size: 17px;
+    }
+    .setting-row {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 12px;
     }
     .page-intro {
       margin: -4px 0 16px;
@@ -833,6 +851,7 @@ export const adminHTML = `
   <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
   <a href="/admin/subs" data-nav-page="subs"><span class="nav-icon" aria-hidden="true">📡</span><span class="nav-label">优选订阅源</span></a>
   <a href="/admin/apis" data-nav-page="apis"><span class="nav-icon" aria-hidden="true">🔗</span><span class="nav-label">API 源</span></a>
+  <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
 </nav>
 
 <p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
@@ -888,6 +907,20 @@ export const adminHTML = `
     <button class="btn-primary" onclick="saveApis()">💾 保存配置</button>
   </div>
   <div id="apisList"></div>
+</div>
+
+<!-- ==================== 设置 ==================== -->
+<div class="card" id="settingsSection">
+  <h3>⚙️ 界面设置</h3>
+  <div class="settings-list">
+    <div class="setting-row">
+      <div class="setting-copy">
+        <strong>主题模式</strong>
+        <small>在深色和浅色界面之间切换。</small>
+      </div>
+      <button class="btn-outline" type="button" onclick="toggleTheme()">切换主题</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1551,7 +1584,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const intros = {
     overview: '集中查看订阅聚合结果和节点状态。',
     subs: '管理优选订阅源，控制启用状态并维护备注。',
-    apis: '管理额外 API 源，控制启用状态并维护备注。'
+    apis: '管理额外 API 源，控制启用状态并维护备注。',
+    settings: '调整管理面板的界面显示设置。'
   };
   if (intro) intro.textContent = intros[page] || intros.overview;
   document.querySelectorAll('[data-nav-page]').forEach((link) => {
@@ -1569,7 +1603,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initTheme();
   if (page === 'subs') loadSubs();
   else if (page === 'apis') loadApis();
-  else fetchNodes();
+  else if (page !== 'settings') fetchNodes();
 });
 </script>
 </body>

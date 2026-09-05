@@ -41,7 +41,7 @@ test("serves the login page and authenticated UUID endpoint", async () => {
 
 test("serves separate responsive admin pages", async () => {
   const hash = await sha256Hex("secret");
-  for (const [path, page] of [["/admin", "overview"], ["/admin/subs", "subs"], ["/admin/apis", "apis"]]) {
+  for (const [path, page] of [["/admin", "overview"], ["/admin/subs", "subs"], ["/admin/apis", "apis"], ["/admin/settings", "settings"]]) {
     const response = await worker.fetch(new Request(`https://example.test${path}`, {
       headers: { Cookie: `auth=${hash}` },
     }), env());
