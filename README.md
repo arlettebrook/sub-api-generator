@@ -33,7 +33,8 @@ Production 和 Preview 配置：
 - `UUID`：公开订阅路径，例如 `my-subscription`
 - `PASSWORD`：后台登录密码，建议添加为 Secret
 
-不要依赖代码中的默认值；未配置变量时会回退到公开的默认密码和路径。
+`UUID` 和 `PASSWORD` 都是必填配置。当前版本不会使用默认密码或默认订阅路径，缺少任一配置时
+Pages Function 会返回 `503` 配置错误。
 Pages 不支持 Worker 的 `keep_vars` 配置；环境变量和 Secret 以 Dashboard 中的 Production/Preview
 设置为准。
 

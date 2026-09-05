@@ -1,8 +1,9 @@
-// ========================= 顶层常量（常驻内存，避免每次请求重复创建） =========================
-const DEFAULT_PASSWORD = "mysecret";
-const DEFAULT_UUID = "uuid";
+// ========================= 顶层常量 =========================
 const KV_KEY_SUBS = "subs";
 const KV_KEY_APIS = "apis";
+const MAX_CONFIG_ENTRIES = 200;
+const MAX_CONFIG_KEY_LENGTH = 2048;
+const OUTBOUND_TIMEOUT_MS = 15000;
 
 // ========== 预初始化常量（全局仅执行一次，常驻内存复用） ==========
 const _LOWER_BLACKLIST = [
@@ -41,7 +42,7 @@ const UA_SUBS_FETCH =
 const UA_APIS_FETCH = "v2r" + "ayN/edg" + "e";
 
 // 预编译正则表达式，避免每次请求重复编译
-const AUTH_COOKIE_REGEX = /auth=([a-f0-9]{64})/;
+const AUTH_COOKIE_REGEX = /(?:^|;\s*)auth=([a-f0-9]{64})(?:;|$)/;
 const NODE_ADDRESS_REGEX = /:\/\/[^@]+@([^?]+)/;
 const NODE_REMARK_REGEX = /#(.+)$/;
 const HTTP_PROTOCOL_REGEX = /^https?:\/\//i;
@@ -70,13 +71,127 @@ async function sha256Hex(encoder, str) {
  * @returns {Object} 标准化后的数据
  */
 function normalizeKvData(data) {
-  const normalized = { ...(data || {}) };
-  for (const key in normalized) {
-    if (typeof normalized[key] === "boolean") {
-      normalized[key] = { enabled: normalized[key], remark: "" };
+  if (!isPlainObject(data)) return {};
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === "boolean") {
+      normalized[key] = { enabled: value, remark: "" };
+    } else if (isPlainObject(value)) {
+      normalized[key] = {
+        enabled: value.enabled === true,
+        remark: typeof value.remark === "string" ? value.remark : "",
+      };
     }
   }
   return normalized;
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function getRuntimeConfig(env) {
+  const uuid = typeof env.UUID === "string" ? env.UUID.trim() : "";
+  const password = typeof env.PASSWORD === "string" ? env.PASSWORD : "";
+
+  if (!env.KV || typeof env.KV.get !== "function" || typeof env.KV.put !== "function") {
+    return { error: "KV 绑定未配置，请在 Pages 项目中绑定名为 KV 的 Namespace" };
+  }
+  if (!uuid || !/^[A-Za-z0-9_-]{1,128}$/.test(uuid)) {
+    return { error: "UUID 环境变量未配置或格式无效" };
+  }
+  if (!password) {
+    return { error: "PASSWORD Secret 未配置" };
+  }
+
+  return { uuid, password };
+}
+
+function withSecurityHeaders(headers = {}) {
+  const result = new Headers(headers);
+  result.set("x-content-type-options", "nosniff");
+  result.set("x-frame-options", "DENY");
+  result.set("referrer-policy", "no-referrer");
+  return result;
+}
+
+function textResponse(message, status = 200, headers = {}) {
+  return new Response(message, {
+    status,
+    headers: withSecurityHeaders({
+      "content-type": "text/plain; charset=utf-8",
+      ...headers,
+    }),
+  });
+}
+
+function jsonResponse(data, status = 200, headers = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: withSecurityHeaders({
+      "content-type": "application/json; charset=utf-8",
+      ...headers,
+    }),
+  });
+}
+
+function methodNotAllowed(allow) {
+  return textResponse("Method Not Allowed", 405, { Allow: allow });
+}
+
+function redirectResponse(request, pathname, headers = {}) {
+  const result = withSecurityHeaders(headers);
+  result.set("location", new URL(pathname, request.url).toString());
+  return new Response(null, { status: 303, headers: result });
+}
+
+function validateConfigPayload(body) {
+  if (!isPlainObject(body)) {
+    throw new Error("配置必须是 JSON 对象");
+  }
+
+  const entries = Object.entries(body);
+  if (entries.length > MAX_CONFIG_ENTRIES) {
+    throw new Error(`配置条目不能超过 ${MAX_CONFIG_ENTRIES} 个`);
+  }
+
+  const normalized = {};
+  for (const [key, value] of entries) {
+    if (!key.trim() || key.length > MAX_CONFIG_KEY_LENGTH) {
+      throw new Error("配置键为空或过长");
+    }
+    if (typeof value === "boolean") {
+      normalized[key] = { enabled: value, remark: "" };
+      continue;
+    }
+    if (!isPlainObject(value)) {
+      throw new Error(`配置项无效: ${key}`);
+    }
+    normalized[key] = {
+      enabled: value.enabled === true,
+      remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
+    };
+  }
+  return normalized;
+}
+
+async function readJsonObject(request) {
+  try {
+    return validateConfigPayload(await request.json());
+  } catch (error) {
+    throw new Error(`请求 JSON 无效: ${error.message}`);
+  }
+}
+
+async function fetchWithTimeout(resource, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OUTBOUND_TIMEOUT_MS);
+  try {
+    return await fetch(resource, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -124,7 +239,7 @@ async function fetchPreferredSubs(host) {
   const baseHost = HTTP_PROTOCOL_REGEX.test(host) ? host : `https://${host}`;
   const fetchUrl = `${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`;
 
-  const resp = await fetch(fetchUrl, {
+  const resp = await fetchWithTimeout(fetchUrl, {
     headers: { "User-Agent": UA_SUBS_FETCH },
   });
 
@@ -153,7 +268,7 @@ async function fetchPreferredSubs(host) {
  * @returns {Promise<string[]>} 订阅行列表
  */
 async function fetchApiSubs(apiUrl) {
-  const resp = await fetch(apiUrl, {
+  const resp = await fetchWithTimeout(apiUrl, {
     headers: { "User-Agent": UA_APIS_FETCH },
   });
 
@@ -176,33 +291,29 @@ async function handleLogin(request, encoder, validHash) {
   const inputHash = await sha256Hex(encoder, pwd);
 
   if (inputHash === validHash) {
-    return new Response(loginSuccess(validHash), {
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-        "set-cookie": `auth=${validHash}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
-      },
+    const secure = new URL(request.url).protocol === "https:";
+    return redirectResponse(request, "/", {
+      "cache-control": "no-store",
+      "set-cookie": `auth=${validHash}; Path=/; HttpOnly; ${secure ? "Secure; " : ""}SameSite=Lax; Max-Age=2592000`,
     });
   }
 
   return new Response(await loginPage("密码错误，请重试 🔒"), {
-    headers: {
+    headers: withSecurityHeaders({
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
-    },
+    }),
   });
 }
 
 /**
  * 处理登出请求 POST /logout
  */
-async function handleLogout() {
-  return new Response(await loginPage(), {
-    headers: {
-      "set-cookie": "auth=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store",
-    },
+async function handleLogout(request) {
+  const secure = new URL(request.url).protocol === "https:";
+  return redirectResponse(request, "/", {
+    "set-cookie": `auth=; Path=/; HttpOnly; ${secure ? "Secure; " : ""}SameSite=Lax; Max-Age=0`,
+    "cache-control": "no-store",
   });
 }
 
@@ -211,16 +322,16 @@ async function handleLogout() {
  */
 async function handleGetSubs(env) {
   const data = await env.KV.get(KV_KEY_SUBS, "json");
-  return Response.json(normalizeKvData(data));
+  return jsonResponse(normalizeKvData(data));
 }
 
 /**
  * 处理 POST /api/subs
  */
 async function handlePostSubs(request, env) {
-  const body = await request.json();
+  const body = await readJsonObject(request);
   await env.KV.put(KV_KEY_SUBS, JSON.stringify(body));
-  return Response.json({ ok: true });
+  return jsonResponse({ ok: true });
 }
 
 /**
@@ -228,24 +339,23 @@ async function handlePostSubs(request, env) {
  */
 async function handleGetApis(env) {
   const data = await env.KV.get(KV_KEY_APIS, "json");
-  return Response.json(normalizeKvData(data));
+  return jsonResponse(normalizeKvData(data));
 }
 
 /**
  * 处理 POST /api/apis
  */
 async function handlePostApis(request, env) {
-  const body = await request.json();
+  const body = await readJsonObject(request);
   await env.KV.put(KV_KEY_APIS, JSON.stringify(body));
-  return Response.json({ ok: true });
+  return jsonResponse({ ok: true });
 }
 
 /**
  * 处理 GET /api/uuid （新增：需认证的UUID查询接口）
  */
 async function handleGetUuid(env) {
-  const uuid = env.UUID || DEFAULT_UUID;
-  return Response.json({ uuid });
+  return jsonResponse({ uuid: env.UUID.trim() });
 }
 
 /**
@@ -253,7 +363,10 @@ async function handleGetUuid(env) {
  */
 function handleAdmin() {
   return new Response(adminHTML, {
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: withSecurityHeaders({
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    }),
   });
 }
 
@@ -268,8 +381,8 @@ async function handleRoot(env) {
       env.KV.get(KV_KEY_APIS, "json"),
     ]);
 
-    if (!subsConfig || typeof subsConfig !== "object") {
-      return new Response("KV 未配置 subs", { status: 500 });
+    if (!isPlainObject(subsConfig)) {
+      return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
     // ✅ 优化2：两类数据源拉取完全并行执行，总耗时取最大值而非求和
@@ -295,7 +408,7 @@ async function handleRoot(env) {
       })(),
       // 任务组2：所有 API 订阅源并发拉取
       (async () => {
-        if (!apisConfig || typeof apisConfig !== "object") return [];
+        if (!isPlainObject(apisConfig)) return [];
         const apiTasks = [];
         for (const [apiUrl, entry] of Object.entries(apisConfig)) {
           const enabled =
@@ -340,11 +453,14 @@ async function handleRoot(env) {
     }
 
     return new Response(output, {
-      headers: { "content-type": "text/plain; charset=utf-8" },
+      headers: withSecurityHeaders({
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+      }),
     });
   } catch (error) {
-    return new Response("！！！！！优选订阅生成器异常：" + error.message, {
-      status: 500,
+    return textResponse("！！！！！优选订阅生成器异常：" + error.message, 500, {
+      "cache-control": "no-store",
     });
   }
 }
@@ -355,38 +471,39 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    const config = getRuntimeConfig(env);
 
-    // 全局复用 TextEncoder，减少实例化开销
-    const encoder =
-      globalThis._encoder || (globalThis._encoder = new TextEncoder());
-
-    // 密码哈希全局缓存（冷启动仅计算一次，后续常驻内存）
-    if (!globalThis._pwdHash) {
-      const password = env.PASSWORD || DEFAULT_PASSWORD;
-      globalThis._pwdHash = await sha256Hex(encoder, password);
+    if (config.error) {
+      return textResponse(config.error, 503, { "cache-control": "no-store" });
     }
-    const validPwdHash = globalThis._pwdHash;
+
+    const encoder = new TextEncoder();
+    const validPwdHash = await sha256Hex(encoder, config.password);
 
     // ========== 免认证接口 ==========
     if (path === "/login" && method === "POST") {
-      return handleLogin(request, encoder, validPwdHash);
+      return await handleLogin(request, encoder, validPwdHash);
     }
     if (path === "/logout" && method === "POST") {
-      return handleLogout();
+      return await handleLogout(request);
+    }
+    if (path === "/login" || path === "/logout") {
+      return methodNotAllowed("POST");
     }
     // UUID 订阅路径（公开访问，无需认证）
-    const uuidPath = `/${env.UUID || DEFAULT_UUID}`;
+    const uuidPath = `/${config.uuid}`;
     if (path === uuidPath) {
-      return handleRoot(env);
+      if (method !== "GET") return methodNotAllowed("GET");
+      return await handleRoot(env);
     }
 
     // ========== 未认证统一返回登录页 ==========
     if (!isAuthenticated(request, validPwdHash)) {
       return new Response(await loginPage(), {
-        headers: {
+        headers: withSecurityHeaders({
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
-        },
+        }),
       });
     }
 
@@ -394,25 +511,26 @@ export default {
     try {
       switch (path) {
         case "/api/subs":
-          return method === "GET"
-            ? handleGetSubs(env)
-            : handlePostSubs(request, env);
+          if (method === "GET") return await handleGetSubs(env);
+          if (method === "POST") return await handlePostSubs(request, env);
+          return methodNotAllowed("GET, POST");
         case "/api/apis":
-          return method === "GET"
-            ? handleGetApis(env)
-            : handlePostApis(request, env);
+          if (method === "GET") return await handleGetApis(env);
+          if (method === "POST") return await handlePostApis(request, env);
+          return methodNotAllowed("GET, POST");
         case "/api/uuid":
-          return method === "GET"
-            ? handleGetUuid(env)
-            : new Response("Method Not Allowed", { status: 405 });
+          if (method === "GET") return await handleGetUuid(env);
+          return methodNotAllowed("GET");
         case "/":
         case "/admin":
+          if (method !== "GET") return methodNotAllowed("GET");
           return handleAdmin();
         default:
-          return new Response("Not Found", { status: 404 });
+          return textResponse("Not Found", 404);
       }
     } catch (error) {
-      return new Response("Error: " + error.message, { status: 500 });
+      const status = error.message.startsWith("请求 JSON 无效") ? 400 : 500;
+      return textResponse("Error: " + error.message, status);
     }
   },
 };
@@ -557,39 +675,6 @@ async function loginPage(message = "") {
     "<!--MSG_PLACEHOLDER-->",
     message ? `<div class="msg">${message}</div>` : "",
   );
-}
-
-// 登录成功页面（简洁过渡）
-function loginSuccess(hash) {
-  return `<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>登录成功</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  </head>
-  <body class="h-screen flex items-center justify-center bg-gradient-to-tr from-indigo-500 via-purple-500 to-sky-400 text-white font-sans">
-    <div class="p-8 rounded-3xl bg-white/15 backdrop-blur-lg shadow-2xl text-center animate-fade-in">
-      <div class="text-6xl mb-3 drop-shadow-md">✅</div>
-      <p class="text-xl font-semibold tracking-wide">登录成功，正在跳转…</p>
-    </div>
-
-    <script>
-      setTimeout(() => location.href = '/', 1200);
-    </script>
-
-    <style>
-      @keyframes fade-in {
-        from { opacity: 0; transform: scale(0.95); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      .animate-fade-in {
-        animation: fade-in 0.6s ease-out forwards;
-      }
-    </style>
-  </body>
-</html>`;
 }
 
 // ============================
