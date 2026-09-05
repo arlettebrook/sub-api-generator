@@ -7,6 +7,17 @@
 项目使用根目录的 `_worker.js` 作为 Pages Functions 入口，`wrangler.toml` 中的
 `pages_build_output_dir = "."` 表示当前目录就是 Pages 输出目录。
 
+代码结构：
+
+```text
+_worker.js          Pages 入口，仅转发到 src/index.js
+src/index.js        路由和管理页面
+src/config.js       Pages 环境、KV 配置和请求数据校验
+src/http.js         统一响应和安全响应头
+src/auth.js         登录、登出和 Cookie 认证
+src/subscriptions.js 订阅源抓取、过滤和聚合
+```
+
 ### 1. 创建或选择 KV Namespace
 
 将 `wrangler.toml` 中的 `KV` 绑定替换成你自己的 Namespace ID：
