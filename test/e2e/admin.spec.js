@@ -39,6 +39,12 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#customApiSaveStatus")).toHaveText("有未保存的修改");
   await page.locator("#saveCustomApisButton").click();
   await expect(page.locator("#customApiSaveStatus")).toHaveText("配置已保存");
+  const savedConfig = await page.evaluate(async (path) => {
+    const response = await fetch('/api/custom-apis', { cache: 'no-store' });
+    const data = await response.json();
+    return data[path];
+  }, customPath);
+  expect(savedConfig.sources).toBeNull();
 });
 
 test("edits and saves the blacklist from settings", async ({ page }, testInfo) => {

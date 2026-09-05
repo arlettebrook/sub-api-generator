@@ -690,6 +690,18 @@ function getNewCustomApiSources() {
   }));
 }
 
+function getNewCustomApiSourceSelection() {
+  const selected = getNewCustomApiSources();
+  const enabled = sourceEntries()
+    .filter((source) => source.enabled)
+    .map(({ type, key }) => ({ type, key }));
+  const enabledKeys = new Set(enabled.map((source) => source.type + ':' + source.key));
+  const selectedKeys = new Set(selected.map((source) => source.type + ':' + source.key));
+  const selectsAllEnabled = selectedKeys.size === enabledKeys.size
+    && [...enabledKeys].every((key) => selectedKeys.has(key));
+  return selectsAllEnabled ? null : selected;
+}
+
 function renderCustomApiSelect() {
   const select = $('previewApiSelect');
   if (!select) return;
@@ -856,7 +868,7 @@ function addCustomApi() {
     pathInput.focus();
     return;
   }
-  customApis[path] = { enabled: true, remark, sources: getNewCustomApiSources() };
+  customApis[path] = { enabled: true, remark, sources: getNewCustomApiSourceSelection() };
   pathInput.value = '';
   remarkInput.value = '';
   renderNewCustomApiSources();
