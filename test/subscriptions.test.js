@@ -48,6 +48,27 @@ test("retries an empty preferred subscription response", async () => {
   }
 });
 
+test("coalesces concurrent requests for the same preferred source", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#CN";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return new Response(btoa(source), { status: 200 });
+  };
+  try {
+    const results = await Promise.all([
+      fetchPreferredSubs("e.ye.gs"),
+      fetchPreferredSubs("e.ye.gs"),
+    ]);
+    assert.deepEqual(results[0], results[1]);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reports failed sources without discarding healthy source output", async () => {
   const originalFetch = globalThis.fetch;
   const values = {

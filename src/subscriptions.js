@@ -14,11 +14,16 @@ const LINE_CLEAN_REGEX = /(\s*@.*|加入.*|telegram.*)$/i;
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
+const sourceInflight = new Map();
 const LOWER_BLACKLIST = [
   "问题", "每日", "重置", "官网", "群组", "流量", "到期", "客服", "kefu", "加入",
   "t.me", "免费", "telegram", "channel", "premium", "nodes", "进群", "获取", "频道",
   "官方", "共享", "提供", "联系", "tg", "云",
 ].map((value) => value.toLowerCase());
+const BLACKLIST_REGEX = new RegExp(
+  LOWER_BLACKLIST.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+  "i",
+);
 
 async function fetchWithTimeout(resource, options = {}) {
   const controller = new AbortController();
@@ -54,7 +59,8 @@ function decodeSubscriptionBody(content) {
   const text = content.replace(/^\uFEFF/, "").trim();
   if (!text) return "";
   try {
-    const decoded = atob(text.replace(/\s+/g, ""));
+    const encoded = /\s/.test(text) ? text.replace(/\s+/g, "") : text;
+    const decoded = atob(encoded);
     if (decoded.includes("://") || decoded.includes("\n")) return decoded;
   } catch {
     // Some providers return plain text instead of Base64.
@@ -69,10 +75,12 @@ async function fetchPreferredSubs(host) {
   }, "订阅源");
 
   const rawContent = decodeSubscriptionBody(content);
-  return rawContent
-    .split(/\r?\n/)
-    .map((line) => parsePreferredIpLine(line))
-    .filter(Boolean);
+  const result = [];
+  for (const line of rawContent.split(/\r?\n/)) {
+    const parsed = parsePreferredIpLine(line);
+    if (parsed) result.push(parsed);
+  }
+  return result;
 }
 
 async function fetchApiSubs(apiUrl) {
@@ -83,6 +91,20 @@ async function fetchApiSubs(apiUrl) {
 }
 
 async function fetchSourceText(resource, options, label) {
+  const key = String(resource);
+  const pending = sourceInflight.get(key);
+  if (pending) return pending;
+
+  const request = fetchSourceTextUncached(resource, options, label);
+  sourceInflight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (sourceInflight.get(key) === request) sourceInflight.delete(key);
+  }
+}
+
+async function fetchSourceTextUncached(resource, options, label) {
   let lastError = new Error(`${label}返回空数据`);
   for (let attempt = 0; attempt <= UPSTREAM_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
@@ -108,6 +130,7 @@ async function fetchSourceText(resource, options, label) {
 
 function filterPreferredIps(lines) {
   const result = [];
+  const seen = new Set();
   for (const value of lines) {
     if (!value) continue;
     const line = value.trim();
@@ -118,10 +141,13 @@ function filterPreferredIps(lines) {
     const remark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
     const full = remark ? `${node}#${remark}` : node;
     const lower = full.toLowerCase();
-    if (LOWER_BLACKLIST.some((word) => lower.includes(word))) continue;
-    result.push(full.replace(LINE_CLEAN_REGEX, "").trim());
+    if (BLACKLIST_REGEX.test(lower)) continue;
+    const cleaned = full.replace(LINE_CLEAN_REGEX, "").trim();
+    if (seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    result.push(cleaned);
   }
-  return [...new Set(result)];
+  return result;
 }
 
 function enabledEntries(config) {
@@ -158,8 +184,9 @@ export async function handleRoot(env, sourceSelection) {
     }
 
     const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
+    const selectedKeys = selected ? new Set(selected.map((source) => `${source?.type}:${source?.key}`)) : null;
     const selectedEntries = (config, type) => enabledEntries(config).filter(([key]) => {
-      return selected === null || selected.some((source) => source?.type === type && source.key === key);
+      return selectedKeys === null || selectedKeys.has(`${type}:${key}`);
     });
     const [subsResults, apiResults] = await Promise.all([
       Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
