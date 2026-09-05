@@ -69,7 +69,8 @@ function decodeSubscriptionBody(content) {
 }
 
 async function fetchPreferredSubs(host) {
-  const baseHost = HTTP_PROTOCOL_REGEX.test(host) ? host : `https://${host}`;
+  const rawHost = String(host || "").trim().replace(/\/+$/, "");
+  const baseHost = HTTP_PROTOCOL_REGEX.test(rawHost) ? rawHost : `https://${rawHost}`;
   const content = await fetchSourceText(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
     headers: { "User-Agent": UA_SUBS_FETCH },
   }, "订阅源");
@@ -171,6 +172,14 @@ function enabledEntries(config) {
   });
 }
 
+function normalizeSelectedSourceKey(type, key) {
+  const value = String(key || "").trim();
+  if (type === "subs") {
+    return value.replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+  }
+  return value.replace(/\/+$/, "").toLowerCase();
+}
+
 export async function handleRoot(env, sourceSelection) {
   try {
     const cacheKey = Array.isArray(sourceSelection)
@@ -197,9 +206,11 @@ export async function handleRoot(env, sourceSelection) {
     }
 
     const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
-    const selectedKeys = selected ? new Set(selected.map((source) => `${source?.type}:${source?.key}`)) : null;
+    const selectedKeys = selected
+      ? new Set(selected.map((source) => `${source?.type}:${normalizeSelectedSourceKey(source?.type, source?.key)}`))
+      : null;
     const selectedEntries = (config, type) => enabledEntries(config).filter(([key]) => {
-      return selectedKeys === null || selectedKeys.has(`${type}:${key}`);
+      return selectedKeys === null || selectedKeys.has(`${type}:${normalizeSelectedSourceKey(type, key)}`);
     });
     const [subsResults, apiResults] = await Promise.all([
       Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
