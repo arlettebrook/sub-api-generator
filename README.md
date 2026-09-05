@@ -82,6 +82,15 @@ PASSWORD=change-this-password
 npm test
 ```
 
+浏览器端自动化测试使用 Playwright，首次运行需要安装 Chromium：
+
+```powershell
+npx playwright install chromium
+npm run test:e2e
+```
+
+端到端测试会自动启动本地测试服务，覆盖桌面端和移动端的管理页加载、主题切换、退出登录、导航以及优选 API 数据源选择。
+
 测试覆盖配置校验、认证 Cookie、登录登出、订阅过滤、Pages 路由和 HTTP 方法限制。
 
 ## 路由
