@@ -226,6 +226,83 @@ export const adminStyle = `
     font-size: 13px;
   }
 
+  .setting-block {
+    display: grid;
+    gap: 14px;
+    padding: 16px 18px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .setting-block-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .blacklist-add-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .blacklist-add-row input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .blacklist-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .blacklist-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .blacklist-row input {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+  }
+
+  .blacklist-row .del-btn {
+    opacity: 1;
+    pointer-events: auto;
+    height: 32px;
+    padding: 0 10px;
+  }
+
+  .blacklist-empty {
+    padding: 18px 10px;
+    border: 1px dashed var(--border-hover);
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
+    text-align: center;
+    font-size: 13px;
+  }
+
+  .blacklist-empty[hidden] {
+    display: none;
+  }
+
+  .blacklist-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+  }
+
+  .blacklist-toolbar .save-status {
+    margin-right: auto;
+  }
+
   .source-picker {
     display: grid;
     gap: 8px;
@@ -1246,6 +1323,30 @@ export const adminStyle = `
       align-items: flex-start;
       flex-direction: column;
       gap: 12px;
+    }
+    .setting-block {
+      padding: 12px;
+    }
+    .setting-block-heading {
+      gap: 8px;
+    }
+    .blacklist-add-row {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .blacklist-add-row button,
+    .blacklist-toolbar button {
+      width: 100%;
+    }
+    .blacklist-list {
+      grid-template-columns: 1fr;
+    }
+    .blacklist-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .blacklist-toolbar .save-status {
+      margin-right: 0;
     }
     .page-intro {
       margin: 0 0 10px;

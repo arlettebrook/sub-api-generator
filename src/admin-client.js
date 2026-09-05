@@ -1211,6 +1211,143 @@ function importApis(event) {
   event.target.value = '';
 }
 
+// ======================== 黑名单管理 ========================
+let blacklist = [];
+
+function normalizeBlacklistClient(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.reduce((result, item) => {
+    if (typeof item !== 'string') return result;
+    const word = item.trim().slice(0, 128);
+    const key = word.toLowerCase();
+    if (!word || seen.has(key) || result.length >= 200) return result;
+    seen.add(key);
+    result.push(word);
+    return result;
+  }, []);
+}
+
+function setBlacklistDirty(dirty = true) {
+  const status = $('blacklistSaveStatus');
+  const button = $('saveBlacklistButton');
+  if (status) {
+    status.textContent = dirty ? '有未保存的修改' : '配置已保存';
+    status.classList.toggle('dirty', dirty);
+  }
+  if (button) button.disabled = !dirty;
+}
+
+function renderBlacklist() {
+  const list = $('blacklistList');
+  const empty = $('blacklistEmpty');
+  const summary = $('blacklistSummary');
+  if (!list) return;
+  list.innerHTML = '';
+  blacklist.forEach((word, index) => {
+    const row = document.createElement('div');
+    row.className = 'blacklist-row';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 128;
+    input.value = word;
+    input.setAttribute('aria-label', '黑名单词条 ' + (index + 1));
+    input.addEventListener('input', () => {
+      blacklist[index] = input.value.slice(0, 128);
+      setBlacklistDirty(true);
+    });
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'del-btn';
+    deleteButton.textContent = '删除';
+    deleteButton.title = '删除此黑名单词条';
+    deleteButton.addEventListener('click', () => {
+      blacklist.splice(index, 1);
+      renderBlacklist();
+      setBlacklistDirty(true);
+    });
+
+    row.append(input, deleteButton);
+    list.appendChild(row);
+  });
+  if (empty) empty.hidden = blacklist.length !== 0;
+  if (summary) summary.textContent = blacklist.length + ' 项';
+}
+
+async function loadBlacklist() {
+  try {
+    blacklist = normalizeBlacklistClient(await readJsonResponse('/api/blacklist', '黑名单配置'));
+    renderBlacklist();
+    setBlacklistDirty(false);
+  } catch (error) {
+    renderLoadError('blacklistList', error.message, loadBlacklist);
+    showToast(error.message, 'error');
+  }
+}
+
+function addBlacklistWord() {
+  const input = $('newBlacklistWord');
+  if (!input) return;
+  const word = input.value.trim().slice(0, 128);
+  if (!word) {
+    showToast('请输入黑名单关键词', 'error');
+    input.focus();
+    return;
+  }
+  if (blacklist.length >= 200) {
+    showToast('黑名单条目不能超过 200 个', 'error');
+    return;
+  }
+  if (blacklist.some((item) => item.toLowerCase() === word.toLowerCase())) {
+    showToast('该关键词已存在', 'error');
+    input.focus();
+    return;
+  }
+  blacklist.push(word);
+  input.value = '';
+  renderBlacklist();
+  setBlacklistDirty(true);
+  input.focus();
+}
+
+async function saveBlacklist() {
+  const button = $('saveBlacklistButton');
+  if (button) button.disabled = true;
+  const normalized = normalizeBlacklistClient(blacklist);
+  if (normalized.length !== blacklist.length || normalized.some((word, index) => word !== blacklist[index])) {
+    blacklist = normalized;
+    renderBlacklist();
+  }
+  try {
+    const response = await fetch('/api/blacklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(blacklist)
+    });
+    if (!response.ok) throw responseError('黑名单配置保存', response);
+    setBlacklistDirty(false);
+    showToast('黑名单配置已保存', 'success');
+    if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
+  } catch (error) {
+    setBlacklistDirty(true);
+    showToast(error.message || '黑名单配置保存失败', 'error');
+  }
+}
+
+function initBlacklistForm() {
+  const input = $('newBlacklistWord');
+  if (!input) return;
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addBlacklistWord();
+    }
+  });
+}
+
 // 页面初始化
 window.addEventListener('DOMContentLoaded', () => {
   const page = document.body.dataset.page || 'overview';
@@ -1240,6 +1377,10 @@ window.addEventListener('DOMContentLoaded', () => {
   $('logoutButton')?.addEventListener('click', logout);
   
   initTheme();
+  if (page === 'settings') {
+    initBlacklistForm();
+    loadBlacklist();
+  }
   if (page === 'customApis') initCustomApiForm();
   if (page === 'subs') loadSubs();
   else if (page === 'apis') loadApis();

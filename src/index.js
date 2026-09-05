@@ -1,13 +1,16 @@
 import {
   KV_KEY_CUSTOM_APIS,
   KV_KEY_APIS,
+  KV_KEY_BLACKLIST,
   KV_KEY_SUBS,
   getRuntimeConfig as getPagesRuntimeConfig,
   isAllowedApiPath,
   normalizeCustomApiData,
+  normalizeBlacklist,
   normalizeKvData,
   readJsonObject as readPagesJsonObject,
   validateApiPathPayload,
+  validateBlacklistPayload,
 } from "./config.js";
 import {
   jsonResponse as pagesJsonResponse,
@@ -42,6 +45,23 @@ async function handleGetApis(env) {
 async function handlePostApis(request, env) {
   const body = await readPagesJsonObject(request);
   await env.KV.put(KV_KEY_APIS, JSON.stringify(body));
+  subscriptions.clearAggregateCache();
+  return pagesJsonResponse({ ok: true });
+}
+
+async function handleGetBlacklist(env) {
+  const data = await env.KV.get(KV_KEY_BLACKLIST, "json");
+  return pagesJsonResponse(normalizeBlacklist(data));
+}
+
+async function handlePostBlacklist(request, env) {
+  let body;
+  try {
+    body = validateBlacklistPayload(await request.json());
+  } catch (error) {
+    throw new Error(`请求 JSON 无效: ${error.message}`);
+  }
+  await env.KV.put(KV_KEY_BLACKLIST, JSON.stringify(body));
   subscriptions.clearAggregateCache();
   return pagesJsonResponse({ ok: true });
 }
@@ -158,6 +178,10 @@ export default {
         case "/api/apis":
           if (method === "GET") return await handleGetApis(env);
           if (method === "POST") return await handlePostApis(request, env);
+          return pagesMethodNotAllowed("GET, POST");
+        case "/api/blacklist":
+          if (method === "GET") return await handleGetBlacklist(env);
+          if (method === "POST") return await handlePostBlacklist(request, env);
           return pagesMethodNotAllowed("GET, POST");
         case "/api/custom-apis":
           if (method === "GET") return await handleGetCustomApis(env);

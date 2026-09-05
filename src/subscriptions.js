@@ -1,4 +1,12 @@
-import { isPlainObject, KV_KEY_APIS, KV_KEY_SUBS, normalizeKvData } from "./config.js";
+import {
+  DEFAULT_BLACKLIST,
+  isPlainObject,
+  KV_KEY_APIS,
+  KV_KEY_BLACKLIST,
+  KV_KEY_SUBS,
+  normalizeBlacklist,
+  normalizeKvData,
+} from "./config.js";
 import { textResponse, withSecurityHeaders } from "./http.js";
 
 const OUTBOUND_TIMEOUT_MS = 15000;
@@ -15,15 +23,7 @@ const AGGREGATE_CACHE_TTL_MS = 15000;
 const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
 const sourceInflight = new Map();
-const LOWER_BLACKLIST = [
-  "问题", "每日", "重置", "官网", "群组", "流量", "到期", "客服", "kefu", "加入",
-  "t.me", "免费", "telegram", "channel", "premium", "nodes", "进群", "获取", "频道",
-  "官方", "共享", "提供", "联系", "tg", "云",
-].map((value) => value.toLowerCase());
-const BLACKLIST_REGEX = new RegExp(
-  LOWER_BLACKLIST.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
-  "i",
-);
+const blacklistRegexCache = new Map();
 
 async function fetchWithTimeout(resource, options = {}) {
   const controller = new AbortController();
@@ -128,9 +128,22 @@ async function fetchSourceTextUncached(resource, options, label) {
   throw lastError;
 }
 
-function filterPreferredIps(lines) {
+function getBlacklistRegex(blacklist) {
+  const normalized = normalizeBlacklist(blacklist);
+  const cacheKey = normalized.join("\u0000").toLowerCase();
+  if (blacklistRegexCache.has(cacheKey)) return blacklistRegexCache.get(cacheKey);
+  const regex = normalized.length
+    ? new RegExp(normalized.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i")
+    : null;
+  if (blacklistRegexCache.size >= 16) blacklistRegexCache.delete(blacklistRegexCache.keys().next().value);
+  blacklistRegexCache.set(cacheKey, regex);
+  return regex;
+}
+
+function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST) {
   const result = [];
   const seen = new Set();
+  const blacklistRegex = getBlacklistRegex(blacklist);
   for (const value of lines) {
     if (!value) continue;
     const line = value.trim();
@@ -140,8 +153,7 @@ function filterPreferredIps(lines) {
     const hashIndex = line.indexOf("#");
     const remark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
     const full = remark ? `${node}#${remark}` : node;
-    const lower = full.toLowerCase();
-    if (BLACKLIST_REGEX.test(lower)) continue;
+    if (blacklistRegex?.test(full)) continue;
     const cleaned = full.replace(LINE_CLEAN_REGEX, "").trim();
     if (seen.has(cleaned)) continue;
     seen.add(cleaned);
@@ -175,9 +187,10 @@ export async function handleRoot(env, sourceSelection) {
         headers: withSecurityHeaders(headers),
       });
     }
-    const [subsConfig, apisConfig] = await Promise.all([
+    const [subsConfig, apisConfig, blacklistConfig] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
+      env.KV.get(KV_KEY_BLACKLIST, "json"),
     ]);
     if (!isPlainObject(subsConfig)) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
@@ -224,7 +237,7 @@ export async function handleRoot(env, sourceSelection) {
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
 
-    const filtered = filterPreferredIps(preferred);
+    const filtered = filterPreferredIps(preferred, normalizeBlacklist(blacklistConfig));
     const output = filtered.join("\n") + (extra.length ? `\n${extra.join("\n")}` : "");
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {

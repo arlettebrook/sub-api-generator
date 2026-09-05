@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getRuntimeConfig,
+  normalizeBlacklist,
   normalizeKvData,
   readJsonObject,
   validateApiPathPayload,
   validateConfigPayload,
+  validateBlacklistPayload,
 } from "../src/config.js";
 
 const kv = { get() {}, put() {} };
@@ -31,6 +33,14 @@ test("validates and normalizes configuration payloads", () => {
   });
   assert.throws(() => validateConfigPayload([]), /配置必须是 JSON 对象/);
   assert.throws(() => validateConfigPayload({ bad: null }), /配置项无效/);
+});
+
+test("normalizes blacklist entries and falls back to defaults", () => {
+  assert.deepEqual(normalizeBlacklist([" foo ", "FOO", "", 1, "bar"]), ["foo", "bar"]);
+  assert.ok(normalizeBlacklist(null).length > 0);
+  assert.deepEqual(validateBlacklistPayload([" foo ", "FOO", "bar"]), ["foo", "bar"]);
+  assert.throws(() => validateBlacklistPayload({}), /字符串数组/);
+  assert.throws(() => validateBlacklistPayload([""]), /非空字符串/);
 });
 
 test("validates custom API access paths", () => {

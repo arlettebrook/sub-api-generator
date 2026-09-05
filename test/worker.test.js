@@ -116,6 +116,43 @@ test("creates and serves custom API access paths", async () => {
   assert.match(await publicResponse.text(), /KV 未配置 subs/);
 });
 
+test("reads and updates blacklist configuration", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const authHeaders = { Cookie: `auth=${hash}` };
+
+  const defaultResponse = await worker.fetch(new Request("https://example.test/api/blacklist", {
+    headers: authHeaders,
+  }), runtime);
+  assert.equal(defaultResponse.status, 200);
+  assert.ok((await defaultResponse.json()).includes("官网"));
+
+  const saveResponse = await worker.fetch(new Request("https://example.test/api/blacklist", {
+    method: "POST",
+    headers: { ...authHeaders, "content-type": "application/json" },
+    body: JSON.stringify([" foo ", "FOO", "bar"]),
+  }), runtime);
+  assert.equal(saveResponse.status, 200);
+
+  const savedResponse = await worker.fetch(new Request("https://example.test/api/blacklist", {
+    headers: authHeaders,
+  }), runtime);
+  assert.deepEqual(await savedResponse.json(), ["foo", "bar"]);
+});
+
+test("rejects invalid blacklist payloads", async () => {
+  const runtime = env();
+  const hash = await sha256Hex("secret");
+  const response = await worker.fetch(new Request("https://example.test/api/blacklist", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ bad: true }),
+  }), runtime);
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /黑名单必须是字符串数组/);
+});
+
 test("rejects unsupported methods", async () => {
   const hash = await sha256Hex("secret");
   const response = await worker.fetch(new Request("https://example.test/api/uuid", {

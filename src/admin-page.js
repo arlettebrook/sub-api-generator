@@ -132,6 +132,25 @@ export const adminHTML = `
       </div>
       <button class="btn-outline" type="button" onclick="toggleTheme()">切换主题</button>
     </div>
+    <div class="setting-block" id="blacklistSettings">
+      <div class="setting-block-heading">
+        <div class="setting-copy">
+          <strong>黑名单</strong>
+          <small>过滤包含这些关键词的节点备注，支持添加、编辑和删除。</small>
+        </div>
+        <span class="section-summary" id="blacklistSummary">0 项</span>
+      </div>
+      <div class="blacklist-add-row">
+        <input id="newBlacklistWord" type="text" maxlength="128" placeholder="输入要过滤的关键词" autocomplete="off" />
+        <button class="btn-primary" id="addBlacklistButton" type="button" onclick="addBlacklistWord()">➕ 添加</button>
+      </div>
+      <div id="blacklistList" class="blacklist-list"></div>
+      <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
+      <div class="blacklist-toolbar">
+        <span class="save-status" id="blacklistSaveStatus">配置已保存</span>
+        <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
+      </div>
+    </div>
   </div>
 </div>
 
