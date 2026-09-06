@@ -56,7 +56,7 @@ export const adminHTML = `
 
 <!-- ==================== 优选 API ==================== -->
 <div class="card" id="customApiSection">
-  <div class="section-heading">
+  <div class="section-heading custom-api-section-heading">
     <div>
       <h3>🚀 优选 API</h3>
     </div>
@@ -115,10 +115,6 @@ export const adminHTML = `
       </div>
     </div>
   </dialog>
-  <div class="toolbar custom-api-toolbar">
-    <span class="save-status" id="customApiSaveStatus">配置已保存</span>
-    <button class="btn-primary" type="button" id="saveCustomApisButton" onclick="saveCustomApis()">💾 保存配置</button>
-  </div>
   <div id="customApisList"></div>
 </div>
 

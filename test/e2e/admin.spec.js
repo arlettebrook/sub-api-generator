@@ -50,7 +50,16 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.getByRole("button", { name: "创建 API" }).click();
   await expect(page.locator("#customApiDialog")).not.toBeVisible();
   await expect(page.locator("#customApisList .row")).toHaveCount(initialApiCount + 1);
-  await expect(page.locator("#customApiSaveStatus")).toHaveText("有未保存的修改");
+  await expect(page.locator("#saveCustomApisButton")).toHaveCount(0);
+  await expect(page.locator("#customApiSaveStatus")).toHaveCount(0);
+  const apiSwitch = page.locator("#customApisList .custom-api-switch input").last();
+  await expect(apiSwitch).toBeChecked();
+  await page.locator("#customApisList .custom-api-switch").last().click();
+  await expect(apiSwitch).not.toBeChecked();
+  await expect.poll(async () => page.evaluate(async (path) => {
+    const response = await fetch('/api/custom-apis', { cache: 'no-store' });
+    return (await response.json())[path]?.enabled;
+  }, customPath)).toBe(false);
   await page.locator("#customApisList .custom-api-row").last().getByRole("button", { name: "✎ 编辑" }).click();
   await expect(page.locator("#customApiEditDialog")).toBeVisible();
   await expect(page.locator("#editCustomApiSources input[type=checkbox]")).toHaveCount(2);
@@ -58,7 +67,6 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#editCustomApiSources input[type=checkbox]").last().check();
   await page.locator("#saveCustomApiEditButton").click();
   await expect(page.locator("#customApiEditDialog")).not.toBeVisible();
-  await expect(page.locator("#customApiSaveStatus")).toHaveText("配置已保存");
   const savedConfig = await page.evaluate(async (path) => {
     const response = await fetch('/api/custom-apis', { cache: 'no-store' });
     const data = await response.json();

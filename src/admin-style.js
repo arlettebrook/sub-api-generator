@@ -574,6 +574,10 @@ export const adminStyle = `
     background: transparent;
   }
 
+  .custom-api-dialog .form-field input {
+    min-width: 0;
+  }
+
   .form-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.8fr);
@@ -667,6 +671,10 @@ export const adminStyle = `
     gap: 12px;
   }
 
+  .custom-api-row:hover {
+    border-color: var(--border-hover);
+  }
+
   .custom-api-row-main {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(220px, 1.1fr);
@@ -728,9 +736,84 @@ export const adminStyle = `
     flex-wrap: wrap;
   }
 
+  .custom-api-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .custom-api-switch input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .custom-api-switch-track {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    border: 1px solid var(--border-hover);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    transition: var(--transition);
+  }
+
+  .custom-api-switch-track::after {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    content: '';
+    transition: var(--transition);
+  }
+
+  .custom-api-switch input:checked + .custom-api-switch-track {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.2);
+  }
+
+  .custom-api-switch input:checked + .custom-api-switch-track::after {
+    left: 21px;
+    background: var(--success);
+  }
+
+  .custom-api-switch input:focus-visible + .custom-api-switch-track {
+    outline: 3px solid var(--accent-light);
+    outline-offset: 2px;
+  }
+
+  .custom-api-switch-text {
+    min-width: 24px;
+  }
+
   .custom-api-actions .del-btn {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .custom-api-delete {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--danger);
+    background: var(--danger-light);
+  }
+
+  .custom-api-delete:hover {
+    border-color: var(--danger);
+    color: var(--danger-hover);
+    background: rgba(239, 68, 68, 0.16);
+    box-shadow: none;
+    transform: none;
   }
 
   .icon-action {
@@ -1462,9 +1545,32 @@ export const adminStyle = `
     .custom-api-create {
       padding: 12px;
     }
-    .section-heading-actions {
+    .custom-api-section-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+    }
+    .custom-api-section-heading > div:first-child,
+    .custom-api-section-heading h3 {
+      min-width: 0;
+    }
+    .custom-api-section-heading h3 {
+      margin: 0;
+      white-space: nowrap;
+    }
+    .custom-api-section-heading .section-heading-actions {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
       width: 100%;
-      justify-content: space-between;
+      gap: 8px;
+    }
+    .custom-api-section-heading .section-summary {
+      justify-self: start;
+    }
+    .custom-api-section-heading #openCustomApiDialogButton {
+      grid-column: 1 / -1;
+      width: 100%;
     }
     .custom-api-dialog {
       width: calc(100vw - 16px);
@@ -1497,6 +1603,12 @@ export const adminStyle = `
     }
     .custom-api-actions button {
       flex: 1;
+    }
+    .custom-api-actions .custom-api-switch {
+      order: -1;
+      width: 100%;
+      justify-content: flex-start;
+      padding-bottom: 2px;
     }
     .custom-api-row .del-btn {
       opacity: 1;

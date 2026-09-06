@@ -539,6 +539,12 @@ function setCustomApisDirty(dirty = true) {
   if (button) button.disabled = !dirty;
 }
 
+async function persistCustomApis(message = '') {
+  const saved = await saveCustomApis(false);
+  if (saved && message) showToast(message, 'success');
+  return saved;
+}
+
 function normalizeCustomApiPath(value) {
   return String(value || '').trim().replace(/^\\/+/, '');
 }
@@ -871,16 +877,26 @@ function renderCustomApis() {
     const actions = document.createElement('div');
     actions.className = 'custom-api-actions';
 
-    const statusBtn = document.createElement('button');
-    statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
-    statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
-    statusBtn.type = 'button';
-    statusBtn.title = '切换启用状态';
-    statusBtn.onclick = () => {
-      customApis[path].enabled = !customApis[path].enabled;
+    const switchLabel = document.createElement('label');
+    switchLabel.className = 'custom-api-switch';
+    switchLabel.title = entry.enabled ? '已启用，点击禁用' : '已禁用，点击启用';
+    const statusSwitch = document.createElement('input');
+    statusSwitch.type = 'checkbox';
+    statusSwitch.role = 'switch';
+    statusSwitch.checked = entry.enabled === true;
+    statusSwitch.setAttribute('aria-label', (entry.remark || '/' + path) + (entry.enabled ? ' 已启用' : ' 已禁用'));
+    const switchTrack = document.createElement('span');
+    switchTrack.className = 'custom-api-switch-track';
+    const switchText = document.createElement('span');
+    switchText.className = 'custom-api-switch-text';
+    switchText.textContent = '启用';
+    switchLabel.append(statusSwitch, switchTrack, switchText);
+    statusSwitch.onchange = async () => {
+      customApis[path].enabled = statusSwitch.checked;
       setCustomApisDirty();
       renderCustomApis();
       renderCustomApiSelect();
+      await persistCustomApis(statusSwitch.checked ? '优选 API 已启用' : '优选 API 已禁用');
     };
 
     const editBtn = document.createElement('button');
@@ -902,17 +918,17 @@ function renderCustomApis() {
     openBtn.onclick = () => window.open(window.location.origin + '/' + path, '_blank', 'noopener');
 
     const delBtn = document.createElement('button');
-    delBtn.className = 'del-btn';
-    delBtn.textContent = '删除';
+    delBtn.className = 'del-btn custom-api-delete';
+    delBtn.textContent = '🗑 删除';
     delBtn.type = 'button';
     delBtn.onclick = () => {
       delete customApis[path];
       setCustomApisDirty();
       renderCustomApis();
       renderCustomApiSelect();
-      showToast('已删除优选 API', 'success');
+      persistCustomApis('已删除优选 API');
     };
-    actions.append(statusBtn, editBtn, copyBtn, openBtn, delBtn);
+    actions.append(switchLabel, editBtn, copyBtn, openBtn, delBtn);
 
     row.append(main, actions);
     el.appendChild(row);
@@ -1018,7 +1034,7 @@ function addCustomApi() {
   renderCustomApis();
   renderCustomApiSelect();
   closeCustomApiDialog(false);
-  showToast('优选 API 创建成功', 'success');
+  persistCustomApis('优选 API 创建并保存成功');
 }
 
 async function saveCustomApis(notify = true) {
