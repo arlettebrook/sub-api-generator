@@ -91,7 +91,7 @@ export const adminHTML = `
   <div id="sourceErrorNotice" class="source-error-notice" role="status" hidden></div>
   <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
   <div id="nodesContainer">
-    <div class="nodes-loading">加载中...</div>
+    <div class="nodes-loading nodes-skeleton" aria-label="正在加载节点"></div>
   </div>
   <div id="pagination" class="pagination"></div>
 </div>
@@ -124,7 +124,7 @@ export const adminHTML = `
           <input id="newCustomApiRemark" placeholder="可选" autocomplete="off" />
         </label>
       </div>
-      <div id="newCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
+      <div id="newCustomApiSources"><div class="source-picker-skeleton" aria-label="正在加载数据源"></div></div>
       <div id="customApiSourceStatus" class="source-load-status" role="status" hidden></div>
       <div class="create-actions">
         <button class="btn-outline" type="button" onclick="closeCustomApiDialog()">取消</button>
@@ -150,7 +150,7 @@ export const adminHTML = `
         </label>
       </div>
       <div class="custom-api-edit-url" id="editCustomApiUrl"></div>
-      <div id="editCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
+      <div id="editCustomApiSources"><div class="source-picker-skeleton" aria-label="正在加载数据源"></div></div>
       <div class="create-actions">
         <button class="btn-outline" type="button" onclick="closeCustomApiEditDialog()">取消</button>
         <button class="btn-primary" type="button" id="saveCustomApiEditButton" onclick="saveCustomApiEdit()">💾 保存修改</button>

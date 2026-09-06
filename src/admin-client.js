@@ -114,6 +114,22 @@ function renderLoadError(containerId, message, retry) {
   container.appendChild(notice);
 }
 
+function nodeSkeletonMarkup(count = 6) {
+  let items = '';
+  for (let i = 0; i < count; i++) items += '<div class="node-skeleton-item"><span></span><i></i></div>';
+  return '<div class="nodes-grid nodes-skeleton" aria-label="正在加载节点">' + items + '</div>';
+}
+
+function listSkeletonMarkup(count = 3) {
+  let rows = '';
+  for (let i = 0; i < count; i++) rows += '<div class="list-skeleton-row"><span></span><span></span><i></i></div>';
+  return '<div class="list-skeleton" aria-label="正在加载列表">' + rows + '</div>';
+}
+
+function sourcePickerSkeletonMarkup() {
+  return '<div class="source-picker-skeleton" aria-label="正在加载数据源"><span></span><span></span><span></span><span></span></div>';
+}
+
 function renderSourceLoadStatus(errors = []) {
   const notice = $('customApiSourceStatus');
   if (!notice) return;
@@ -414,7 +430,7 @@ async function fetchNodes(emptyRetry = 0) {
   if (activeNodeRequest) activeNodeRequest.abort();
   const controller = new AbortController();
   activeNodeRequest = controller;
-  nodesContainer.innerHTML = '<div class="nodes-loading">正在获取节点数据...</div>';
+  nodesContainer.innerHTML = nodeSkeletonMarkup();
   paginationEl.innerHTML = '';
   renderPreviewSourceErrors();
   
@@ -449,7 +465,7 @@ async function fetchNodes(emptyRetry = 0) {
     updateRegionOptions();
     currentPage = 1;
     if (nodes.length === 0 && sourceErrors.length === 0 && emptyRetry < emptyNodeRetryDelays.length) {
-      nodesContainer.innerHTML = '<div class="nodes-loading">暂未获取到节点，正在重试...</div>';
+      nodesContainer.innerHTML = nodeSkeletonMarkup(4) + '<div class="nodes-loading retry-loading">暂未获取到节点，正在重试...</div>';
       nodesCountEl.textContent = '正在获取节点';
       window.setTimeout(() => {
         if (sequence === nodeLoadSequence) fetchNodes(emptyRetry + 1);
@@ -680,6 +696,11 @@ function validateCustomApiPath(path, currentPath = '') {
 }
 
 async function loadCustomApis(loadSources = false) {
+  if ($('customApisList')) $('customApisList').innerHTML = listSkeletonMarkup();
+  if (loadSources) {
+    $('newCustomApiSources') && ($('newCustomApiSources').innerHTML = sourcePickerSkeletonMarkup());
+    $('editCustomApiSources') && ($('editCustomApiSources').innerHTML = sourcePickerSkeletonMarkup());
+  }
   const requests = [readJsonResponse('/api/custom-apis', '优选 API 配置')];
   if (loadSources) {
     requests.push(readJsonResponse('/api/subs', '订阅源配置'), readJsonResponse('/api/apis', 'API 源配置'));
@@ -1319,6 +1340,7 @@ function queueSubsSave() {
 }
 
 async function loadSubs() {
+  if ($('subsList')) $('subsList').innerHTML = listSkeletonMarkup();
   try {
     let data = await readJsonResponse('/api/subs', '订阅源配置');
     for (let key in data) {
@@ -1490,6 +1512,7 @@ function queueApisSave() {
 }
 
 async function loadApis() {
+  if ($('apisList')) $('apisList').innerHTML = listSkeletonMarkup();
   try {
     let data = await readJsonResponse('/api/apis', 'API 源配置');
     for (let key in data) {
@@ -1740,6 +1763,7 @@ function renderBlacklist() {
 }
 
 async function loadBlacklist() {
+  if ($('blacklistList')) $('blacklistList').innerHTML = listSkeletonMarkup(2);
   try {
     blacklist = normalizeBlacklistClient(await readJsonResponse('/api/blacklist', '黑名单配置'));
     renderBlacklist();
@@ -1860,6 +1884,7 @@ function renderFilterRules() {
   if ($('filterRulesSummary')) $('filterRulesSummary').textContent = filterRules.length + ' 项';
 }
 async function loadFilterRules() {
+  if ($('filterRulesList')) $('filterRulesList').innerHTML = listSkeletonMarkup(2);
   try { filterRules = normalizeFilterRulesClient(await readJsonResponse('/api/filter-rules', '备注过滤规则')); renderFilterRules(); setFilterRulesDirty(false); }
   catch (error) { renderLoadError('filterRulesList', error.message, loadFilterRules); showToast(error.message, 'error'); }
 }
