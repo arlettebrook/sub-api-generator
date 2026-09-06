@@ -103,6 +103,21 @@ function setButtonBusy(button, busy, busyText = '保存中…') {
   }
 }
 
+function setInputError(input, message) {
+  if (!input) return;
+  const field = input.closest('.form-field') || input.parentElement;
+  let hint = field?.querySelector('.inline-error');
+  if (!hint) {
+    hint = document.createElement('small');
+    hint.className = 'inline-error';
+    field?.appendChild(hint);
+  }
+  hint.textContent = message || '';
+  hint.hidden = !message;
+  input.setAttribute('aria-invalid', message ? 'true' : 'false');
+  input.classList.toggle('has-error', Boolean(message));
+}
+
 let subsSavePending = 0;
 let apisSavePending = 0;
 let subsDirty = false;
@@ -386,7 +401,8 @@ function applyTheme(mode) {
 }
 
 function toggleTheme() {
-  const next = { system: 'dark', dark: 'light', light: 'system' }[themeMode] || 'system';
+  const isCurrentlyDark = document.documentElement.classList.contains('dark');
+  const next = themeMode === 'dark' ? 'light' : themeMode === 'light' ? 'dark' : (isCurrentlyDark ? 'light' : 'dark');
   applyTheme(next);
   try {
     localStorage.setItem('theme', themeMode);
@@ -1083,14 +1099,19 @@ function renderCustomApis() {
     switchTrack.className = 'custom-api-switch-track';
     const switchText = document.createElement('span');
     switchText.className = 'custom-api-switch-text';
-    switchText.textContent = '启用';
+    switchText.textContent = entry.enabled ? '已启用' : '已禁用';
     switchLabel.append(statusSwitch, switchTrack, switchText);
     statusSwitch.onchange = async () => {
+      const previous = !statusSwitch.checked;
+      statusSwitch.disabled = true;
+      switchText.textContent = '处理中…';
       customApis[path].enabled = statusSwitch.checked;
       setCustomApisDirty();
+      renderCustomApiSelect();
+      const saved = await persistCustomApis(statusSwitch.checked ? '优选 API 已启用' : '优选 API 已禁用');
+      if (!saved && customApis[path]) customApis[path].enabled = previous;
       renderCustomApis();
       renderCustomApiSelect();
-      await persistCustomApis(statusSwitch.checked ? '优选 API 已启用' : '优选 API 已禁用');
     };
 
     const editBtn = document.createElement('button');
@@ -1142,6 +1163,8 @@ async function executeCustomApiDelete() {
     return;
   }
   const removed = customApis[path];
+  const confirmButton = $('confirmCustomApiDeleteButton');
+  setButtonBusy(confirmButton, true, '删除中…');
   delete customApis[path];
   setCustomApisDirty();
   renderCustomApis();
@@ -1149,6 +1172,7 @@ async function executeCustomApiDelete() {
   if (dialog?.open) dialog.close();
   pendingCustomApiDelete = null;
   const saved = await persistCustomApis();
+  setButtonBusy(confirmButton, false);
   if (saved) showToast('已删除优选 API', 'success');
   else {
     customApis[path] = removed;
@@ -1200,10 +1224,12 @@ async function saveCustomApiEdit() {
   const newPath = normalizeCustomApiPath(pathInput?.value);
   const error = validateCustomApiPath(newPath, editingCustomApiPath);
   if (error) {
+    setInputError(pathInput, error);
     showToast(error, 'error');
     pathInput?.focus();
     return;
   }
+  setInputError(pathInput, '');
   const entry = customApis[editingCustomApiPath];
   const selection = editingCustomApiPicker ? readSourcePickerSelection(editingCustomApiPicker) : {
     sourceMode: entry.sourceMode === 'selected' ? 'selected' : 'all-enabled',
@@ -1247,10 +1273,12 @@ function addCustomApi() {
   const remark = remarkInput.value.trim();
   const error = validateCustomApiPath(path);
   if (error) {
+    setInputError(pathInput, error);
     showToast(error, 'error');
     pathInput.focus();
     return;
   }
+  setInputError(pathInput, '');
   const selection = getNewCustomApiSourceSelection();
   customApis[path] = { enabled: true, remark, ...selection };
   pathInput.value = '';
@@ -1435,10 +1463,13 @@ function renderSubs() {
     const statusBtn = document.createElement('button');
     statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
     statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
-    statusBtn.onclick = () => {
+    statusBtn.onclick = async () => {
+      statusBtn.disabled = true;
+      statusBtn.textContent = '处理中…';
       subs[host].enabled = !subs[host].enabled;
+      const saved = await queueSubsSave();
       renderSubs();
-      void queueSubsSave();
+      if (saved) showToast(subs[host]?.enabled ? '订阅源已启用' : '订阅源已禁用', 'success');
     };
 
     const health = createSourceHealth('subs', host);
@@ -1446,11 +1477,15 @@ function renderSubs() {
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn';
     delBtn.textContent = '删除';
-    delBtn.onclick = () => {
+    delBtn.onclick = async () => {
+      delBtn.disabled = true;
+      delBtn.textContent = '删除中…';
+      const removed = subs[host];
       delete subs[host];
+      const saved = await queueSubsSave();
+      if (!saved) subs[host] = removed;
       renderSubs();
-      showToast('已删除订阅源', 'success');
-      void queueSubsSave();
+      if (saved) showToast('已删除订阅源', 'success');
     };
 
     hostInput.onchange = () => {
@@ -1482,7 +1517,8 @@ function addSub() {
   const remarkInput = $('newRemark');
   let host = hostInput.value.trim();
   let remark = remarkInput.value.trim();
-  if (!host) { showToast('请输入主机名', 'error'); return; }
+  if (!host) { setInputError(hostInput, '请输入主机名'); showToast('请修正表单中的错误', 'error'); hostInput.focus(); return; }
+  clearInputError(hostInput);
   host = host.replace(/^https?:\\/\\//i, '');
   const lowerHost = host.toLowerCase();
   let existingKey = null;
@@ -1514,8 +1550,10 @@ async function saveSubs(notify = true) {
     if (notify) showToast('订阅源配置已保存', 'success');
     loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
+    return true;
   } catch (error) {
     showToast(error.message || '订阅源配置保存失败', 'error', () => saveSubs(notify));
+    return false;
   }
 }
 
@@ -1611,10 +1649,13 @@ function renderApis() {
     const statusBtn = document.createElement('button');
     statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
     statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
-    statusBtn.onclick = () => {
+    statusBtn.onclick = async () => {
+      statusBtn.disabled = true;
+      statusBtn.textContent = '处理中…';
       apis[url].enabled = !apis[url].enabled;
+      const saved = await queueApisSave();
       renderApis();
-      void queueApisSave();
+      if (saved) showToast(apis[url]?.enabled ? 'API 源已启用' : 'API 源已禁用', 'success');
     };
 
     const health = createSourceHealth('apis', url);
@@ -1622,11 +1663,15 @@ function renderApis() {
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn';
     delBtn.textContent = '删除';
-    delBtn.onclick = () => {
+    delBtn.onclick = async () => {
+      delBtn.disabled = true;
+      delBtn.textContent = '删除中…';
+      const removed = apis[url];
       delete apis[url];
+      const saved = await queueApisSave();
+      if (!saved) apis[url] = removed;
       renderApis();
-      showToast('已删除API', 'success');
-      void queueApisSave();
+      if (saved) showToast('已删除 API 源', 'success');
     };
 
     urlInput.onchange = () => {
@@ -1658,7 +1703,9 @@ function addApi() {
   const remarkInput = $('newApiRemark');
   let url = urlInput.value.trim();
   let remark = remarkInput.value.trim();
-  if (!url) { showToast('请输入 API URL', 'error'); return; }
+  if (!url) { setInputError(urlInput, '请输入 API URL'); showToast('请修正表单中的错误', 'error'); urlInput.focus(); return; }
+  if (!/^https?:\\/\\//i.test(url)) { setInputError(urlInput, 'API 地址必须以 http:// 或 https:// 开头'); showToast('请修正表单中的错误', 'error'); urlInput.focus(); return; }
+  setInputError(urlInput, '');
   if (apis[url]) {
     if (remark) apis[url].remark = remark;
     showToast('API URL 已存在，已更新备注', 'success');
@@ -1684,8 +1731,10 @@ async function saveApis(notify = true) {
     if (notify) showToast('API 源配置已保存', 'success');
     loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
+    return true;
   } catch (error) {
     showToast(error.message || 'API 源配置保存失败', 'error', () => saveApis(notify));
+    return false;
   }
 }
 

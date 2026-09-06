@@ -166,8 +166,8 @@ export const adminHTML = `
 <div class="card" id="subsSection">
   <h3>📡 优选订阅器管理</h3>
   <div class="add-row">
-    <input id="newHost" placeholder="sub.example.com" style="max-width: 220px;" />
-    <input id="newRemark" placeholder="备注（可选）" style="max-width: 200px;" />
+    <label class="add-field"><span class="sr-only">订阅源地址</span><input id="newHost" placeholder="sub.example.com" /><small class="inline-error" hidden></small></label>
+    <label class="add-field"><span class="sr-only">订阅源备注</span><input id="newRemark" placeholder="备注（可选）" /></label>
     <button class="btn-primary" onclick="addSub()">➕ 添加订阅源</button>
   </div>
   <div class="toolbar">
@@ -182,8 +182,8 @@ export const adminHTML = `
 <div class="card" id="apisSection">
   <h3>🔗 优选 API 管理</h3>
   <div class="add-row">
-    <input id="newApiUrl" placeholder="https://api.example.com/v1" style="max-width: 320px;" />
-    <input id="newApiRemark" placeholder="备注（可选）" style="max-width: 200px;" />
+    <label class="add-field add-field-wide"><span class="sr-only">API 地址</span><input id="newApiUrl" placeholder="https://api.example.com/v1" /><small class="inline-error" hidden></small></label>
+    <label class="add-field"><span class="sr-only">API 备注</span><input id="newApiRemark" placeholder="备注（可选）" /></label>
     <button class="btn-primary" onclick="addApi()">➕ 添加API</button>
   </div>
   <div class="toolbar">

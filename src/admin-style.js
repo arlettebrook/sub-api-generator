@@ -690,6 +690,29 @@ export const adminStyle = `
     color: var(--danger);
   }
 
+  .inline-error {
+    display: block;
+    margin-top: 2px;
+    color: var(--danger);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .inline-error[hidden] {
+    display: none;
+  }
+
+  input.has-error,
+  input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+
+  input.has-error:focus,
+  input[aria-invalid="true"]:focus {
+    box-shadow: 0 0 0 4px var(--danger-light);
+  }
+
   .path-input {
     display: flex;
     align-items: center;
@@ -1577,6 +1600,24 @@ export const adminStyle = `
     min-width: 160px;
   }
 
+  .add-field {
+    display: grid;
+    flex: 1 1 200px;
+    gap: 4px;
+    min-width: 0;
+    max-width: 220px;
+  }
+
+  .add-field-wide {
+    flex-basis: 300px;
+    max-width: 320px;
+  }
+
+  .add-field input {
+    width: 100%;
+    min-width: 0;
+  }
+
   /* 工具栏 */
   .toolbar {
     margin: 0 0 20px 0;
@@ -1739,6 +1780,21 @@ export const adminStyle = `
     background: rgba(239, 68, 68, 0.08);
     color: var(--danger);
   }
+
+  .toast.warning {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.1);
+    color: #b45309;
+  }
+
+  .toast.info {
+    border-color: rgba(59, 130, 246, 0.3);
+    background: rgba(59, 130, 246, 0.08);
+    color: #2563eb;
+  }
+
+  .dark .toast.warning { color: #fbbf24; }
+  .dark .toast.info { color: #93c5fd; }
 
   /* ========== 优选节点展示样式 ========== */
   .nodes-grid {
