@@ -175,6 +175,21 @@ function getBlacklistRegex(blacklist) {
   return regex;
 }
 
+function isBlacklisted(value, blacklistRegex) {
+  if (!blacklistRegex) return false;
+  if (blacklistRegex.test(value)) return true;
+  try {
+    return blacklistRegex.test(decodeURIComponent(value));
+  } catch {
+    return false;
+  }
+}
+
+function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST) {
+  const blacklistRegex = getBlacklistRegex(blacklist);
+  return lines.filter((value) => value && !isBlacklisted(value, blacklistRegex));
+}
+
 function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST) {
   const result = [];
   const seen = new Set();
@@ -188,7 +203,7 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST) {
     const hashIndex = line.indexOf("#");
     const remark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
     const full = remark ? `${node}#${remark}` : node;
-    if (blacklistRegex?.test(full)) continue;
+    if (isBlacklisted(full, blacklistRegex)) continue;
     const cleaned = full.replace(LINE_CLEAN_REGEX, "").trim();
     if (seen.has(cleaned)) continue;
     seen.add(cleaned);
@@ -327,9 +342,10 @@ export async function handleRoot(env, sourceSelection) {
         try {
           const values = await fetchApiSubs(apiUrl);
           const timestamp = new Date().toISOString();
+          const filteredCount = filterBlacklistedLines(values, normalizeBlacklist(blacklistConfig)).length;
           recordSourceStatus("apis", apiUrl, {
-            state: values.length ? "success" : "empty",
-            nodeCount: values.length,
+            state: filteredCount > 0 ? "success" : (values.length ? "filtered" : "empty"),
+            nodeCount: filteredCount,
             rawNodeCount: values.length,
             durationMs: Date.now() - startedAt,
             error: "",
@@ -368,8 +384,10 @@ export async function handleRoot(env, sourceSelection) {
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
 
-    const filtered = filterPreferredIps(preferred, normalizeBlacklist(blacklistConfig));
-    const output = [...filtered, ...extra].join("\n");
+    const blacklist = normalizeBlacklist(blacklistConfig);
+    const filtered = filterPreferredIps(preferred, blacklist);
+    const filteredExtra = filterBlacklistedLines(extra, blacklist);
+    const output = [...filtered, ...filteredExtra].join("\n");
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
       aggregateCache.set(cacheKey, { output, sourceErrors, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });

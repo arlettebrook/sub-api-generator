@@ -55,6 +55,28 @@ test("decodes Base64 responses from API sources", async () => {
   }
 });
 
+test("filters blacklisted API source lines while preserving allowed output", async () => {
+  const originalFetch = globalThis.fetch;
+  const values = {
+    subs: {},
+    apis: { "https://api.example/source": { enabled: true } },
+    blacklist: ["blocked"],
+  };
+  globalThis.fetch = async () => new Response([
+    "trojan://blocked.example:443#blocked",
+    "trojan://allowed.example:443#allowed",
+  ].join("\n"), { status: 200 });
+  const runtime = { KV: { async get(key) { return values[key] ?? null; } } };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime, [{ type: "apis", key: "https://api.example/source" }]);
+    assert.equal(await response.text(), "trojan://allowed.example:443#allowed");
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("matches selected subscription sources across protocol and slash variants", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#API";
