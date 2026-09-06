@@ -5,15 +5,17 @@ export const adminStyle = `
     --bg-gradient: linear-gradient(160deg, #f8fafc 0%, #eef2ff 50%, #e0f2fe 100%);
     --bg-secondary: rgba(255, 255, 255, 0.7);
     --bg-tertiary: #f8fafc;
+    --surface-solid: #ffffff;
     --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-tertiary: #94a3b8;
-    --border-color: rgba(226, 232, 240, 0.8);
-    --border-hover: #cbd5e1;
+    --text-secondary: #334155;
+    --text-tertiary: #64748b;
+    --border-color: rgba(148, 163, 184, 0.48);
+    --border-hover: #94a3b8;
     --accent-primary: #6366f1;
     --accent-hover: #4f46e5;
     --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     --accent-light: rgba(99, 102, 241, 0.12);
+    --accent-border: rgba(79, 70, 229, 0.45);
     --success: #10b981;
     --success-hover: #059669;
     --danger: #ef4444;
@@ -33,6 +35,7 @@ export const adminStyle = `
     --bg-gradient: linear-gradient(160deg, #0f172a 0%, #1e1b4b 50%, #0c1222 100%);
     --bg-secondary: rgba(17, 24, 39, 0.6);
     --bg-tertiary: #1e293b;
+    --surface-solid: #111827;
     --text-primary: #f1f5f9;
     --text-secondary: #cbd5e1;
     --text-tertiary: #64748b;
@@ -42,6 +45,7 @@ export const adminStyle = `
     --accent-hover: #6366f1;
     --accent-gradient: linear-gradient(135deg, #818cf8 0%, #a78bfa 100%);
     --accent-light: rgba(129, 140, 248, 0.18);
+    --accent-border: rgba(129, 140, 248, 0.62);
     --success: #34d399;
     --success-hover: #10b981;
     --danger: #f87171;
@@ -377,6 +381,7 @@ export const adminStyle = `
 
   .source-search {
     width: 100%;
+    min-width: 0;
     height: 34px;
     font-size: 13px;
   }
@@ -511,7 +516,7 @@ export const adminStyle = `
     overflow: hidden;
     border: 1px solid var(--border-hover);
     border-radius: var(--radius-lg);
-    background: var(--bg-secondary);
+    background: var(--surface-solid);
     color: var(--text-primary);
     box-shadow: var(--shadow-lg);
   }
@@ -525,6 +530,70 @@ export const adminStyle = `
     background: rgba(2, 6, 23, 0.72);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
+  }
+
+  .confirm-dialog {
+    width: min(420px, calc(100vw - 32px));
+    margin: auto;
+    padding: 24px;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-lg);
+    background: var(--surface-solid);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-lg);
+    text-align: center;
+  }
+
+  .confirm-dialog::backdrop {
+    background: rgba(2, 6, 23, 0.66);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+
+  .confirm-dialog-icon {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    margin: 0 auto 12px;
+    border: 1px solid rgba(239, 68, 68, 0.42);
+    border-radius: 50%;
+    background: var(--danger-light);
+    color: var(--danger);
+    font-size: 24px;
+    font-weight: 800;
+  }
+
+  .confirm-dialog h3 {
+    justify-content: center;
+    margin-bottom: 8px;
+    font-size: 17px;
+  }
+
+  .confirm-dialog p {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .confirm-dialog-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .btn-danger {
+    border-color: rgba(239, 68, 68, 0.55);
+    background: var(--danger);
+    color: #fff;
+  }
+
+  .btn-danger:hover {
+    border-color: var(--danger-hover);
+    background: var(--danger-hover);
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.2);
   }
 
   .custom-api-dialog-head {
@@ -580,7 +649,7 @@ export const adminStyle = `
 
   .form-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.8fr);
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 1fr);
     gap: 12px;
   }
 
@@ -797,23 +866,9 @@ export const adminStyle = `
     min-width: 24px;
   }
 
-  .custom-api-actions .del-btn {
+  .custom-api-row .custom-api-actions .custom-api-delete {
     opacity: 1;
     pointer-events: auto;
-  }
-
-  .custom-api-delete {
-    border-color: rgba(239, 68, 68, 0.3);
-    color: var(--danger);
-    background: var(--danger-light);
-  }
-
-  .custom-api-delete:hover {
-    border-color: var(--danger);
-    color: var(--danger-hover);
-    background: rgba(239, 68, 68, 0.16);
-    box-shadow: none;
-    transform: none;
   }
 
   .icon-action {
@@ -843,6 +898,31 @@ export const adminStyle = `
 
   .custom-api-edit-dialog .source-picker {
     margin-top: 16px;
+  }
+
+  .custom-api-dialog .source-picker,
+  .custom-api-dialog .source-search,
+  .custom-api-dialog .form-field,
+  .custom-api-dialog .form-field input {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .row.custom-api-row .custom-api-delete,
+  .row.custom-api-row .custom-api-delete:hover {
+    opacity: 1;
+    pointer-events: auto;
+    border: 1px solid rgba(239, 68, 68, 0.55);
+    background: var(--danger-light);
+    color: var(--danger);
+  }
+
+  .row.custom-api-row .custom-api-delete:hover {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.16);
+    color: var(--danger-hover);
+    transform: none;
+    box-shadow: none;
   }
 
   .custom-api-empty {
@@ -1031,7 +1111,7 @@ export const adminStyle = `
   /* 主按钮 */
   .btn-primary {
     background: var(--accent-gradient);
-    border-color: transparent;
+    border-color: var(--accent-border);
     color: #ffffff;
   }
 
@@ -1812,6 +1892,12 @@ export const adminStyle = `
     .source-error-notice button,
     .data-source-error button {
       margin-left: 0;
+    }
+  }
+
+  @media screen and (min-width: 769px) and (max-width: 900px), screen and (min-device-width: 769px) and (max-device-width: 900px) {
+    .custom-api-dialog .form-grid {
+      grid-template-columns: 1fr;
     }
   }
 

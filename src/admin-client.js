@@ -527,6 +527,7 @@ function goToPage(page) {
 // ======================== 优选 API 管理 ========================
 let customApis = {};
 let customApisDirty = false;
+let pendingCustomApiDelete = null;
 
 function setCustomApisDirty(dirty = true) {
   customApisDirty = dirty;
@@ -921,18 +922,47 @@ function renderCustomApis() {
     delBtn.className = 'del-btn custom-api-delete';
     delBtn.textContent = '🗑 删除';
     delBtn.type = 'button';
-    delBtn.onclick = () => {
-      delete customApis[path];
-      setCustomApisDirty();
-      renderCustomApis();
-      renderCustomApiSelect();
-      persistCustomApis('已删除优选 API');
-    };
+    delBtn.onclick = () => confirmCustomApiDelete(path);
     actions.append(switchLabel, editBtn, copyBtn, openBtn, delBtn);
 
     row.append(main, actions);
     el.appendChild(row);
   });
+}
+
+function confirmCustomApiDelete(path) {
+  if (!customApis[path]) return;
+  const dialog = $('customApiDeleteDialog');
+  const message = $('customApiDeleteMessage');
+  if (!dialog || dialog.open) return;
+  if (message) message.textContent = '确定删除“' + (customApis[path].remark || '/' + path) + '”吗？此操作会移除其数据源配置。';
+  pendingCustomApiDelete = path;
+  dialog.showModal();
+}
+
+async function executeCustomApiDelete() {
+  const path = pendingCustomApiDelete;
+  const dialog = $('customApiDeleteDialog');
+  if (!path || !customApis[path]) {
+    if (dialog?.open) dialog.close();
+    pendingCustomApiDelete = null;
+    return;
+  }
+  const removed = customApis[path];
+  delete customApis[path];
+  setCustomApisDirty();
+  renderCustomApis();
+  renderCustomApiSelect();
+  if (dialog?.open) dialog.close();
+  pendingCustomApiDelete = null;
+  const saved = await persistCustomApis();
+  if (saved) showToast('已删除优选 API', 'success');
+  else {
+    customApis[path] = removed;
+    setCustomApisDirty();
+    renderCustomApis();
+    renderCustomApiSelect();
+  }
 }
 
 function openCustomApiEditDialog(path) {
@@ -1109,6 +1139,21 @@ function initCustomApiForm() {
     editingCustomApiPath = '';
     editingCustomApiPicker = null;
   });
+  const deleteDialog = $('customApiDeleteDialog');
+  $('cancelCustomApiDeleteButton')?.addEventListener('click', () => {
+    pendingCustomApiDelete = null;
+    deleteDialog?.close();
+  });
+  $('confirmCustomApiDeleteButton')?.addEventListener('click', executeCustomApiDelete);
+  deleteDialog?.addEventListener('click', (event) => {
+    if (event.target === deleteDialog) {
+      pendingCustomApiDelete = null;
+      deleteDialog.close();
+    }
+  });
+  deleteDialog?.addEventListener('close', () => {
+    pendingCustomApiDelete = null;
+  });
 }
 
 function resetCustomApiForm() {
@@ -1143,6 +1188,12 @@ function closeCustomApiDialog(reset = true) {
 
 // ======================== Subs 管理 ========================
 let subs = {};
+let subsSaveQueue = Promise.resolve();
+
+function queueSubsSave() {
+  subsSaveQueue = subsSaveQueue.then(() => saveSubs(false));
+  return subsSaveQueue;
+}
 
 async function loadSubs() {
   try {
@@ -1184,6 +1235,7 @@ function renderSubs() {
     statusBtn.onclick = () => {
       subs[host].enabled = !subs[host].enabled;
       renderSubs();
+      void queueSubsSave();
     };
 
     const health = createSourceHealth('subs', host);
@@ -1195,6 +1247,7 @@ function renderSubs() {
       delete subs[host];
       renderSubs();
       showToast('已删除订阅源', 'success');
+      void queueSubsSave();
     };
 
     hostInput.onchange = () => {
@@ -1204,10 +1257,12 @@ function renderSubs() {
       delete subs[host];
       subs[newHost] = entryCopy;
       renderSubs();
+      void queueSubsSave();
     };
 
     remarkInput.onchange = () => {
       subs[host].remark = remarkInput.value;
+      void queueSubsSave();
     };
 
     row.appendChild(remarkInput);
@@ -1241,9 +1296,10 @@ function addSub() {
   hostInput.value = '';
   remarkInput.value = '';
   renderSubs();
+  void queueSubsSave();
 }
 
-async function saveSubs() {
+async function saveSubs(notify = true) {
   try {
     const response = await fetch('/api/subs', {
       method: 'POST',
@@ -1251,7 +1307,7 @@ async function saveSubs() {
       body: JSON.stringify(subs)
     });
     if (!response.ok) throw responseError('订阅源配置保存', response);
-    showToast('订阅源配置已保存', 'success');
+    if (notify) showToast('订阅源配置已保存', 'success');
     loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
@@ -1292,6 +1348,7 @@ function importSubs(event) {
       subs = data;
       renderSubs();
       showToast('导入成功！', 'success');
+      void queueSubsSave();
     } catch (err) {
       showToast('导入失败：' + err.message, 'error');
     }
@@ -1302,6 +1359,12 @@ function importSubs(event) {
 
 // ======================== APIs 管理 ========================
 let apis = {};
+let apisSaveQueue = Promise.resolve();
+
+function queueApisSave() {
+  apisSaveQueue = apisSaveQueue.then(() => saveApis(false));
+  return apisSaveQueue;
+}
 
 async function loadApis() {
   try {
@@ -1343,6 +1406,7 @@ function renderApis() {
     statusBtn.onclick = () => {
       apis[url].enabled = !apis[url].enabled;
       renderApis();
+      void queueApisSave();
     };
 
     const health = createSourceHealth('apis', url);
@@ -1354,6 +1418,7 @@ function renderApis() {
       delete apis[url];
       renderApis();
       showToast('已删除API', 'success');
+      void queueApisSave();
     };
 
     urlInput.onchange = () => {
@@ -1363,10 +1428,12 @@ function renderApis() {
       delete apis[url];
       apis[newUrl] = entryCopy;
       renderApis();
+      void queueApisSave();
     };
 
     remarkInput.onchange = () => {
       apis[url].remark = remarkInput.value;
+      void queueApisSave();
     };
 
     row.appendChild(remarkInput);
@@ -1394,9 +1461,10 @@ function addApi() {
   urlInput.value = '';
   remarkInput.value = '';
   renderApis();
+  void queueApisSave();
 }
 
-async function saveApis() {
+async function saveApis(notify = true) {
   try {
     const response = await fetch('/api/apis', {
       method: 'POST',
@@ -1404,7 +1472,7 @@ async function saveApis() {
       body: JSON.stringify(apis)
     });
     if (!response.ok) throw responseError('API 源配置保存', response);
-    showToast('API 源配置已保存', 'success');
+    if (notify) showToast('API 源配置已保存', 'success');
     loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
@@ -1445,6 +1513,7 @@ function importApis(event) {
       apis = data;
       renderApis();
       showToast('导入成功！', 'success');
+      void queueApisSave();
     } catch (err) {
       showToast('导入失败：' + err.message, 'error');
     }

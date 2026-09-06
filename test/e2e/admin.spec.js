@@ -75,6 +75,19 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   expect(savedConfig.sourceMode).toBe("selected");
   expect(savedConfig.sources).toHaveLength(1);
   expect(savedConfig.sources[0].type).toBe("apis");
+  const createdRow = page.locator("#customApisList .custom-api-row").last();
+  await createdRow.getByRole("button", { name: "🗑 删除" }).click();
+  await expect(page.locator("#customApiDeleteDialog")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).last().click();
+  await expect(page.locator("#customApiDeleteDialog")).not.toBeVisible();
+  await expect(page.locator("#customApisList .custom-api-row")).toHaveCount(initialApiCount + 1);
+  await page.locator("#customApisList .custom-api-row").last().getByRole("button", { name: "🗑 删除" }).click();
+  await page.getByRole("button", { name: "确认删除" }).click();
+  await expect(page.locator("#customApisList .custom-api-row")).toHaveCount(initialApiCount);
+  await expect.poll(async () => page.evaluate(async (path) => {
+    const response = await fetch('/api/custom-apis', { cache: 'no-store' });
+    return Object.prototype.hasOwnProperty.call(await response.json(), path);
+  }, customPath)).toBe(false);
 });
 
 test("edits and saves the blacklist from settings", async ({ page }, testInfo) => {

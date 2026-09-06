@@ -12,6 +12,16 @@ export const adminHTML = `
 <!-- Toast 提示容器 -->
 <div id="toast" class="toast"></div>
 
+<dialog class="confirm-dialog" id="customApiDeleteDialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
+  <div class="confirm-dialog-icon" aria-hidden="true">!</div>
+  <h3 id="customApiDeleteTitle">删除优选 API？</h3>
+  <p id="customApiDeleteMessage">此操作会移除当前访问路径及其数据源配置。</p>
+  <div class="confirm-dialog-actions">
+    <button class="btn-outline" type="button" id="cancelCustomApiDeleteButton">取消</button>
+    <button class="btn-danger" type="button" id="confirmCustomApiDeleteButton">确认删除</button>
+  </div>
+</dialog>
+
 <div class="page-header">
   <div class="header-left">
     <h2>优选API•生成器•管理面板</h2>
@@ -130,7 +140,6 @@ export const adminHTML = `
     <button onclick="exportSubs()">📤 导出配置</button>
     <button onclick="document.getElementById('importSubsFile').click()">📥 导入配置</button>
     <input type="file" id="importSubsFile" accept=".json,application/json" style="display:none" onchange="importSubs(event)" />
-    <button class="btn-primary" onclick="saveSubs()">💾 保存配置</button>
   </div>
   <div id="subsList"></div>
 </div>
@@ -147,7 +156,6 @@ export const adminHTML = `
     <button onclick="exportApis()">📤 导出配置</button>
     <button onclick="document.getElementById('importApisFile').click()">📥 导入配置</button>
     <input type="file" id="importApisFile" accept=".json,application/json" style="display:none" onchange="importApis(event)" />
-    <button class="btn-primary" onclick="saveApis()">💾 保存配置</button>
   </div>
   <div id="apisList"></div>
 </div>
