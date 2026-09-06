@@ -89,6 +89,7 @@ export const adminHTML = `
     <button class="btn-outline nodes-filter-reset" id="nodesFilterReset" type="button">清除筛选</button>
   </div>
   <div id="sourceErrorNotice" class="source-error-notice" role="status" hidden></div>
+  <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
   <div id="nodesContainer">
     <div class="nodes-loading">加载中...</div>
   </div>

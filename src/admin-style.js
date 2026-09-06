@@ -1329,6 +1329,114 @@ export const adminStyle = `
     color: var(--danger);
   }
 
+  .source-status-summary {
+    display: grid;
+    gap: 12px;
+    margin: -4px 0 18px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .source-status-summary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .source-status-summary-head strong {
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .source-status-summary-head span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .source-status-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .source-status-metric {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+  }
+
+  .source-status-metric b {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .source-status-metric span {
+    color: var(--text-secondary);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .source-status-metric-success b { color: var(--success); }
+  .source-status-metric-filtered b,
+  .source-status-metric-empty b { color: #d97706; }
+  .source-status-metric-error b { color: var(--danger); }
+
+  .source-status-issues {
+    display: grid;
+    gap: 6px;
+  }
+
+  .source-status-issue {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.6fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-left: 3px solid #d97706;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: var(--bg-secondary);
+  }
+
+  .source-status-issue-error { border-left-color: var(--danger); }
+
+  .source-status-issue-identity {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .source-status-issue-identity strong,
+  .source-status-issue-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-status-issue-identity strong {
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+
+  .source-status-issue-identity small,
+  .source-status-issue > small {
+    color: var(--text-tertiary);
+    font-size: 10px;
+  }
+
+  .source-status-issue-detail {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
   /* 删除按钮 - 默认隐藏，hover显示 */
   .row .del-btn {
     background: transparent;
@@ -1998,6 +2106,13 @@ export const adminStyle = `
     .source-error-notice button,
     .data-source-error button {
       margin-left: 0;
+    }
+    .source-status-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .source-status-issue {
+      grid-template-columns: 1fr;
+      gap: 3px;
     }
   }
 

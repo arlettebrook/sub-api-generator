@@ -174,6 +174,79 @@ function renderPreviewSourceErrors(errors = []) {
   notice.appendChild(retry);
 }
 
+function formatSourceTime(value) {
+  if (!value) return '尚未检测';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function sourceStatusLabel(state) {
+  return {
+    success: '正常',
+    filtered: '已过滤',
+    empty: '空数据',
+    error: '失败',
+    idle: '未检测',
+  }[state] || '未检测';
+}
+
+function renderSourceStatusSummary() {
+  const summary = $('sourceStatusSummary');
+  if (!summary) return;
+  const entries = Object.entries(sourceStatuses || {}).flatMap(([type, values]) => Object.entries(values || {}).map(([key, status]) => ({ type, key, status })));
+  summary.innerHTML = '';
+  summary.hidden = entries.length === 0;
+  if (!entries.length) return;
+  const counts = { success: 0, filtered: 0, empty: 0, error: 0, idle: 0 };
+  entries.forEach(({ status }) => { counts[status.state] = (counts[status.state] || 0) + 1; });
+  const heading = document.createElement('div');
+  heading.className = 'source-status-summary-head';
+  const title = document.createElement('strong');
+  title.textContent = '数据源状态';
+  const checked = document.createElement('span');
+  const latest = entries.map(({ status }) => status.lastAttemptAt).filter(Boolean).sort().pop();
+  checked.textContent = latest ? '最近检测：' + formatSourceTime(latest) : '等待首次检测';
+  heading.append(title, checked);
+  summary.appendChild(heading);
+
+  const metrics = document.createElement('div');
+  metrics.className = 'source-status-metrics';
+  [['success', '正常'], ['filtered', '已过滤'], ['empty', '空数据'], ['error', '失败']].forEach(([state, label]) => {
+    const metric = document.createElement('div');
+    metric.className = 'source-status-metric source-status-metric-' + state;
+    metric.innerHTML = '<b>' + (counts[state] || 0) + '</b><span>' + label + '</span>';
+    metrics.appendChild(metric);
+  });
+  summary.appendChild(metrics);
+
+  const issues = entries.filter(({ status }) => ['filtered', 'empty', 'error'].includes(status.state));
+  if (!issues.length) return;
+  const list = document.createElement('div');
+  list.className = 'source-status-issues';
+  issues.forEach(({ type, key, status }) => {
+    const item = document.createElement('div');
+    item.className = 'source-status-issue source-status-issue-' + status.state;
+    const identity = document.createElement('div');
+    identity.className = 'source-status-issue-identity';
+    const name = document.createElement('strong');
+    name.textContent = status.remark || key;
+    const kind = document.createElement('small');
+    kind.textContent = type === 'apis' ? 'API 源' : '订阅源';
+    identity.append(name, kind);
+    const detail = document.createElement('span');
+    detail.className = 'source-status-issue-detail';
+    if (status.state === 'error') detail.textContent = status.error || '请求失败';
+    else if (status.state === 'filtered') detail.textContent = '原始 ' + status.rawNodeCount + ' 个，过滤后无可用节点';
+    else detail.textContent = '返回 0 个节点';
+    const meta = document.createElement('small');
+    meta.textContent = (status.durationMs === null || status.durationMs === undefined ? '' : status.durationMs + ' ms · ') + formatSourceTime(status.lastAttemptAt);
+    item.append(identity, detail, meta);
+    list.appendChild(item);
+  });
+  summary.appendChild(list);
+}
+
 // ======================== 登出功能 ========================
 async function logout() {
   const button = document.querySelector('.btn-logout');
@@ -384,6 +457,7 @@ async function fetchNodes(emptyRetry = 0) {
       return;
     }
     renderNodeView();
+    void loadSourceStatuses();
   } catch (err) {
     if (err.name === 'AbortError') return;
     nodesContainer.innerHTML = '';
@@ -670,9 +744,11 @@ function createSourceHealth(type, key) {
 async function loadSourceStatuses() {
   try {
     sourceStatuses = await readJsonResponse('/api/source-status', '数据源状态');
+    renderSourceStatusSummary();
     if ($('subsList')) renderSubs();
     if ($('apisList')) renderApis();
   } catch {
+    renderSourceStatusSummary();
     // 状态接口不可用时保留配置页面，不阻断管理操作。
   }
 }
