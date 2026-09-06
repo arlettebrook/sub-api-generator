@@ -6,6 +6,8 @@ export const MAX_CONFIG_ENTRIES = 200;
 export const MAX_CONFIG_KEY_LENGTH = 2048;
 export const MAX_BLACKLIST_ENTRIES = 200;
 export const MAX_BLACKLIST_WORD_LENGTH = 128;
+export const SOURCE_MODE_ALL_ENABLED = "all-enabled";
+export const SOURCE_MODE_SELECTED = "selected";
 
 export const DEFAULT_BLACKLIST = [
   "问题", "每日", "重置", "官网", "群组", "流量", "到期", "客服", "kefu", "加入",
@@ -135,8 +137,13 @@ export function validateApiPathPayload(body) {
     }
     const value = typeof rawValue === "boolean" ? { enabled: rawValue, remark: "" } : rawValue;
     if (!isPlainObject(value)) throw new Error(`配置项无效: ${rawPath}`);
-    const hasSources = Array.isArray(value.sources);
-    const sources = hasSources ? value.sources : [];
+    const sourceMode = value.sourceMode === undefined
+      ? (Array.isArray(value.sources) && value.sources.length ? SOURCE_MODE_SELECTED : SOURCE_MODE_ALL_ENABLED)
+      : value.sourceMode;
+    if (![SOURCE_MODE_ALL_ENABLED, SOURCE_MODE_SELECTED].includes(sourceMode)) {
+      throw new Error(`数据源模式无效: ${rawPath}`);
+    }
+    const sources = Array.isArray(value.sources) ? value.sources : [];
     const normalizedSources = [];
     for (const source of sources) {
       if (!isPlainObject(source) || !["subs", "apis"].includes(source.type) || typeof source.key !== "string") {
@@ -151,7 +158,8 @@ export function validateApiPathPayload(body) {
     normalized[path] = {
       enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
-      sources: hasSources ? normalizedSources : null,
+      sourceMode,
+      sources: sourceMode === SOURCE_MODE_SELECTED ? normalizedSources : [],
     };
   }
   return normalized;
@@ -162,15 +170,19 @@ export function normalizeCustomApiData(data) {
   const normalized = {};
   for (const [path, value] of Object.entries(data)) {
     if (typeof value === "boolean") {
-      normalized[path] = { enabled: value, remark: "", sources: null };
+      normalized[path] = { enabled: value, remark: "", sourceMode: SOURCE_MODE_ALL_ENABLED, sources: [] };
     } else if (isPlainObject(value)) {
+      const sourceMode = value.sourceMode === SOURCE_MODE_SELECTED
+        ? SOURCE_MODE_SELECTED
+        : (Array.isArray(value.sources) && value.sources.length ? SOURCE_MODE_SELECTED : SOURCE_MODE_ALL_ENABLED);
       normalized[path] = {
         enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",
-        sources: Array.isArray(value.sources)
+        sourceMode,
+        sources: sourceMode === SOURCE_MODE_SELECTED && Array.isArray(value.sources)
           ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis"].includes(source.type) && typeof source.key === "string")
               .map((source) => ({ type: source.type, key: source.key }))
-          : null,
+          : [],
       };
     }
   }

@@ -9,6 +9,7 @@ import {
   normalizeBlacklist,
   normalizeKvData,
   readJsonObject as readPagesJsonObject,
+  SOURCE_MODE_SELECTED,
   validateApiPathPayload,
   validateBlacklistPayload,
 } from "./config.js";
@@ -89,9 +90,9 @@ async function handleCustomApiPath(path, env) {
   const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
   const configured = normalizeCustomApiData(data);
   if (!configured[apiPath]?.enabled) return null;
-  const sources = configured[apiPath].sources;
-  // Empty source selections from older configurations should continue to use enabled sources.
-  return subscriptions.handleRoot(env, Array.isArray(sources) && sources.length ? sources : null);
+  const api = configured[apiPath];
+  const sourceSelection = api.sourceMode === SOURCE_MODE_SELECTED ? api.sources : null;
+  return subscriptions.handleRoot(env, sourceSelection);
 }
 
 async function handleGetUuid(env) {

@@ -28,6 +28,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(0);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "全选" }).click();
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(2);
+  await page.locator("#newCustomApiSources").getByRole("button", { name: "清空" }).click();
   await page.locator("#newCustomApiPath").fill("bad path");
   await expect(page.locator("#newCustomApiPathHint")).toHaveClass(/error/);
   const customPath = "preview-api-" + Date.now().toString(36) + "-" + testInfo.project.name;
@@ -44,7 +45,8 @@ test("navigates to the custom API page and selects data sources", async ({ page 
     const data = await response.json();
     return data[path];
   }, customPath);
-  expect(savedConfig.sources).toBeNull();
+  expect(savedConfig.sourceMode).toBe("selected");
+  expect(savedConfig.sources).toHaveLength(1);
 });
 
 test("edits and saves the blacklist from settings", async ({ page }, testInfo) => {

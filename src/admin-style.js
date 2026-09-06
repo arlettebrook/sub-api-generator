@@ -326,6 +326,31 @@ export const adminStyle = `
     font-variant-numeric: tabular-nums;
   }
 
+  .source-mode-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .source-mode-action {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .source-mode-action:hover,
+  .source-mode-action.active {
+    border-color: var(--accent-primary);
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    box-shadow: none;
+    transform: none;
+  }
+
   .source-actions {
     display: flex;
     gap: 4px;

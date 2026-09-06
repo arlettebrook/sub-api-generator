@@ -56,6 +56,7 @@ test("validates custom API access paths", () => {
     "my-api": {
       enabled: true,
       remark: "测试",
+      sourceMode: "selected",
       sources: [
         { type: "subs", key: "sub.example.com" },
         { type: "apis", key: "https://api.example.com" },
@@ -68,8 +69,8 @@ test("validates custom API access paths", () => {
     first: { enabled: true },
     second: { enabled: true, sources: null },
   }), {
-    first: { enabled: true, remark: "", sources: null },
-    second: { enabled: true, remark: "", sources: null },
+    first: { enabled: true, remark: "", sourceMode: "all-enabled", sources: [] },
+    second: { enabled: true, remark: "", sourceMode: "all-enabled", sources: [] },
   });
 });
 

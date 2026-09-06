@@ -108,6 +108,7 @@ test("creates and serves custom API access paths", async () => {
     "my-api": {
       enabled: true,
       remark: "测试 API",
+      sourceMode: "selected",
       sources: [{ type: "subs", key: "sub.example.com" }],
     },
   });

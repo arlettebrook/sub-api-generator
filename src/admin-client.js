@@ -590,10 +590,11 @@ function sourceEntries() {
   ];
 }
 
-function sourcePicker(selectedSources = [], title = '选择数据源') {
+function sourcePicker(selectedSources = [], title = '选择数据源', sourceMode = 'selected') {
   const selected = new Set(selectedSources.map((source) => source.type + ':' + source.key));
   const picker = document.createElement('div');
   picker.className = 'source-picker';
+  picker.dataset.sourceMode = sourceMode;
   const head = document.createElement('div');
   head.className = 'source-picker-head';
   const titleEl = document.createElement('div');
@@ -613,6 +614,17 @@ function sourcePicker(selectedSources = [], title = '选择数据源') {
   });
   head.append(titleEl, count, actions);
   picker.appendChild(head);
+  const modeActions = document.createElement('div');
+  modeActions.className = 'source-mode-actions';
+  [['all-enabled', '全部启用源'], ['selected', '手动选择']].forEach(([mode, text]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'source-mode-action';
+    button.dataset.sourceMode = mode;
+    button.textContent = text;
+    modeActions.appendChild(button);
+  });
+  picker.appendChild(modeActions);
   const search = document.createElement('input');
   search.type = 'search';
   search.className = 'source-search';
@@ -644,9 +656,29 @@ function sourcePicker(selectedSources = [], title = '选择数据源') {
   const updateCount = () => {
     const checked = picker.querySelectorAll('input[type="checkbox"]:checked').length;
     const total = picker.querySelectorAll('input[type="checkbox"]').length;
-    count.textContent = total ? checked + '/' + total : '0 个';
+    count.textContent = picker.dataset.sourceMode === 'all-enabled'
+      ? '动态跟随启用源'
+      : (total ? checked + '/' + total : '0 个');
+    modeActions.querySelectorAll('[data-source-mode]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.sourceMode === picker.dataset.sourceMode);
+    });
   };
-  options.addEventListener('change', updateCount);
+  options.addEventListener('change', () => {
+    picker.dataset.sourceMode = 'selected';
+    updateCount();
+  });
+  modeActions.addEventListener('click', (event) => {
+    const mode = event.target.dataset.sourceMode;
+    if (!mode) return;
+    picker.dataset.sourceMode = mode;
+    if (mode === 'all-enabled') {
+      options.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+    }
+    updateCount();
+    picker.dispatchEvent(new CustomEvent('source-mode-change'));
+  });
   actions.addEventListener('click', (event) => {
     const action = event.target.dataset.sourceAction;
     if (!action) return;
@@ -675,29 +707,21 @@ function readSourcePicker(picker) {
 function renderNewCustomApiSources() {
   const container = $('newCustomApiSources');
   if (!container) return;
-  const picker = sourcePicker([], '选择此 API 使用的数据源（不选择则使用全部启用源）');
+  const picker = sourcePicker([], '选择此 API 使用的数据源', 'all-enabled');
   container.innerHTML = '';
   container.appendChild(picker);
 }
 
-function getNewCustomApiSources() {
-  return [...document.querySelectorAll('#newCustomApiSources input[type="checkbox"]:checked')].map((checkbox) => ({
-    type: checkbox.dataset.sourceType,
-    key: checkbox.dataset.sourceKey,
-  }));
+function readSourcePickerSelection(picker) {
+  return {
+    sourceMode: picker.dataset.sourceMode === 'selected' ? 'selected' : 'all-enabled',
+    sources: readSourcePicker(picker),
+  };
 }
 
 function getNewCustomApiSourceSelection() {
-  const selected = getNewCustomApiSources();
-  if (!selected.length) return null;
-  const enabled = sourceEntries()
-    .filter((source) => source.enabled)
-    .map(({ type, key }) => ({ type, key }));
-  const enabledKeys = new Set(enabled.map((source) => source.type + ':' + source.key));
-  const selectedKeys = new Set(selected.map((source) => source.type + ':' + source.key));
-  const selectsAllEnabled = selectedKeys.size === enabledKeys.size
-    && [...enabledKeys].every((key) => selectedKeys.has(key));
-  return selectsAllEnabled ? null : selected;
+  const picker = $('newCustomApiSources')?.querySelector('.source-picker');
+  return picker ? readSourcePickerSelection(picker) : { sourceMode: 'all-enabled', sources: [] };
 }
 
 function renderCustomApiSelect() {
@@ -830,14 +854,19 @@ function renderCustomApis() {
       renderCustomApiSelect();
     };
 
-    const selectedSources = Array.isArray(entry.sources)
+    const sourceMode = entry.sourceMode === 'selected' ? 'selected' : 'all-enabled';
+    const selectedSources = sourceMode === 'selected' && Array.isArray(entry.sources)
       ? entry.sources
-      : sourceEntries().map((source) => ({ type: source.type, key: source.key }));
-    const picker = sourcePicker(selectedSources);
-    picker.addEventListener('change', () => {
-      customApis[path].sources = readSourcePicker(picker);
+      : [];
+    const picker = sourcePicker(selectedSources, '选择此 API 使用的数据源', sourceMode);
+    const updateSelection = () => {
+      const selection = readSourcePickerSelection(picker);
+      customApis[path].sourceMode = selection.sourceMode;
+      customApis[path].sources = selection.sources;
       setCustomApisDirty();
-    });
+    };
+    picker.addEventListener('change', updateSelection);
+    picker.addEventListener('source-mode-change', updateSelection);
 
     row.append(main, actions);
     row.appendChild(picker);
@@ -866,7 +895,8 @@ function addCustomApi() {
     pathInput.focus();
     return;
   }
-  customApis[path] = { enabled: true, remark, sources: getNewCustomApiSourceSelection() };
+  const selection = getNewCustomApiSourceSelection();
+  customApis[path] = { enabled: true, remark, ...selection };
   pathInput.value = '';
   remarkInput.value = '';
   renderNewCustomApiSources();
