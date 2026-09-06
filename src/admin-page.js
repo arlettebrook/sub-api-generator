@@ -8,7 +8,9 @@ export const adminHTML = `
 <script>
   (() => {
     try {
-      if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+      const mode = localStorage.getItem('theme') || 'system';
+      document.documentElement.dataset.themeMode = mode;
+      if (mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
     } catch (_) {}
   })();
 </script>
@@ -34,7 +36,7 @@ export const adminHTML = `
     <h2>优选API•生成器•管理面板</h2>
   </div>
   <div class="header-right">
-    <button id="themeSwitch" class="theme-switch" type="button" title="切换主题" aria-label="切换主题" aria-pressed="true"></button>
+    <button id="themeSwitch" class="theme-switch" type="button" title="主题：跟随系统" aria-label="主题：跟随系统" aria-pressed="false"></button>
     <button id="logoutButton" class="btn-outline btn-logout" type="button" title="退出登录">
       <span>🚪</span> 退出登录
     </button>

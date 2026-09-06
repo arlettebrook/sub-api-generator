@@ -532,6 +532,10 @@ export const adminStyle = `
     grid-template-rows: auto minmax(0, 1fr);
   }
 
+  .custom-api-dialog .custom-api-create {
+    overscroll-behavior: contain;
+  }
+
   .custom-api-dialog::backdrop {
     background: rgba(2, 6, 23, 0.72);
     backdrop-filter: blur(4px);
@@ -724,6 +728,12 @@ export const adminStyle = `
     justify-content: flex-end;
     gap: 8px;
     margin-top: 4px;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 12px 0 max(4px, env(safe-area-inset-bottom, 0px));
+    background: var(--surface-solid);
+    border-top: 1px solid var(--border-color);
   }
 
   .custom-api-toolbar {
@@ -1070,7 +1080,7 @@ export const adminStyle = `
   }
 
   .theme-switch::before {
-    content: '🌙';
+    content: '◐';
     position: absolute;
     left: 3px;
     top: 50%;
@@ -1088,8 +1098,18 @@ export const adminStyle = `
   }
 
   .dark .theme-switch::before {
+    content: '🌙';
+    left: calc(100% - 25px);
+  }
+
+  html[data-theme-mode="light"] .theme-switch::before {
     content: '☀️';
     left: calc(100% - 25px);
+  }
+
+  html[data-theme-mode="system"] .theme-switch::before {
+    content: '◐';
+    left: 3px;
   }
 
   /* 按钮通用样式 */
@@ -2055,12 +2075,28 @@ export const adminStyle = `
       width: calc(100vw - 16px);
       max-height: calc(100dvh - 16px);
       border-radius: var(--radius-md);
+      align-self: end;
+      margin: 0 auto;
+      transform: translateY(0);
     }
     .custom-api-dialog-head {
       padding: 14px 16px;
     }
     .custom-api-dialog .custom-api-create {
       padding: 14px;
+    }
+    .custom-api-dialog .create-actions {
+      margin: 14px -14px -14px;
+      padding: 12px 14px max(10px, env(safe-area-inset-bottom, 0px));
+    }
+    .custom-api-dialog .create-actions button {
+      flex: 1;
+      min-height: 42px;
+    }
+    .confirm-dialog {
+      width: calc(100vw - 24px);
+      max-height: calc(100dvh - 24px);
+      padding: 20px 16px max(20px, env(safe-area-inset-bottom, 0px));
     }
     .source-picker-head {
       flex-wrap: wrap;

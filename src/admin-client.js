@@ -332,32 +332,45 @@ async function copyNodeData(event) {
 }
 
 // ======================== 主题切换逻辑 ========================
-function toggleTheme() {
+let themeMode = 'system';
+
+function applyTheme(mode) {
   const root = document.documentElement;
-  const isDark = !root.classList.contains('dark');
+  themeMode = ['light', 'dark', 'system'].includes(mode) ? mode : 'system';
+  const isDark = themeMode === 'dark' || (window.matchMedia?.('(prefers-color-scheme: dark)').matches && themeMode === 'system');
+  root.dataset.themeMode = themeMode;
   root.classList.toggle('dark', isDark);
   document.body.classList.toggle('dark', isDark);
   const switcher = document.querySelector('.theme-switch');
-  if (switcher) switcher.setAttribute('aria-pressed', String(isDark));
+  if (switcher) {
+    const labels = { light: '亮色', dark: '暗色', system: '跟随系统' };
+    switcher.setAttribute('aria-label', '主题：' + labels[themeMode] + '，点击切换');
+    switcher.title = '主题：' + labels[themeMode] + '（点击切换）';
+    switcher.setAttribute('aria-pressed', String(isDark));
+  }
+  return isDark;
+}
+
+function toggleTheme() {
+  const next = { system: 'dark', dark: 'light', light: 'system' }[themeMode] || 'system';
+  applyTheme(next);
   try {
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('theme', themeMode);
   } catch {
     // Theme switching should still work when storage is unavailable.
   }
 }
 
 function initTheme() {
-  let savedTheme = null;
+  let savedTheme = 'system';
   try {
-    savedTheme = localStorage.getItem('theme');
+    savedTheme = localStorage.getItem('theme') || 'system';
   } catch {
-    // Fall back to the default light theme when storage is unavailable.
+    // Fall back to following the system preference when storage is unavailable.
   }
-  const isDark = savedTheme === 'dark' || document.documentElement.classList.contains('dark');
-  document.documentElement.classList.toggle('dark', isDark);
-  document.body.classList.toggle('dark', isDark);
-  const switcher = document.querySelector('.theme-switch');
-  if (switcher) switcher.setAttribute('aria-pressed', String(isDark));
+  applyTheme(savedTheme);
+  const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+  media?.addEventListener?.('change', () => { if (themeMode === 'system') applyTheme('system'); });
 }
 
 // ======================== 优选节点展示与增强分页 ========================
