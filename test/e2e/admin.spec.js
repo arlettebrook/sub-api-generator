@@ -22,8 +22,13 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator('a[data-nav-page="customApis"]').click();
   await expect(page).toHaveURL(/\/admin\/custom-apis$/);
   await expect(page.locator("#customApiSection")).toBeVisible();
+  await expect(page.locator("#customApiDialog")).not.toBeVisible();
+  await page.getByRole("button", { name: "新建优选 API" }).click();
+  await expect(page.locator("#customApiDialog")).toBeVisible();
   await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(2);
   await expect(page.locator("#newCustomApiSources .source-group-title")).toHaveCount(2);
+  await expect(page.locator("#newCustomApiSources .source-option").first()).not.toContainText("订阅源 ·");
+  await expect(page.locator("#newCustomApiSources .source-option").last()).not.toContainText("API 源 ·");
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(0);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "清空" }).click();
   await page.locator("#newCustomApiSources").getByRole("button", { name: "仅显示已选" }).click();
@@ -39,7 +44,8 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#newCustomApiPath").fill(customPath);
   await page.locator("#newCustomApiSources input[type=checkbox]").first().check();
   const initialApiCount = await page.locator("#customApisList .row").count();
-  await page.getByRole("button", { name: "新建 API" }).click();
+  await page.getByRole("button", { name: "创建 API" }).click();
+  await expect(page.locator("#customApiDialog")).not.toBeVisible();
   await expect(page.locator("#customApisList .row")).toHaveCount(initialApiCount + 1);
   await expect(page.locator("#customApiSaveStatus")).toHaveText("有未保存的修改");
   await page.locator("#saveCustomApisButton").click();

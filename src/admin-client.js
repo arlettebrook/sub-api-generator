@@ -585,8 +585,8 @@ async function loadCustomApis(loadSources = false) {
 
 function sourceEntries() {
   return [
-    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, enabled: value?.enabled === true, label: '订阅源 · ' + (value.remark || key) + (value?.enabled === true ? ' · 已启用' : ' · 已禁用') })),
-    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, enabled: value?.enabled === true, label: 'API 源 · ' + (value.remark || key) + (value?.enabled === true ? ' · 已启用' : ' · 已禁用') })),
+    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, enabled: value?.enabled === true, label: value.remark || key })),
+    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, enabled: value?.enabled === true, label: value.remark || key })),
   ];
 }
 
@@ -695,7 +695,8 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
     const query = search.value.trim().toLowerCase();
     const visible = entries.filter((source) => {
       const sourceId = source.type + ':' + normalizeSourceKeyClient(source.type, source.key);
-      return (!query || source.label.toLowerCase().includes(query))
+      const searchText = (source.label + ' ' + source.key).toLowerCase();
+      return (!query || searchText.includes(query))
         && (picker.dataset.onlySelected !== 'true' || selected.has(sourceId));
     });
     options.innerHTML = '';
@@ -717,15 +718,19 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
       for (const source of group) {
         const label = document.createElement('label');
         label.className = 'source-option';
-        label.dataset.sourceSearch = source.label.toLowerCase();
+        label.title = source.label === source.key ? source.label : source.label + ' · ' + source.key;
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.dataset.sourceType = source.type;
         checkbox.dataset.sourceKey = source.key;
         checkbox.checked = selected.has(source.type + ':' + normalizeSourceKeyClient(source.type, source.key));
         const text = document.createElement('span');
+        text.className = 'source-option-name';
         text.textContent = source.label;
-        label.append(checkbox, text);
+        const status = document.createElement('span');
+        status.className = 'source-option-status ' + (source.enabled ? 'enabled' : 'disabled');
+        status.textContent = source.enabled ? '已启用' : '已禁用';
+        label.append(checkbox, text, status);
         options.appendChild(label);
       }
     }
@@ -985,6 +990,7 @@ function addCustomApi() {
   setCustomApisDirty();
   renderCustomApis();
   renderCustomApiSelect();
+  closeCustomApiDialog(false);
   showToast('优选 API 创建成功', 'success');
 }
 
@@ -1024,6 +1030,41 @@ function initCustomApiForm() {
       addCustomApi();
     }
   });
+  const dialog = $('customApiDialog');
+  dialog?.addEventListener('click', (event) => {
+    if (event.target === dialog) closeCustomApiDialog();
+  });
+  dialog?.addEventListener('close', () => resetCustomApiForm());
+}
+
+function resetCustomApiForm() {
+  const pathInput = $('newCustomApiPath');
+  const remarkInput = $('newCustomApiRemark');
+  const hint = $('newCustomApiPathHint');
+  if (pathInput) {
+    pathInput.value = '';
+    pathInput.setAttribute('aria-invalid', 'false');
+  }
+  if (remarkInput) remarkInput.value = '';
+  if (hint) {
+    hint.textContent = '仅支持字母、数字、短横线和下划线。';
+    hint.className = '';
+  }
+  renderNewCustomApiSources();
+}
+
+function openCustomApiDialog() {
+  const dialog = $('customApiDialog');
+  if (!dialog || dialog.open) return;
+  dialog.showModal();
+  $('newCustomApiPath')?.focus();
+}
+
+function closeCustomApiDialog(reset = true) {
+  const dialog = $('customApiDialog');
+  if (!dialog) return;
+  if (dialog.open) dialog.close();
+  if (reset) resetCustomApiForm();
 }
 
 // ======================== Subs 管理 ========================

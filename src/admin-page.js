@@ -60,26 +60,36 @@ export const adminHTML = `
     <div>
       <h3>🚀 优选 API</h3>
     </div>
-    <span class="section-summary" id="customApiSummary">0 个 API</span>
-  </div>
-  <div class="custom-api-create">
-    <div class="form-grid">
-      <label class="form-field">
-        <span>访问路径</span>
-        <span class="path-input"><b>/</b><input id="newCustomApiPath" placeholder="例如 my-api" autocomplete="off" /></span>
-        <small id="newCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
-      </label>
-      <label class="form-field">
-        <span>备注</span>
-        <input id="newCustomApiRemark" placeholder="可选" autocomplete="off" />
-      </label>
-    </div>
-    <div id="newCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
-    <div id="customApiSourceStatus" class="source-load-status" role="status" hidden></div>
-    <div class="create-actions">
-      <button class="btn-primary" type="button" onclick="addCustomApi()">➕ 新建 API</button>
+    <div class="section-heading-actions">
+      <span class="section-summary" id="customApiSummary">0 个 API</span>
+      <button class="btn-primary" type="button" id="openCustomApiDialogButton" onclick="openCustomApiDialog()">➕ 新建优选 API</button>
     </div>
   </div>
+  <dialog class="custom-api-dialog" id="customApiDialog" aria-labelledby="customApiDialogTitle">
+    <div class="custom-api-dialog-head">
+      <h3 id="customApiDialogTitle">新建优选 API</h3>
+      <button class="dialog-close" type="button" onclick="closeCustomApiDialog()" title="关闭" aria-label="关闭">×</button>
+    </div>
+    <div class="custom-api-create">
+      <div class="form-grid">
+        <label class="form-field">
+          <span>访问路径</span>
+          <span class="path-input"><b>/</b><input id="newCustomApiPath" placeholder="例如 my-api" autocomplete="off" /></span>
+          <small id="newCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
+        </label>
+        <label class="form-field">
+          <span>备注</span>
+          <input id="newCustomApiRemark" placeholder="可选" autocomplete="off" />
+        </label>
+      </div>
+      <div id="newCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
+      <div id="customApiSourceStatus" class="source-load-status" role="status" hidden></div>
+      <div class="create-actions">
+        <button class="btn-outline" type="button" onclick="closeCustomApiDialog()">取消</button>
+        <button class="btn-primary" type="button" onclick="addCustomApi()">➕ 创建 API</button>
+      </div>
+    </div>
+  </dialog>
   <div class="toolbar custom-api-toolbar">
     <span class="save-status" id="customApiSaveStatus">配置已保存</span>
     <button class="btn-primary" type="button" id="saveCustomApisButton" onclick="saveCustomApis()">💾 保存配置</button>
