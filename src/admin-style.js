@@ -322,6 +322,8 @@ export const adminStyle = `
     align-items: center;
     gap: 10px;
     min-height: 24px;
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
   .source-picker-head .source-count {
@@ -360,6 +362,8 @@ export const adminStyle = `
     display: flex;
     gap: 4px;
     margin-left: auto;
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
   .source-action {
@@ -641,6 +645,7 @@ export const adminStyle = `
     border: 0;
     border-radius: 0;
     background: transparent;
+    min-width: 0;
   }
 
   .custom-api-dialog .form-field input {
@@ -649,13 +654,17 @@ export const adminStyle = `
 
   .form-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     gap: 12px;
+    min-width: 0;
   }
 
   .form-field {
     display: grid;
+    align-content: start;
+    align-self: start;
     gap: 6px;
+    min-width: 0;
     color: var(--text-secondary);
     font-size: 12px;
     font-weight: 600;
@@ -679,6 +688,7 @@ export const adminStyle = `
     display: flex;
     align-items: center;
     height: 40px;
+    min-width: 0;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-secondary);
@@ -686,6 +696,7 @@ export const adminStyle = `
   }
 
   .path-input b {
+    flex: 0 0 auto;
     padding-left: 13px;
     color: var(--text-tertiary);
     font-size: 16px;
@@ -693,6 +704,8 @@ export const adminStyle = `
   }
 
   .path-input input {
+    flex: 1 1 auto;
+    min-width: 0;
     height: 38px;
     border: 0;
     box-shadow: none;
@@ -942,6 +955,9 @@ export const adminStyle = `
   }
 
   .source-picker-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--text-secondary);
     font-size: 13px;
     font-weight: 600;

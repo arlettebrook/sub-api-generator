@@ -164,7 +164,7 @@ export default {
     const method = request.method;
     if (path === "/admin.css") {
       if (method !== "GET") return pagesMethodNotAllowed("GET");
-      return assetResponse(adminStyle, "text/css; charset=utf-8");
+      return assetResponse(adminStyle, "text/css; charset=utf-8", "no-store");
     }
     if (path === "/admin-client.js") {
       if (method !== "GET") return pagesMethodNotAllowed("GET");
