@@ -209,9 +209,15 @@ export async function handleRoot(env, sourceSelection) {
     const selectedKeys = selected
       ? new Set(selected.map((source) => `${source?.type}:${normalizeSelectedSourceKey(source?.type, source?.key)}`))
       : null;
-    const selectedEntries = (config, type) => enabledEntries(config).filter(([key]) => {
-      return selectedKeys === null || selectedKeys.has(`${type}:${normalizeSelectedSourceKey(type, key)}`);
-    });
+    const selectedEntries = (config, type) => {
+      const entries = selectedKeys === null ? enabledEntries(config) : Object.entries(config || {});
+      return entries.filter(([key, entry]) => {
+        if (selectedKeys === null) return entry === true || (isPlainObject(entry) && entry.enabled === true);
+        // Explicit selections on a custom API are independent from UUID source toggles.
+        return selectedKeys.has(`${type}:${normalizeSelectedSourceKey(type, key)}`)
+          && (typeof entry === "boolean" || isPlainObject(entry));
+      });
+    };
     const [subsResults, apiResults] = await Promise.all([
       Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
         try {
