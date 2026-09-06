@@ -1,15 +1,16 @@
 export const adminStyle = `
   /* ========== 主题变量定义 ========== */
   :root {
-    --bg-primary: #f1f5f9;
-    --bg-gradient: linear-gradient(160deg, #f8fafc 0%, #eef2ff 50%, #e0f2fe 100%);
-    --bg-secondary: rgba(255, 255, 255, 0.7);
-    --bg-tertiary: #f8fafc;
+    color-scheme: light;
+    --bg-primary: #e8eef7;
+    --bg-gradient: linear-gradient(160deg, #f8fbff 0%, #eef3fb 52%, #e5edf7 100%);
+    --bg-secondary: rgba(255, 255, 255, 0.96);
+    --bg-tertiary: #f4f7fb;
     --surface-solid: #ffffff;
     --text-primary: #0f172a;
     --text-secondary: #334155;
     --text-tertiary: #64748b;
-    --border-color: rgba(148, 163, 184, 0.48);
+    --border-color: #cbd5e1;
     --border-hover: #94a3b8;
     --accent-primary: #6366f1;
     --accent-hover: #4f46e5;
@@ -21,9 +22,9 @@ export const adminStyle = `
     --danger: #ef4444;
     --danger-hover: #dc2626;
     --danger-light: rgba(239, 68, 68, 0.08);
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-    --shadow-md: 0 4px 20px rgba(15, 23, 42, 0.06);
-    --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.08);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 18px rgba(15, 23, 42, 0.09);
+    --shadow-lg: 0 14px 36px rgba(15, 23, 42, 0.13);
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 18px;
@@ -31,6 +32,7 @@ export const adminStyle = `
   }
 
   .dark {
+    color-scheme: dark;
     --bg-primary: #0b0f17;
     --bg-gradient: linear-gradient(160deg, #0f172a 0%, #1e1b4b 50%, #0c1222 100%);
     --bg-secondary: rgba(17, 24, 39, 0.6);
@@ -87,7 +89,7 @@ export const adminStyle = `
     margin: 48px auto;
     padding: 0 24px;
     line-height: 1.6;
-    transition: var(--transition);
+    transition: background 0.25s ease, color 0.25s ease;
     min-height: 100vh;
     font-synthesis: none;
     -webkit-font-smoothing: antialiased;

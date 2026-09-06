@@ -5,9 +5,16 @@ export const adminHTML = `
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>优选API•生成器</title>
+<script>
+  (() => {
+    try {
+      if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+    } catch (_) {}
+  })();
+</script>
 <link rel="stylesheet" href="/admin.css" />
 </head>
-<body class="dark" data-page="__PAGE__">
+<body data-page="__PAGE__">
 
 <!-- Toast 提示容器 -->
 <div id="toast" class="toast"></div>

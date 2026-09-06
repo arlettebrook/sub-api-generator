@@ -243,8 +243,10 @@ async function copyNodeData(event) {
 
 // ======================== 主题切换逻辑 ========================
 function toggleTheme() {
-  document.body.classList.toggle('dark');
-  const isDark = document.body.classList.contains('dark');
+  const root = document.documentElement;
+  const isDark = !root.classList.contains('dark');
+  root.classList.toggle('dark', isDark);
+  document.body.classList.toggle('dark', isDark);
   const switcher = document.querySelector('.theme-switch');
   if (switcher) switcher.setAttribute('aria-pressed', String(isDark));
   try {
@@ -259,15 +261,13 @@ function initTheme() {
   try {
     savedTheme = localStorage.getItem('theme');
   } catch {
-    // Fall back to the default dark theme when storage is unavailable.
+    // Fall back to the default light theme when storage is unavailable.
   }
-  if (savedTheme === 'light') {
-    document.body.classList.remove('dark');
-  } else if (savedTheme === 'dark') {
-    document.body.classList.add('dark');
-  }
+  const isDark = savedTheme === 'dark' || document.documentElement.classList.contains('dark');
+  document.documentElement.classList.toggle('dark', isDark);
+  document.body.classList.toggle('dark', isDark);
   const switcher = document.querySelector('.theme-switch');
-  if (switcher) switcher.setAttribute('aria-pressed', String(document.body.classList.contains('dark')));
+  if (switcher) switcher.setAttribute('aria-pressed', String(isDark));
 }
 
 // ======================== 优选节点展示与增强分页 ========================
