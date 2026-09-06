@@ -20,6 +20,8 @@ const NODE_ADDRESS_REGEX = /:\/\/[^@]+@([^?]+)/;
 const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
 const LINE_CLEAN_REGEX = /(\s*@.*|加入.*|telegram.*)$/i;
+const REMARK_SEPARATOR_REGEX = /[ 【|]/u;
+const REMARK_SYMBOL_REGEX = /[\p{So}\uFE0F]+/gu;
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const AGGREGATE_CACHE_MAX_ENTRIES = 128;
 const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
@@ -47,13 +49,12 @@ function parsePreferredIpLine(line) {
   const remarkMatch = NODE_REMARK_REGEX.exec(line);
   if (remarkMatch) {
     let remark = remarkMatch[1];
-    try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
-    remark = remark
-      .split(" ")[0]
-      .split("【")[0]
-      .split("|")[0]
-      .replace(/[\p{So}\uFE0F]/gu, "")
-      .trim();
+    if (remark.includes("%")) {
+      try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
+    }
+    const separatorIndex = remark.search(REMARK_SEPARATOR_REGEX);
+    if (separatorIndex >= 0) remark = remark.slice(0, separatorIndex);
+    remark = remark.replace(REMARK_SYMBOL_REGEX, "").trim();
     result += `#${remark}`;
   }
   return result;
@@ -164,12 +165,11 @@ async function fetchSourceTextUncached(resource, options, label) {
   throw lastError;
 }
 
-function getBlacklistRegex(blacklist) {
-  const normalized = normalizeBlacklist(blacklist);
-  const cacheKey = normalized.join("\u0000").toLowerCase();
+function getBlacklistRegex(normalizedBlacklist) {
+  const cacheKey = normalizedBlacklist.join("\u0000").toLowerCase();
   if (blacklistRegexCache.has(cacheKey)) return blacklistRegexCache.get(cacheKey);
-  const regex = normalized.length
-    ? new RegExp(normalized.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i")
+  const regex = normalizedBlacklist.length
+    ? new RegExp(normalizedBlacklist.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i")
     : null;
   if (blacklistRegexCache.size >= 16) blacklistRegexCache.delete(blacklistRegexCache.keys().next().value);
   blacklistRegexCache.set(cacheKey, regex);
@@ -179,6 +179,7 @@ function getBlacklistRegex(blacklist) {
 function isBlacklisted(value, blacklistRegex) {
   if (!blacklistRegex) return false;
   if (blacklistRegex.test(value)) return true;
+  if (!value.includes("%")) return false;
   try {
     return blacklistRegex.test(decodeURIComponent(value));
   } catch {
@@ -186,15 +187,19 @@ function isBlacklisted(value, blacklistRegex) {
   }
 }
 
-function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST) {
-  const blacklistRegex = getBlacklistRegex(blacklist);
-  return lines.filter((value) => value && !isBlacklisted(value, blacklistRegex));
+function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null) {
+  const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
+  const result = [];
+  for (const value of lines) {
+    if (value && !isBlacklisted(value, blacklistRegex)) result.push(value);
+  }
+  return result;
 }
 
-function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST) {
+function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null) {
   const result = [];
   const seen = new Set();
-  const blacklistRegex = getBlacklistRegex(blacklist);
+  const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
   for (const value of lines) {
     if (!value) continue;
     const line = value.trim();
@@ -247,12 +252,12 @@ function normalizeSourceSelection(sourceSelection) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklistConfig) {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
-    blacklist: normalizeBlacklist(blacklistConfig),
+    blacklist,
   });
 }
 
@@ -278,7 +283,8 @@ export async function handleRoot(env, sourceSelection) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklistConfig);
+    const blacklist = normalizeBlacklist(blacklistConfig);
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -307,17 +313,18 @@ export async function handleRoot(env, sourceSelection) {
           && (typeof entry === "boolean" || isPlainObject(entry));
       });
     };
+    const blacklistRegex = getBlacklistRegex(blacklist);
     const [subsResults, apiResults] = await Promise.all([
       Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
         const startedAt = Date.now();
         try {
-          const values = await fetchPreferredSubs(host);
+          const rawValues = await fetchPreferredSubs(host);
+          const values = filterPreferredIps(rawValues, blacklist, blacklistRegex);
           const timestamp = new Date().toISOString();
-          const filteredCount = filterPreferredIps(values, normalizeBlacklist(blacklistConfig)).length;
           recordSourceStatus("subs", host, {
-            state: filteredCount > 0 ? "success" : (values.length ? "filtered" : "empty"),
-            nodeCount: filteredCount,
-            rawNodeCount: values.length,
+            state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
+            nodeCount: values.length,
+            rawNodeCount: rawValues.length,
             durationMs: Date.now() - startedAt,
             error: "",
             lastAttemptAt: timestamp,
@@ -341,13 +348,13 @@ export async function handleRoot(env, sourceSelection) {
       Promise.allSettled(selectedEntries(apisConfig, "apis").map(async ([apiUrl]) => {
         const startedAt = Date.now();
         try {
-          const values = await fetchApiSubs(apiUrl);
+          const rawValues = await fetchApiSubs(apiUrl);
+          const values = filterBlacklistedLines(rawValues, blacklist, blacklistRegex);
           const timestamp = new Date().toISOString();
-          const filteredCount = filterBlacklistedLines(values, normalizeBlacklist(blacklistConfig)).length;
           recordSourceStatus("apis", apiUrl, {
-            state: filteredCount > 0 ? "success" : (values.length ? "filtered" : "empty"),
-            nodeCount: filteredCount,
-            rawNodeCount: values.length,
+            state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
+            nodeCount: values.length,
+            rawNodeCount: rawValues.length,
             durationMs: Date.now() - startedAt,
             error: "",
             lastAttemptAt: timestamp,
@@ -385,10 +392,8 @@ export async function handleRoot(env, sourceSelection) {
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
 
-    const blacklist = normalizeBlacklist(blacklistConfig);
-    const filtered = filterPreferredIps(preferred, blacklist);
-    const filteredExtra = filterBlacklistedLines(extra, blacklist);
-    const output = [...filtered, ...filteredExtra].join("\n");
+    const filtered = [...new Set(preferred)];
+    const output = [...filtered, ...extra].join("\n");
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
       aggregateCache.set(cacheKey, { output, sourceErrors, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
