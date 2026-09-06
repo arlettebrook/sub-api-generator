@@ -1380,6 +1380,82 @@ export const adminStyle = `
     align-items: center;
   }
 
+  .nodes-filters {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(140px, 0.35fr) minmax(150px, 0.4fr) auto;
+    gap: 10px;
+    align-items: end;
+    margin: -4px 0 18px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .nodes-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+  }
+
+  .nodes-search:focus-within {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--accent-light);
+  }
+
+  .nodes-search input {
+    width: 100%;
+    height: 38px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .nodes-search input:focus {
+    box-shadow: none;
+  }
+
+  .nodes-filter-field {
+    display: grid;
+    gap: 5px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .nodes-filter-field select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .nodes-filter-reset {
+    height: 40px;
+    white-space: nowrap;
+  }
+
+  .nodes-filter-reset:disabled {
+    opacity: 0.45;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   hr {
     display: none;
   }
@@ -1811,6 +1887,18 @@ export const adminStyle = `
       gap: 6px;
       margin-bottom: 12px;
       padding-bottom: 10px;
+    }
+    .nodes-filters {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: -4px;
+      padding: 10px;
+    }
+    .nodes-search {
+      grid-column: 1 / -1;
+    }
+    .nodes-filter-reset {
+      width: 100%;
     }
     .toolbar > select {
       grid-column: 1 / -1;

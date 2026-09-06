@@ -64,6 +64,30 @@ export const adminHTML = `
     </button>
     <span class="nodes-count" id="nodesCount">共 0 个节点</span>
   </div>
+  <div class="nodes-filters" aria-label="节点筛选和排序">
+    <label class="nodes-search">
+      <span class="sr-only">搜索节点</span>
+      <span aria-hidden="true">⌕</span>
+      <input id="nodesSearch" type="search" placeholder="搜索地址或备注" autocomplete="off" />
+    </label>
+    <label class="nodes-filter-field">
+      <span>地区</span>
+      <select id="nodesRegionFilter" aria-label="按地区筛选">
+        <option value="">全部地区</option>
+      </select>
+    </label>
+    <label class="nodes-filter-field">
+      <span>排序</span>
+      <select id="nodesSort" aria-label="节点排序">
+        <option value="default">默认顺序</option>
+        <option value="host-asc">地址 A-Z</option>
+        <option value="host-desc">地址 Z-A</option>
+        <option value="remark-asc">备注 A-Z</option>
+        <option value="remark-desc">备注 Z-A</option>
+      </select>
+    </label>
+    <button class="btn-outline nodes-filter-reset" id="nodesFilterReset" type="button">清除筛选</button>
+  </div>
   <div id="sourceErrorNotice" class="source-error-notice" role="status" hidden></div>
   <div id="nodesContainer">
     <div class="nodes-loading">加载中...</div>

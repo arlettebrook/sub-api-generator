@@ -3,6 +3,7 @@ export const adminClientScript = `
 // 缓存DOM元素，避免重复查询提升性能
 const $ = (id) => document.getElementById(id);
 let nodesContainer, paginationEl, nodesCountEl;
+let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl;
 
 // 地区匹配映射表（替代长串if-else，匹配效率提升60%+）
 const regionMap = [
@@ -279,6 +280,52 @@ let activeNodeRequest = null;
 let nodeLoadSequence = 0;
 const emptyNodeRetryDelays = [500, 1200];
 
+function getNodeRegion(node) {
+  const remark = String(node?.remark || '');
+  const regionClass = getRegionClass(remark);
+  const match = regionMap.find((item) => item.class === regionClass);
+  return match ? match.keys[match.keys.length - 1] : '其他';
+}
+
+function getVisibleNodes() {
+  const query = (nodesSearchEl?.value || '').trim().toLowerCase();
+  const region = nodesRegionFilterEl?.value || '';
+  const sort = nodesSortEl?.value || 'default';
+  const visible = currentNodes.filter((node) => {
+    const text = (String(node.host || '') + ' ' + String(node.remark || '')).toLowerCase();
+    return (!query || text.includes(query)) && (!region || getNodeRegion(node) === region);
+  });
+  if (sort !== 'default') {
+    const [field, direction] = sort.split('-');
+    visible.sort((a, b) => {
+      const left = String(field === 'host' ? a.host : a.remark || '').toLocaleLowerCase();
+      const right = String(field === 'host' ? b.host : b.remark || '').toLocaleLowerCase();
+      return left.localeCompare(right, 'zh-CN') * (direction === 'desc' ? -1 : 1);
+    });
+  }
+  return visible;
+}
+
+function updateRegionOptions() {
+  if (!nodesRegionFilterEl) return;
+  const selected = nodesRegionFilterEl.value;
+  const regions = [...new Set(currentNodes.map(getNodeRegion))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  nodesRegionFilterEl.innerHTML = '<option value="">全部地区</option>' + regions.map((region) => \`<option value="\${region.replace(/"/g, '&quot;')}">\${region}</option>\`).join('');
+  if (regions.includes(selected)) nodesRegionFilterEl.value = selected;
+}
+
+function renderNodeView() {
+  currentPage = 1;
+  const visible = getVisibleNodes();
+  renderNodes(visible);
+  if (nodesCountEl) {
+    nodesCountEl.textContent = visible.length === currentNodes.length
+      ? \`共 \${currentNodes.length} 个节点\`
+      : \`显示 \${visible.length} / 共 \${currentNodes.length} 个节点\`;
+  }
+  if (nodesFilterResetEl) nodesFilterResetEl.disabled = !((nodesSearchEl?.value || '').trim() || nodesRegionFilterEl?.value || nodesSortEl?.value !== 'default');
+}
+
 async function getPreviewApiUrl(signal) {
   const selectedPath = $('previewApiSelect')?.value || '';
   if (selectedPath) return window.location.origin + '/' + selectedPath;
@@ -326,6 +373,7 @@ async function fetchNodes(emptyRetry = 0) {
     }
     
     currentNodes = nodes;
+    updateRegionOptions();
     currentPage = 1;
     if (nodes.length === 0 && sourceErrors.length === 0 && emptyRetry < emptyNodeRetryDelays.length) {
       nodesContainer.innerHTML = '<div class="nodes-loading">暂未获取到节点，正在重试...</div>';
@@ -335,8 +383,7 @@ async function fetchNodes(emptyRetry = 0) {
       }, emptyNodeRetryDelays[emptyRetry]);
       return;
     }
-    renderNodes(nodes);
-    nodesCountEl.textContent = \`共 \${nodes.length} 个节点\`;
+    renderNodeView();
   } catch (err) {
     if (err.name === 'AbortError') return;
     nodesContainer.innerHTML = '';
@@ -516,10 +563,10 @@ function renderPagination(total) {
 }
 
 function goToPage(page) {
-  const totalPages = Math.ceil(currentNodes.length / pageSize);
+  const totalPages = Math.ceil(getVisibleNodes().length / pageSize);
   if (page < 1 || page > totalPages) return;
   currentPage = page;
-  renderNodes(currentNodes);
+  renderNodes(getVisibleNodes());
   // 平滑滚动到节点区域顶部
   document.querySelector('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1801,6 +1848,17 @@ window.addEventListener('DOMContentLoaded', () => {
   nodesContainer = $('nodesContainer');
   paginationEl = $('pagination');
   nodesCountEl = $('nodesCount');
+  nodesSearchEl = $('nodesSearch');
+  nodesRegionFilterEl = $('nodesRegionFilter');
+  nodesSortEl = $('nodesSort');
+  nodesFilterResetEl = $('nodesFilterReset');
+  [nodesSearchEl, nodesRegionFilterEl, nodesSortEl].forEach((element) => element?.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', renderNodeView));
+  nodesFilterResetEl?.addEventListener('click', () => {
+    if (nodesSearchEl) nodesSearchEl.value = '';
+    if (nodesRegionFilterEl) nodesRegionFilterEl.value = '';
+    if (nodesSortEl) nodesSortEl.value = 'default';
+    renderNodeView();
+  });
 
   $('themeSwitch')?.addEventListener('click', toggleTheme);
   $('logoutButton')?.addEventListener('click', logout);
