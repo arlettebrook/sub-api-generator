@@ -140,6 +140,9 @@ export const adminHTML = `
       <div id="blacklistList" class="blacklist-list"></div>
       <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
       <div class="blacklist-toolbar">
+        <button type="button" onclick="exportBlacklist()">📤 导出</button>
+        <button type="button" onclick="document.getElementById('importBlacklistFile').click()">📥 导入</button>
+        <input type="file" id="importBlacklistFile" accept=".json,application/json" style="display:none" onchange="importBlacklist(event)" />
         <span class="save-status" id="blacklistSaveStatus">配置已保存</span>
         <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
       </div>
@@ -159,6 +162,9 @@ export const adminHTML = `
       <div id="filterRulesList" class="blacklist-list"></div>
       <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
       <div class="blacklist-toolbar">
+        <button type="button" onclick="exportFilterRules()">📤 导出</button>
+        <button type="button" onclick="document.getElementById('importFilterRulesFile').click()">📥 导入</button>
+        <input type="file" id="importFilterRulesFile" accept=".json,application/json" style="display:none" onchange="importFilterRules(event)" />
         <span class="save-status" id="filterRulesSaveStatus">配置已保存</span>
         <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
       </div>

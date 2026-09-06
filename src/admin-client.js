@@ -1355,6 +1355,35 @@ function normalizeBlacklistClient(value) {
   }, []);
 }
 
+function downloadJsonFile(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function readJsonFile(event, onData, label) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      onData(JSON.parse(e.target.result));
+      showToast('导入成功！', 'success');
+    } catch (error) {
+      showToast(label + '导入失败：' + error.message, 'error');
+    }
+  };
+  reader.onerror = () => showToast(label + '导入失败：文件读取失败', 'error');
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
 function setBlacklistDirty(dirty = true) {
   const status = $('blacklistSaveStatus');
   const button = $('saveBlacklistButton');
@@ -1437,6 +1466,20 @@ function addBlacklistWord() {
   renderBlacklist();
   setBlacklistDirty(true);
   input.focus();
+}
+
+function exportBlacklist() {
+  downloadJsonFile(blacklist, 'blacklist_backup.json');
+  showToast('黑名单已导出', 'success');
+}
+
+function importBlacklist(event) {
+  readJsonFile(event, (data) => {
+    if (!Array.isArray(data)) throw new Error('文件内容必须是字符串数组');
+    blacklist = normalizeBlacklistClient(data);
+    renderBlacklist();
+    setBlacklistDirty(true);
+  }, '黑名单');
 }
 
 async function saveBlacklist() {
@@ -1534,6 +1577,20 @@ async function saveFilterRules() {
 function initFilterRulesForm() {
   const input = $('newFilterRule');
   input?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addFilterRule(); } });
+}
+
+function exportFilterRules() {
+  downloadJsonFile(filterRules, 'filter_rules_backup.json');
+  showToast('备注过滤规则已导出', 'success');
+}
+
+function importFilterRules(event) {
+  readJsonFile(event, (data) => {
+    if (!Array.isArray(data)) throw new Error('文件内容必须是字符串数组');
+    filterRules = normalizeFilterRulesClient(data);
+    renderFilterRules();
+    setFilterRulesDirty(true);
+  }, '备注过滤规则');
 }
 
 // 页面初始化
