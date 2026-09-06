@@ -1195,7 +1195,8 @@ export const adminStyle = `
 
   /* 卡片容器 */
   .card {
-    background: var(--bg-secondary);
+    position: relative;
+    background: var(--surface-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 28px;
@@ -1206,10 +1207,69 @@ export const adminStyle = `
     -webkit-backdrop-filter: blur(16px);
   }
 
+  .card > h3 {
+    position: relative;
+    margin: -2px 0 22px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .card > h3::after {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 42px;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--accent-gradient);
+    content: '';
+  }
+
+  .card > .section-heading {
+    margin: -2px 0 22px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .card > .section-heading h3 {
+    margin-bottom: 0;
+  }
+
+  #subsList,
+  #apisList,
+  #customApisList {
+    display: grid;
+    gap: 8px;
+  }
+
+  #subsList .row,
+  #apisList .row,
+  #customApisList .row {
+    margin-bottom: 0;
+    border-color: var(--border-color);
+    background: var(--bg-tertiary);
+  }
+
+  #subsList .row:nth-child(even),
+  #apisList .row:nth-child(even),
+  #customApisList .row:nth-child(even) {
+    background: var(--bg-secondary);
+  }
+
+  .setting-block {
+    background: var(--bg-tertiary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .setting-block-heading {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
   .card:hover {
     border-color: var(--border-hover);
     box-shadow: var(--shadow-lg);
-    transform: translateY(-2px);
+    transform: none;
   }
 
   /* 输入框通用样式 */
@@ -1486,6 +1546,23 @@ export const adminStyle = `
     padding-bottom: 20px;
     border-bottom: 1px solid var(--border-color);
     align-items: center;
+  }
+
+  /* 统一列表操作区层级 */
+  .add-row {
+    margin: -2px 0 18px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .toolbar {
+    margin: -2px 0 18px;
+    padding: 10px 12px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
   }
 
   .nodes-filters {
