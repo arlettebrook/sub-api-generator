@@ -101,6 +101,68 @@ test("allows custom APIs to use sources disabled for the UUID path", async () =>
   }
 });
 
+test("invalidates aggregate cache when blacklist configuration changes", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#blocked";
+  const values = {
+    subs: { "e.ye.gs": { enabled: true } },
+    apis: {},
+    blacklist: ["blocked"],
+  };
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(btoa(source), { status: 200 });
+  };
+  const runtime = { KV: { async get(key) { return values[key] ?? null; } } };
+  try {
+    clearAggregateCache();
+    const first = await handleRoot(runtime);
+    assert.equal(await first.text(), "");
+    values.blacklist = [];
+    const second = await handleRoot(runtime);
+    assert.match(await second.text(), /43\.129\.217\.38:443/);
+    assert.equal(calls, 2);
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reuses aggregate cache when selected source order changes", async () => {
+  const originalFetch = globalThis.fetch;
+  const values = {
+    subs: {},
+    apis: {
+      "https://api.example/one": { enabled: true },
+      "https://api.example/two": { enabled: true },
+    },
+    blacklist: [],
+  };
+  let calls = 0;
+  globalThis.fetch = async (url) => {
+    calls += 1;
+    return new Response(url.endsWith("/one") ? "1.2.3.4:443#one" : "5.6.7.8:443#two", { status: 200 });
+  };
+  const runtime = { KV: { async get(key) { return values[key] ?? null; } } };
+  const firstSelection = [
+    { type: "apis", key: "https://api.example/one" },
+    { type: "apis", key: "https://api.example/two" },
+  ];
+  const secondSelection = [...firstSelection].reverse();
+  try {
+    clearAggregateCache();
+    const first = await handleRoot(runtime, firstSelection);
+    const second = await handleRoot(runtime, secondSelection);
+    assert.match(await first.text(), /1\.2\.3\.4:443/);
+    assert.match(await second.text(), /5\.6\.7\.8:443/);
+    assert.equal(calls, 2);
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("retries an empty preferred subscription response", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#CN";

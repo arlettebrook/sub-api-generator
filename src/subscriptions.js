@@ -173,11 +173,52 @@ function enabledEntries(config) {
   });
 }
 
+function stableSerialize(value) {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
+  if (isPlainObject(value)) {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeSourceSelection(sourceSelection) {
+  if (!Array.isArray(sourceSelection)) return null;
+  const unique = new Map();
+  for (const source of sourceSelection) {
+    const type = source?.type;
+    if (!["subs", "apis"].includes(type)) continue;
+    const key = normalizeSourceKey(type, source?.key);
+    if (!key) continue;
+    unique.set(`${type}:${key}`, { type, key });
+  }
+  return [...unique.values()].sort((left, right) => {
+    const a = `${left.type}:${left.key}`;
+    const b = `${right.type}:${right.key}`;
+    return a.localeCompare(b);
+  });
+}
+
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklistConfig) {
+  return stableSerialize({
+    selection: normalizeSourceSelection(sourceSelection),
+    subs: subsConfig,
+    apis: apisConfig,
+    blacklist: normalizeBlacklist(blacklistConfig),
+  });
+}
+
 export async function handleRoot(env, sourceSelection) {
   try {
-    const cacheKey = Array.isArray(sourceSelection)
-      ? JSON.stringify(sourceSelection)
-      : "__all__";
+    const [subsConfig, apisConfig, blacklistConfig] = await Promise.all([
+      env.KV.get(KV_KEY_SUBS, "json"),
+      env.KV.get(KV_KEY_APIS, "json"),
+      env.KV.get(KV_KEY_BLACKLIST, "json"),
+    ]);
+    if (!isPlainObject(subsConfig)) {
+      return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
+    }
+
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklistConfig);
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       const headers = {
@@ -188,14 +229,6 @@ export async function handleRoot(env, sourceSelection) {
       return new Response(cached.output, {
         headers: withSecurityHeaders(headers),
       });
-    }
-    const [subsConfig, apisConfig, blacklistConfig] = await Promise.all([
-      env.KV.get(KV_KEY_SUBS, "json"),
-      env.KV.get(KV_KEY_APIS, "json"),
-      env.KV.get(KV_KEY_BLACKLIST, "json"),
-    ]);
-    if (!isPlainObject(subsConfig)) {
-      return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
     const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
