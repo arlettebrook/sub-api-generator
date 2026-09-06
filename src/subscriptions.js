@@ -52,6 +52,7 @@ function parsePreferredIpLine(line) {
       .split(" ")[0]
       .split("【")[0]
       .split("|")[0]
+      .replace(/[\p{So}\uFE0F]/gu, "")
       .trim();
     result += `#${remark}`;
   }

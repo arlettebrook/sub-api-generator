@@ -32,6 +32,18 @@ test("parses Base64 responses from preferred subscription providers", async () =
   }
 });
 
+test("removes emoji and trademark symbols attached to preferred remarks", async () => {
+  const originalFetch = globalThis.fetch;
+  const remark = encodeURIComponent("HK🐲™️");
+  const source = `vless://00000000-0000-4000-8000-000000000000@8.218.36.133:9010?security=tls&sni=example.com#${remark}`;
+  globalThis.fetch = async () => new Response(btoa(source), { status: 200 });
+  try {
+    assert.deepEqual(await fetchPreferredSubs("e.ye.gs"), ["8.218.36.133:9010#HK"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("decodes Base64 responses from API sources", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#API";
