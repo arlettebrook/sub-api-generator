@@ -89,6 +89,30 @@ test("filters blacklisted API source lines while preserving allowed output", asy
   }
 });
 
+test("applies configurable remark filter rules to preferred sources", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = "vless://00000000-0000-4000-8000-000000000000@8.218.36.133:9010?security=tls&sni=example.com#HK-VIP";
+  globalThis.fetch = async () => new Response(btoa(source), { status: 200 });
+  const runtime = {
+    KV: {
+      async get(key) {
+        if (key === "subs") return { "e.ye.gs": { enabled: true } };
+        if (key === "apis") return {};
+        if (key === "filter_rules") return ["-VIP"];
+        return null;
+      },
+    },
+  };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime);
+    assert.equal(await response.text(), "8.218.36.133:9010#HK");
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("matches selected subscription sources across protocol and slash variants", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#API";

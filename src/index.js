@@ -2,16 +2,19 @@ import {
   KV_KEY_CUSTOM_APIS,
   KV_KEY_APIS,
   KV_KEY_BLACKLIST,
+  KV_KEY_FILTER_RULES,
   KV_KEY_SUBS,
   getRuntimeConfig as getPagesRuntimeConfig,
   isAllowedApiPath,
   normalizeCustomApiData,
   normalizeBlacklist,
+  normalizeFilterRules,
   normalizeKvData,
   readJsonObject as readPagesJsonObject,
   SOURCE_MODE_SELECTED,
   validateApiPathPayload,
   validateBlacklistPayload,
+  validateFilterRulesPayload,
 } from "./config.js";
 import {
   jsonResponse as pagesJsonResponse,
@@ -71,6 +74,23 @@ async function handlePostBlacklist(request, env) {
     throw new Error(`请求 JSON 无效: ${error.message}`);
   }
   await env.KV.put(KV_KEY_BLACKLIST, JSON.stringify(body));
+  subscriptions.clearAggregateCache();
+  return pagesJsonResponse({ ok: true });
+}
+
+async function handleGetFilterRules(env) {
+  const data = await env.KV.get(KV_KEY_FILTER_RULES, "json");
+  return pagesJsonResponse(normalizeFilterRules(data));
+}
+
+async function handlePostFilterRules(request, env) {
+  let body;
+  try {
+    body = validateFilterRulesPayload(await request.json());
+  } catch (error) {
+    throw new Error(`请求 JSON 无效: ${error.message}`);
+  }
+  await env.KV.put(KV_KEY_FILTER_RULES, JSON.stringify(body));
   subscriptions.clearAggregateCache();
   return pagesJsonResponse({ ok: true });
 }
@@ -206,6 +226,10 @@ export default {
         case "/api/blacklist":
           if (method === "GET") return await handleGetBlacklist(env);
           if (method === "POST") return await handlePostBlacklist(request, env);
+          return pagesMethodNotAllowed("GET, POST");
+        case "/api/filter-rules":
+          if (method === "GET") return await handleGetFilterRules(env);
+          if (method === "POST") return await handlePostFilterRules(request, env);
           return pagesMethodNotAllowed("GET, POST");
         case "/api/custom-apis":
           if (method === "GET") return await handleGetCustomApis(env);

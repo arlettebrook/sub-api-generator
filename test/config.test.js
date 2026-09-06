@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   getRuntimeConfig,
   normalizeBlacklist,
+  normalizeFilterRules,
   normalizeKvData,
   normalizeSourceKey,
   readJsonObject,
@@ -42,6 +43,11 @@ test("normalizes blacklist entries and falls back to defaults", () => {
   assert.deepEqual(validateBlacklistPayload([" foo ", "FOO", "bar"]), ["foo", "bar"]);
   assert.throws(() => validateBlacklistPayload({}), /字符串数组/);
   assert.throws(() => validateBlacklistPayload([""]), /非空字符串/);
+});
+
+test("normalizes configurable remark filter rules", () => {
+  assert.deepEqual(normalizeFilterRules([" 🐲 ", "🐲", "", 1, "-VIP"]), ["🐲", "-VIP"]);
+  assert.ok(normalizeFilterRules(null).includes("符号"));
 });
 
 test("normalizes source identifiers at the configuration boundary", () => {

@@ -222,6 +222,31 @@ test("reads and updates blacklist configuration", async () => {
   assert.deepEqual(await savedResponse.json(), ["foo", "bar"]);
 });
 
+test("reads and updates remark filter rules", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const authHeaders = { Cookie: `auth=${hash}` };
+
+  const defaultResponse = await worker.fetch(new Request("https://example.test/api/filter-rules", {
+    headers: authHeaders,
+  }), runtime);
+  assert.equal(defaultResponse.status, 200);
+  assert.ok((await defaultResponse.json()).includes("符号"));
+
+  const saveResponse = await worker.fetch(new Request("https://example.test/api/filter-rules", {
+    method: "POST",
+    headers: { ...authHeaders, "content-type": "application/json" },
+    body: JSON.stringify([" -VIP ", "-VIP", "🐲"]),
+  }), runtime);
+  assert.equal(saveResponse.status, 200);
+
+  const savedResponse = await worker.fetch(new Request("https://example.test/api/filter-rules", {
+    headers: authHeaders,
+  }), runtime);
+  assert.deepEqual(await savedResponse.json(), ["-VIP", "🐲"]);
+});
+
 test("rejects invalid blacklist payloads", async () => {
   const runtime = env();
   const hash = await sha256Hex("secret");

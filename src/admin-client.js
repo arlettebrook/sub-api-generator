@@ -1475,6 +1475,67 @@ function initBlacklistForm() {
   });
 }
 
+let filterRules = [];
+function normalizeFilterRulesClient(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.reduce((result, item) => {
+    if (typeof item !== 'string') return result;
+    const rule = item.trim().slice(0, 128);
+    const key = rule.toLowerCase();
+    if (!rule || seen.has(key) || result.length >= 200) return result;
+    seen.add(key); result.push(rule); return result;
+  }, []);
+}
+function setFilterRulesDirty(dirty = true) {
+  const status = $('filterRulesSaveStatus');
+  const button = $('saveFilterRulesButton');
+  if (status) { status.textContent = dirty ? '有未保存的修改' : '配置已保存'; status.classList.toggle('dirty', dirty); }
+  if (button) button.disabled = !dirty;
+}
+function renderFilterRules() {
+  const list = $('filterRulesList');
+  if (!list) return;
+  list.innerHTML = '';
+  filterRules.forEach((rule, index) => {
+    const row = document.createElement('div'); row.className = 'blacklist-row';
+    const input = document.createElement('input'); input.type = 'text'; input.maxLength = 128; input.value = rule;
+    input.setAttribute('aria-label', '过滤规则 ' + (index + 1));
+    input.addEventListener('input', () => { filterRules[index] = input.value.slice(0, 128); setFilterRulesDirty(); });
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'del-btn'; button.textContent = '删除';
+    button.onclick = () => { filterRules.splice(index, 1); renderFilterRules(); setFilterRulesDirty(); };
+    row.append(input, button); list.appendChild(row);
+  });
+  if ($('filterRulesEmpty')) $('filterRulesEmpty').hidden = filterRules.length !== 0;
+  if ($('filterRulesSummary')) $('filterRulesSummary').textContent = filterRules.length + ' 项';
+}
+async function loadFilterRules() {
+  try { filterRules = normalizeFilterRulesClient(await readJsonResponse('/api/filter-rules', '备注过滤规则')); renderFilterRules(); setFilterRulesDirty(false); }
+  catch (error) { renderLoadError('filterRulesList', error.message, loadFilterRules); showToast(error.message, 'error'); }
+}
+function addFilterRule() {
+  const input = $('newFilterRule'); if (!input) return;
+  const rule = input.value.trim().slice(0, 128);
+  if (!rule) { showToast('请输入过滤规则', 'error'); input.focus(); return; }
+  if (filterRules.length >= 200) { showToast('过滤规则不能超过 200 个', 'error'); return; }
+  if (filterRules.some((item) => item.toLowerCase() === rule.toLowerCase())) { showToast('该规则已存在', 'error'); input.focus(); return; }
+  filterRules.push(rule); input.value = ''; renderFilterRules(); setFilterRulesDirty(); input.focus();
+}
+async function saveFilterRules() {
+  const button = $('saveFilterRulesButton'); if (button) button.disabled = true;
+  filterRules = normalizeFilterRulesClient(filterRules); renderFilterRules();
+  try {
+    const response = await fetch('/api/filter-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(filterRules) });
+    if (!response.ok) throw responseError('备注过滤规则保存', response);
+    setFilterRulesDirty(false); showToast('备注过滤规则已保存', 'success');
+    if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
+  } catch (error) { setFilterRulesDirty(true); showToast(error.message || '备注过滤规则保存失败', 'error'); }
+}
+function initFilterRulesForm() {
+  const input = $('newFilterRule');
+  input?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addFilterRule(); } });
+}
+
 // 页面初始化
 window.addEventListener('DOMContentLoaded', () => {
   const page = document.body.dataset.page || 'overview';
@@ -1507,6 +1568,8 @@ window.addEventListener('DOMContentLoaded', () => {
   if (page === 'settings') {
     initBlacklistForm();
     loadBlacklist();
+    initFilterRulesForm();
+    loadFilterRules();
   }
   if (page === 'customApis') initCustomApiForm();
   if (page === 'subs') loadSubs();

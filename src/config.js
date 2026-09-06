@@ -2,10 +2,13 @@ export const KV_KEY_SUBS = "subs";
 export const KV_KEY_APIS = "apis";
 export const KV_KEY_CUSTOM_APIS = "custom_apis";
 export const KV_KEY_BLACKLIST = "blacklist";
+export const KV_KEY_FILTER_RULES = "filter_rules";
 export const MAX_CONFIG_ENTRIES = 200;
 export const MAX_CONFIG_KEY_LENGTH = 2048;
 export const MAX_BLACKLIST_ENTRIES = 200;
 export const MAX_BLACKLIST_WORD_LENGTH = 128;
+export const MAX_FILTER_RULES = 200;
+export const MAX_FILTER_RULE_LENGTH = 128;
 export const SOURCE_MODE_ALL_ENABLED = "all-enabled";
 export const SOURCE_MODE_SELECTED = "selected";
 
@@ -14,6 +17,7 @@ export const DEFAULT_BLACKLIST = [
   "t.me", "免费", "telegram", "channel", "premium", "nodes", "进群", "获取", "频道",
   "官方", "共享", "提供", "联系", "tg", "云",
 ];
+export const DEFAULT_FILTER_RULES = ["空格", "【", "|", "符号"];
 
 const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);
@@ -69,6 +73,39 @@ export function normalizeBlacklist(data) {
     if (normalized.length >= MAX_BLACKLIST_ENTRIES) break;
   }
   return normalized;
+}
+
+export function normalizeFilterRules(data) {
+  if (data === null || data === undefined) return [...DEFAULT_FILTER_RULES];
+  if (!Array.isArray(data)) return [...DEFAULT_FILTER_RULES];
+  const normalized = [];
+  const seen = new Set();
+  for (const value of data) {
+    if (typeof value !== "string") continue;
+    const rule = value.trim().slice(0, MAX_FILTER_RULE_LENGTH);
+    const key = rule.toLowerCase();
+    if (!rule || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(rule);
+    if (normalized.length >= MAX_FILTER_RULES) break;
+  }
+  return normalized;
+}
+
+export function validateFilterRulesPayload(body) {
+  if (!Array.isArray(body)) throw new Error("过滤规则必须是字符串数组");
+  if (body.length > MAX_FILTER_RULES) {
+    throw new Error(`过滤规则不能超过 ${MAX_FILTER_RULES} 个`);
+  }
+  for (const value of body) {
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error("过滤规则必须是非空字符串");
+    }
+    if (value.trim().length > MAX_FILTER_RULE_LENGTH) {
+      throw new Error(`过滤规则不能超过 ${MAX_FILTER_RULE_LENGTH} 个字符`);
+    }
+  }
+  return normalizeFilterRules(body);
 }
 
 export function validateBlacklistPayload(body) {

@@ -101,6 +101,8 @@ npm run test:e2e
 - `/admin/subs`、`/admin/apis`：兼容保留的独立管理页，需要登录
 - `/<UUID>`：公开订阅聚合接口
 - `/api/subs`、`/api/apis`：后台配置接口，需要登录
+- `/api/blacklist`：节点黑名单配置接口，需要登录
+- `/api/filter-rules`：节点备注过滤规则配置接口，需要登录
 - `/api/custom-apis`：优选 API 路径和数据源配置接口，需要登录
 - `/api/uuid`：读取订阅 UUID，需要登录
 

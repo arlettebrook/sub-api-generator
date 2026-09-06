@@ -3,7 +3,9 @@ import {
   isPlainObject,
   KV_KEY_APIS,
   KV_KEY_BLACKLIST,
+  KV_KEY_FILTER_RULES,
   KV_KEY_SUBS,
+  normalizeFilterRules,
   normalizeBlacklist,
   normalizeKvData,
   normalizeSourceKey,
@@ -20,7 +22,6 @@ const NODE_ADDRESS_REGEX = /:\/\/[^@]+@([^?]+)/;
 const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
 const LINE_CLEAN_REGEX = /(\s*@.*|加入.*|telegram.*)$/i;
-const REMARK_SEPARATOR_REGEX = /[ 【|]/u;
 const REMARK_SYMBOL_REGEX = /[\p{So}\uFE0F]+/gu;
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const AGGREGATE_CACHE_MAX_ENTRIES = 128;
@@ -40,7 +41,23 @@ async function fetchWithTimeout(resource, options = {}) {
   }
 }
 
-function parsePreferredIpLine(line) {
+function cleanPreferredRemark(value, filterRules = []) {
+  let remark = value;
+  if (remark.includes("%")) {
+    try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
+  }
+  let cutIndex = -1;
+  for (const rule of filterRules) {
+    if (rule === "符号") continue;
+    const index = rule === "空格" ? remark.search(/\s/u) : remark.toLowerCase().indexOf(rule.toLowerCase());
+    if (index >= 0 && (cutIndex < 0 || index < cutIndex)) cutIndex = index;
+  }
+  if (cutIndex >= 0) remark = remark.slice(0, cutIndex);
+  if (filterRules.includes("符号")) remark = remark.replace(REMARK_SYMBOL_REGEX, "");
+  return remark.trim();
+}
+
+function parsePreferredIpLine(line, filterRules = ["空格", "【", "|", "符号"]) {
   if (!line.includes(FIXED_UUID) || !line.includes(FIXED_HOST)) return null;
   const addressMatch = NODE_ADDRESS_REGEX.exec(line);
   if (!addressMatch) return null;
@@ -48,13 +65,7 @@ function parsePreferredIpLine(line) {
   let result = addressMatch[1];
   const remarkMatch = NODE_REMARK_REGEX.exec(line);
   if (remarkMatch) {
-    let remark = remarkMatch[1];
-    if (remark.includes("%")) {
-      try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
-    }
-    const separatorIndex = remark.search(REMARK_SEPARATOR_REGEX);
-    if (separatorIndex >= 0) remark = remark.slice(0, separatorIndex);
-    remark = remark.replace(REMARK_SYMBOL_REGEX, "").trim();
+    const remark = cleanPreferredRemark(remarkMatch[1], filterRules);
     result += `#${remark}`;
   }
   return result;
@@ -73,7 +84,7 @@ function decodeSubscriptionBody(content) {
   return text;
 }
 
-async function fetchPreferredSubs(host) {
+async function fetchPreferredSubs(host, filterRules) {
   const rawHost = String(host || "").trim().replace(/\/+$/, "");
   const baseHost = HTTP_PROTOCOL_REGEX.test(rawHost) ? rawHost : `https://${rawHost}`;
   const content = await fetchSourceText(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
@@ -83,7 +94,7 @@ async function fetchPreferredSubs(host) {
   const rawContent = decodeSubscriptionBody(content);
   const result = [];
   for (const line of rawContent.split(/\r?\n/)) {
-    const parsed = parsePreferredIpLine(line);
+    const parsed = parsePreferredIpLine(line, filterRules);
     if (parsed) result.push(parsed);
   }
   return result;
@@ -187,11 +198,18 @@ function isBlacklisted(value, blacklistRegex) {
   }
 }
 
-function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null) {
+function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = []) {
   const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
   const result = [];
   for (const value of lines) {
-    if (value && !isBlacklisted(value, blacklistRegex)) result.push(value);
+    if (!value || isBlacklisted(value, blacklistRegex)) continue;
+    const hashIndex = value.indexOf("#");
+    if (hashIndex < 0) {
+      result.push(value);
+      continue;
+    }
+    const remark = cleanPreferredRemark(value.slice(hashIndex + 1), filterRules);
+    result.push(`${value.slice(0, hashIndex)}${remark ? `#${remark}` : ""}`);
   }
   return result;
 }
@@ -252,12 +270,13 @@ function normalizeSourceSelection(sourceSelection) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist) {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
     blacklist,
+    filterRules,
   });
 }
 
@@ -274,17 +293,19 @@ function pruneAggregateCache(now = Date.now()) {
 
 export async function handleRoot(env, sourceSelection) {
   try {
-    const [subsConfig, apisConfig, blacklistConfig] = await Promise.all([
+    const [subsConfig, apisConfig, blacklistConfig, filterRulesConfig] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
       env.KV.get(KV_KEY_BLACKLIST, "json"),
+      env.KV.get(KV_KEY_FILTER_RULES, "json"),
     ]);
     if (!isPlainObject(subsConfig)) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
     const blacklist = normalizeBlacklist(blacklistConfig);
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist);
+    const filterRules = normalizeFilterRules(filterRulesConfig);
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -318,7 +339,7 @@ export async function handleRoot(env, sourceSelection) {
       Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
         const startedAt = Date.now();
         try {
-          const rawValues = await fetchPreferredSubs(host);
+          const rawValues = await fetchPreferredSubs(host, filterRules);
           const values = filterPreferredIps(rawValues, blacklist, blacklistRegex);
           const timestamp = new Date().toISOString();
           recordSourceStatus("subs", host, {
@@ -349,7 +370,7 @@ export async function handleRoot(env, sourceSelection) {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchApiSubs(apiUrl);
-          const values = filterBlacklistedLines(rawValues, blacklist, blacklistRegex);
+          const values = filterBlacklistedLines(rawValues, blacklist, blacklistRegex, filterRules);
           const timestamp = new Date().toISOString();
           recordSourceStatus("apis", apiUrl, {
             state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),

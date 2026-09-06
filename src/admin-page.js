@@ -144,6 +144,25 @@ export const adminHTML = `
         <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
       </div>
     </div>
+    <div class="setting-block" id="filterRulesSettings">
+      <div class="setting-block-heading">
+        <div class="setting-copy">
+          <strong>备注过滤规则</strong>
+          <small>清理节点备注中的分隔符、符号或自定义内容。</small>
+        </div>
+        <span class="section-summary" id="filterRulesSummary">0 项</span>
+      </div>
+      <div class="blacklist-add-row">
+        <input id="newFilterRule" type="text" maxlength="128" placeholder="例如：🐲 或 ™️" autocomplete="off" />
+        <button class="btn-primary" id="addFilterRuleButton" type="button" onclick="addFilterRule()">➕ 添加</button>
+      </div>
+      <div id="filterRulesList" class="blacklist-list"></div>
+      <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
+      <div class="blacklist-toolbar">
+        <span class="save-status" id="filterRulesSaveStatus">配置已保存</span>
+        <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
+      </div>
+    </div>
   </div>
 </div>
 
