@@ -162,6 +162,35 @@ test("keeps multiple custom API paths independently usable", async () => {
   }
 });
 
+test("reports latest source status after an aggregate request", async () => {
+  const values = {
+    subs: { "e.ye.gs": { enabled: true, remark: "e.ye.gs" } },
+    apis: {},
+    custom_apis: {},
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(btoa(
+    "vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#ok",
+  ), { status: 200 });
+  try {
+    const publicResponse = await worker.fetch(new Request("https://example.test/test-sub"), runtime);
+    assert.equal(publicResponse.status, 200);
+    const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status", {
+      headers: { Cookie: `auth=${hash}` },
+    }), runtime);
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.subs["e.ye.gs"].state, "success");
+    assert.equal(status.subs["e.ye.gs"].nodeCount, 1);
+    assert.equal(typeof status.subs["e.ye.gs"].durationMs, "number");
+    assert.match(status.subs["e.ye.gs"].lastAttemptAt, /^20/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reads and updates blacklist configuration", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

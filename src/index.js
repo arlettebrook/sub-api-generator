@@ -43,6 +43,14 @@ async function handleGetApis(env) {
   return pagesJsonResponse(normalizeKvData(data, "apis"));
 }
 
+async function handleGetSourceStatuses(env) {
+  const [subs, apis] = await Promise.all([
+    env.KV.get(KV_KEY_SUBS, "json"),
+    env.KV.get(KV_KEY_APIS, "json"),
+  ]);
+  return pagesJsonResponse(subscriptions.getSourceStatuses(subs, apis));
+}
+
 async function handlePostApis(request, env) {
   const body = await readPagesJsonObject(request, "apis");
   await env.KV.put(KV_KEY_APIS, JSON.stringify(body));
@@ -182,6 +190,9 @@ export default {
           if (method === "GET") return await handleGetApis(env);
           if (method === "POST") return await handlePostApis(request, env);
           return pagesMethodNotAllowed("GET, POST");
+        case "/api/source-status":
+          if (method === "GET") return await handleGetSourceStatuses(env);
+          return pagesMethodNotAllowed("GET");
         case "/api/blacklist":
           if (method === "GET") return await handleGetBlacklist(env);
           if (method === "POST") return await handlePostBlacklist(request, env);

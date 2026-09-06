@@ -954,6 +954,44 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
+  .source-health {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    max-width: min(100%, 280px);
+    padding: 0 9px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-health-success {
+    border-color: rgba(16, 185, 129, 0.35);
+    color: var(--success);
+  }
+
+  .source-health-filtered,
+  .source-health-empty {
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #d97706;
+  }
+
+  .dark .source-health-filtered,
+  .dark .source-health-empty {
+    color: #fbbf24;
+  }
+
+  .source-health-error {
+    max-width: min(100%, 360px);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: var(--danger);
+  }
+
   /* 删除按钮 - 默认隐藏，hover显示 */
   .row .del-btn {
     background: transparent;

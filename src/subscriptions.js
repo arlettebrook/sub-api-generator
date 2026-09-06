@@ -26,6 +26,7 @@ const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
 const sourceInflight = new Map();
 const blacklistRegexCache = new Map();
+const sourceStatus = new Map();
 
 async function fetchWithTimeout(resource, options = {}) {
   const controller = new AbortController();
@@ -82,6 +83,37 @@ async function fetchPreferredSubs(host) {
   for (const line of rawContent.split(/\r?\n/)) {
     const parsed = parsePreferredIpLine(line);
     if (parsed) result.push(parsed);
+  }
+  return result;
+}
+
+function recordSourceStatus(type, key, details) {
+  const normalizedKey = normalizeSourceKey(type, key);
+  if (!normalizedKey) return;
+  sourceStatus.set(`${type}:${normalizedKey}`, {
+    type,
+    key: normalizedKey,
+    ...details,
+  });
+}
+
+export function getSourceStatuses(subsConfig, apisConfig) {
+  const result = { subs: {}, apis: {} };
+  for (const [type, config] of [["subs", subsConfig], ["apis", apisConfig]]) {
+    const normalized = normalizeKvData(config, type);
+    for (const [key, entry] of Object.entries(normalized)) {
+      result[type][key] = {
+        enabled: entry.enabled === true,
+        state: "idle",
+        nodeCount: 0,
+        rawNodeCount: 0,
+        durationMs: null,
+        error: "",
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        ...(sourceStatus.get(`${type}:${key}`) || {}),
+      };
+    }
   }
   return result;
 }
@@ -262,20 +294,61 @@ export async function handleRoot(env, sourceSelection) {
     };
     const [subsResults, apiResults] = await Promise.all([
       Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
+        const startedAt = Date.now();
         try {
-          return { key: host, values: await fetchPreferredSubs(host) };
+          const values = await fetchPreferredSubs(host);
+          const timestamp = new Date().toISOString();
+          const filteredCount = filterPreferredIps(values, normalizeBlacklist(blacklistConfig)).length;
+          recordSourceStatus("subs", host, {
+            state: filteredCount > 0 ? "success" : (values.length ? "filtered" : "empty"),
+            nodeCount: filteredCount,
+            rawNodeCount: values.length,
+            durationMs: Date.now() - startedAt,
+            error: "",
+            lastAttemptAt: timestamp,
+            lastSuccessAt: timestamp,
+          });
+          return { key: host, values };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceKey = host;
+          recordSourceStatus("subs", host, {
+            state: "error",
+            nodeCount: 0,
+            rawNodeCount: 0,
+            durationMs: Date.now() - startedAt,
+            error: sourceErrorMessage(failure),
+            lastAttemptAt: new Date().toISOString(),
+          });
           throw failure;
         }
       })),
       Promise.allSettled(selectedEntries(apisConfig, "apis").map(async ([apiUrl]) => {
+        const startedAt = Date.now();
         try {
-          return { key: apiUrl, values: await fetchApiSubs(apiUrl) };
+          const values = await fetchApiSubs(apiUrl);
+          const timestamp = new Date().toISOString();
+          recordSourceStatus("apis", apiUrl, {
+            state: values.length ? "success" : "empty",
+            nodeCount: values.length,
+            rawNodeCount: values.length,
+            durationMs: Date.now() - startedAt,
+            error: "",
+            lastAttemptAt: timestamp,
+            lastSuccessAt: timestamp,
+          });
+          return { key: apiUrl, values };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceKey = apiUrl;
+          recordSourceStatus("apis", apiUrl, {
+            state: "error",
+            nodeCount: 0,
+            rawNodeCount: 0,
+            durationMs: Date.now() - startedAt,
+            error: sourceErrorMessage(failure),
+            lastAttemptAt: new Date().toISOString(),
+          });
           throw failure;
         }
       })),

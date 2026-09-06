@@ -590,6 +590,39 @@ function sourceEntries() {
   ];
 }
 
+let sourceStatuses = { subs: {}, apis: {} };
+
+function getSourceStatus(type, key) {
+  const normalizedKey = normalizeSourceKeyClient(type, key);
+  return sourceStatuses[type]?.[normalizedKey] || { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
+}
+
+function createSourceHealth(type, key) {
+  const status = getSourceStatus(type, key);
+  const state = ['success', 'filtered', 'empty', 'error'].includes(status.state) ? status.state : 'idle';
+  const health = document.createElement('span');
+  health.className = 'source-health source-health-' + state;
+  let text = '未检测';
+  if (state === 'success') text = '正常 · ' + status.nodeCount + ' 个节点';
+  if (state === 'filtered') text = '已过滤 · 原始 ' + status.rawNodeCount + ' 个';
+  if (state === 'empty') text = '返回空数据';
+  if (state === 'error') text = '失败 · ' + (status.error || '请求失败');
+  if (status.durationMs !== null && state !== 'idle') text += ' · ' + status.durationMs + ' ms';
+  health.textContent = text;
+  health.title = status.lastAttemptAt ? '最近检测：' + status.lastAttemptAt : '尚未检测此数据源';
+  return health;
+}
+
+async function loadSourceStatuses() {
+  try {
+    sourceStatuses = await readJsonResponse('/api/source-status', '数据源状态');
+    if ($('subsList')) renderSubs();
+    if ($('apisList')) renderApis();
+  } catch {
+    // 状态接口不可用时保留配置页面，不阻断管理操作。
+  }
+}
+
 function normalizeSourceKeyClient(type, key) {
   const value = String(key || '').trim();
   if (type === 'subs') return value.replace(/^https?:\\\/\\\//i, '').replace(/\\\/+$/, '').toLowerCase();
@@ -999,6 +1032,8 @@ function renderSubs() {
       renderSubs();
     };
 
+    const health = createSourceHealth('subs', host);
+
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn';
     delBtn.textContent = '删除';
@@ -1024,6 +1059,7 @@ function renderSubs() {
     row.appendChild(remarkInput);
     row.appendChild(hostInput);
     row.appendChild(statusBtn);
+    row.appendChild(health);
     row.appendChild(delBtn);
     el.appendChild(row);
   });
@@ -1062,7 +1098,8 @@ async function saveSubs() {
     });
     if (!response.ok) throw responseError('订阅源配置保存', response);
     showToast('订阅源配置已保存', 'success');
-    fetchNodes();
+    loadSourceStatuses();
+    if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
     showToast(error.message || '订阅源配置保存失败', 'error');
   }
@@ -1154,6 +1191,8 @@ function renderApis() {
       renderApis();
     };
 
+    const health = createSourceHealth('apis', url);
+
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn';
     delBtn.textContent = '删除';
@@ -1179,6 +1218,7 @@ function renderApis() {
     row.appendChild(remarkInput);
     row.appendChild(urlInput);
     row.appendChild(statusBtn);
+    row.appendChild(health);
     row.appendChild(delBtn);
     el.appendChild(row);
   });
@@ -1211,7 +1251,8 @@ async function saveApis() {
     });
     if (!response.ok) throw responseError('API 源配置保存', response);
     showToast('API 源配置已保存', 'success');
-    fetchNodes();
+    loadSourceStatuses();
+    if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
     showToast(error.message || 'API 源配置保存失败', 'error');
   }
@@ -1442,5 +1483,6 @@ window.addEventListener('DOMContentLoaded', () => {
       renderCustomApiSelect();
     });
   }
+  if (page === 'subs' || page === 'apis' || page === 'manage') loadSourceStatuses();
 });
 `;
