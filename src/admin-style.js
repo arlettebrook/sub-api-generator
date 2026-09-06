@@ -667,14 +667,38 @@ export const adminStyle = `
     display: flex;
     flex-wrap: wrap;
     gap: 8px 14px;
+    align-items: start;
+  }
+
+  .source-group-title {
+    flex: 0 0 100%;
+    padding: 6px 4px 2px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
   }
 
   .source-option {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    max-width: 100%;
+    overflow: hidden;
     color: var(--text-primary);
     font-size: 13px;
+  }
+
+  .source-option span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-action.active {
+    border-radius: 6px;
+    background: var(--accent-light);
   }
 
   .source-option input {

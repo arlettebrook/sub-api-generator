@@ -23,8 +23,12 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page).toHaveURL(/\/admin\/custom-apis$/);
   await expect(page.locator("#customApiSection")).toBeVisible();
   await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(2);
+  await expect(page.locator("#newCustomApiSources .source-group-title")).toHaveCount(2);
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(0);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "清空" }).click();
+  await page.locator("#newCustomApiSources").getByRole("button", { name: "仅显示已选" }).click();
+  await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(0);
+  await page.locator("#newCustomApiSources").getByRole("button", { name: "仅显示已选" }).click();
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(0);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "全选" }).click();
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(2);

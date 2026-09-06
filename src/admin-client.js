@@ -585,8 +585,8 @@ async function loadCustomApis(loadSources = false) {
 
 function sourceEntries() {
   return [
-    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, enabled: value?.enabled === true, label: '订阅源 · ' + (value.remark || key) })),
-    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, enabled: value?.enabled === true, label: 'API 源 · ' + (value.remark || key) })),
+    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, enabled: value?.enabled === true, label: '订阅源 · ' + (value.remark || key) + (value?.enabled === true ? ' · 已启用' : ' · 已禁用') })),
+    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, enabled: value?.enabled === true, label: 'API 源 · ' + (value.remark || key) + (value?.enabled === true ? ' · 已启用' : ' · 已禁用') })),
   ];
 }
 
@@ -647,7 +647,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
   count.className = 'source-count';
   const actions = document.createElement('div');
   actions.className = 'source-actions';
-  [['all', '全选'], ['clear', '清空']].forEach(([action, text]) => {
+  [['all', '全选'], ['clear', '清空'], ['selected', '仅显示已选']].forEach(([action, text]) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'source-action';
@@ -677,25 +677,8 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
   const options = document.createElement('div');
   options.className = 'source-options';
   const entries = sourceEntries();
-  if (!entries.length) {
-    const empty = document.createElement('div');
-    empty.className = 'source-empty';
-    empty.textContent = '暂无可用数据源，请先在优选管理中添加。';
-    options.appendChild(empty);
-  }
-  entries.forEach((source) => {
-    const label = document.createElement('label');
-    label.className = 'source-option';
-    label.dataset.sourceSearch = source.label.toLowerCase();
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.dataset.sourceType = source.type;
-    checkbox.dataset.sourceKey = source.key;
-    checkbox.checked = selected.has(source.type + ':' + normalizeSourceKeyClient(source.type, source.key));
-    label.append(checkbox, document.createTextNode(source.label));
-    options.appendChild(label);
-  });
   picker.appendChild(options);
+  picker.dataset.onlySelected = 'false';
   const updateCount = () => {
     const checked = picker.querySelectorAll('input[type="checkbox"]:checked').length;
     const total = picker.querySelectorAll('input[type="checkbox"]').length;
@@ -705,10 +688,58 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
     modeActions.querySelectorAll('[data-source-mode]').forEach((button) => {
       button.classList.toggle('active', button.dataset.sourceMode === picker.dataset.sourceMode);
     });
+    const selectedButton = actions.querySelector('[data-source-action="selected"]');
+    if (selectedButton) selectedButton.classList.toggle('active', picker.dataset.onlySelected === 'true');
+  };
+  const renderOptions = () => {
+    const query = search.value.trim().toLowerCase();
+    const visible = entries.filter((source) => {
+      const sourceId = source.type + ':' + normalizeSourceKeyClient(source.type, source.key);
+      return (!query || source.label.toLowerCase().includes(query))
+        && (picker.dataset.onlySelected !== 'true' || selected.has(sourceId));
+    });
+    options.innerHTML = '';
+    if (!visible.length) {
+      const empty = document.createElement('div');
+      empty.className = 'source-empty';
+      empty.textContent = entries.length ? '没有匹配的数据源。' : '暂无可用数据源，请先在优选管理中添加。';
+      options.appendChild(empty);
+      updateCount();
+      return;
+    }
+    for (const [type, title] of [['subs', '订阅源'], ['apis', 'API 源']]) {
+      const group = visible.filter((source) => source.type === type);
+      if (!group.length) continue;
+      const heading = document.createElement('div');
+      heading.className = 'source-group-title';
+      heading.textContent = title + ' · ' + group.length;
+      options.appendChild(heading);
+      for (const source of group) {
+        const label = document.createElement('label');
+        label.className = 'source-option';
+        label.dataset.sourceSearch = source.label.toLowerCase();
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.dataset.sourceType = source.type;
+        checkbox.dataset.sourceKey = source.key;
+        checkbox.checked = selected.has(source.type + ':' + normalizeSourceKeyClient(source.type, source.key));
+        const text = document.createElement('span');
+        text.textContent = source.label;
+        label.append(checkbox, text);
+        options.appendChild(label);
+      }
+    }
+    updateCount();
   };
   options.addEventListener('change', () => {
     picker.dataset.sourceMode = 'selected';
+    options.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+      const sourceId = checkbox.dataset.sourceType + ':' + normalizeSourceKeyClient(checkbox.dataset.sourceType, checkbox.dataset.sourceKey);
+      if (checkbox.checked) selected.add(sourceId);
+      else selected.delete(sourceId);
+    });
     updateCount();
+    if (picker.dataset.onlySelected === 'true') renderOptions();
   });
   modeActions.addEventListener('click', (event) => {
     const mode = event.target.dataset.sourceMode;
@@ -725,18 +756,26 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
   actions.addEventListener('click', (event) => {
     const action = event.target.dataset.sourceAction;
     if (!action) return;
-    options.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
-      checkbox.checked = action === 'all';
+    if (action === 'selected') {
+      picker.dataset.onlySelected = picker.dataset.onlySelected !== 'true' ? 'true' : 'false';
+      renderOptions();
+      return;
+    }
+    entries.forEach((source) => {
+      const sourceId = source.type + ':' + normalizeSourceKeyClient(source.type, source.key);
+      if (action === 'all') selected.add(sourceId);
+      else selected.delete(sourceId);
     });
-    options.dispatchEvent(new Event('change', { bubbles: true }));
+    picker.dataset.sourceMode = 'selected';
+    renderOptions();
+    picker.dispatchEvent(new CustomEvent('source-mode-change'));
   });
+  let searchTimer = null;
   search.addEventListener('input', () => {
-    const query = search.value.trim().toLowerCase();
-    options.querySelectorAll('.source-option').forEach((option) => {
-      option.hidden = Boolean(query) && !option.dataset.sourceSearch.includes(query);
-    });
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(renderOptions, 120);
   });
-  updateCount();
+  renderOptions();
   return picker;
 }
 
