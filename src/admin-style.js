@@ -1711,6 +1711,23 @@ export const adminStyle = `
     transform: translateX(-50%) translateY(0);
   }
 
+  .toast-retry {
+    height: 28px;
+    padding: 0 9px;
+    border-color: currentColor;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+  }
+
+  .toast-retry:hover {
+    border-color: currentColor;
+    background: rgba(127, 127, 127, 0.12);
+    color: inherit;
+    box-shadow: none;
+    transform: none;
+  }
+
   .toast.success {
     border-color: rgba(16, 185, 129, 0.3);
     background: rgba(16, 185, 129, 0.08);

@@ -63,9 +63,20 @@ function getRegionClass(remark) {
 }
 
 // ======================== Toast 提示工具 ========================
-function showToast(message, type = 'default') {
+function showToast(message, type = 'default', retry) {
   const toast = $('toast');
-  toast.textContent = message;
+  toast.innerHTML = '';
+  const messageEl = document.createElement('span');
+  messageEl.textContent = message;
+  toast.appendChild(messageEl);
+  if (typeof retry === 'function') {
+    const retryButton = document.createElement('button');
+    retryButton.type = 'button';
+    retryButton.className = 'toast-retry';
+    retryButton.textContent = '重试';
+    retryButton.onclick = () => { toast.classList.remove('show'); retry(); };
+    toast.appendChild(retryButton);
+  }
   toast.className = 'toast ' + type;
   
   requestAnimationFrame(() => {
@@ -75,7 +86,30 @@ function showToast(message, type = 'default') {
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => {
     toast.classList.remove('show');
-  }, 2000);
+  }, typeof retry === 'function' ? 6000 : 2000);
+}
+
+function setButtonBusy(button, busy, busyText = '保存中…') {
+  if (!button) return;
+  if (busy) {
+    if (!button.dataset.idleText) button.dataset.idleText = button.textContent;
+    button.disabled = true;
+    button.textContent = busyText;
+    button.setAttribute('aria-busy', 'true');
+  } else {
+    button.disabled = false;
+    if (button.dataset.idleText) button.textContent = button.dataset.idleText;
+    button.removeAttribute('aria-busy');
+  }
+}
+
+let subsSavePending = 0;
+let apisSavePending = 0;
+let subsDirty = false;
+let apisDirty = false;
+
+function hasUnsavedChanges() {
+  return customApisDirty || blacklistDirty || filterRulesDirty || subsDirty || apisDirty || subsSavePending > 0 || apisSavePending > 0;
 }
 
 function responseError(label, response) {
@@ -677,6 +711,8 @@ function goToPage(page) {
 // ======================== 优选 API 管理 ========================
 let customApis = {};
 let customApisDirty = false;
+let blacklistDirty = false;
+let filterRulesDirty = false;
 let pendingCustomApiDelete = null;
 
 function setCustomApisDirty(dirty = true) {
@@ -1184,7 +1220,10 @@ async function saveCustomApiEdit() {
   setCustomApisDirty(true);
   renderCustomApis();
   renderCustomApiSelect();
+  const saveButton = $('saveCustomApiEditButton');
+  setButtonBusy(saveButton, true, '保存中…');
   const saved = await saveCustomApis(false);
+  setButtonBusy(saveButton, false);
   if (saved) {
     closeCustomApiEditDialog();
     showToast('优选 API 配置已保存', 'success');
@@ -1226,7 +1265,7 @@ function addCustomApi() {
 
 async function saveCustomApis(notify = true) {
   const button = $('saveCustomApisButton');
-  if (button) button.disabled = true;
+  setButtonBusy(button, true);
   try {
     const response = await fetch('/api/custom-apis', {
       method: 'POST',
@@ -1239,10 +1278,13 @@ async function saveCustomApis(notify = true) {
     return true;
   } catch (error) {
     setCustomApisDirty(true);
-    showToast('优选 API 配置保存失败', 'error');
+    showToast('优选 API 配置保存失败', 'error', () => saveCustomApis(notify));
     return false;
   } finally {
-    if (button) button.disabled = !customApisDirty;
+    if (button) {
+      setButtonBusy(button, false);
+      button.disabled = !customApisDirty;
+    }
   }
 }
 
@@ -1348,7 +1390,9 @@ let subs = {};
 let subsSaveQueue = Promise.resolve();
 
 function queueSubsSave() {
-  subsSaveQueue = subsSaveQueue.then(() => saveSubs(false));
+  subsDirty = true;
+  subsSavePending += 1;
+  subsSaveQueue = subsSaveQueue.then(() => saveSubs(false)).finally(() => { subsSavePending = Math.max(0, subsSavePending - 1); });
   return subsSaveQueue;
 }
 
@@ -1362,6 +1406,7 @@ async function loadSubs() {
       }
     }
     subs = data;
+    subsDirty = false;
     renderSubs();
   } catch (error) {
     renderLoadError('subsList', error.message, loadSubs);
@@ -1465,11 +1510,12 @@ async function saveSubs(notify = true) {
       body: JSON.stringify(subs)
     });
     if (!response.ok) throw responseError('订阅源配置保存', response);
+    subsDirty = false;
     if (notify) showToast('订阅源配置已保存', 'success');
     loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
-    showToast(error.message || '订阅源配置保存失败', 'error');
+    showToast(error.message || '订阅源配置保存失败', 'error', () => saveSubs(notify));
   }
 }
 
@@ -1520,7 +1566,9 @@ let apis = {};
 let apisSaveQueue = Promise.resolve();
 
 function queueApisSave() {
-  apisSaveQueue = apisSaveQueue.then(() => saveApis(false));
+  apisDirty = true;
+  apisSavePending += 1;
+  apisSaveQueue = apisSaveQueue.then(() => saveApis(false)).finally(() => { apisSavePending = Math.max(0, apisSavePending - 1); });
   return apisSaveQueue;
 }
 
@@ -1534,6 +1582,7 @@ async function loadApis() {
       }
     }
     apis = data;
+    apisDirty = false;
     renderApis();
   } catch (error) {
     renderLoadError('apisList', error.message, loadApis);
@@ -1631,11 +1680,12 @@ async function saveApis(notify = true) {
       body: JSON.stringify(apis)
     });
     if (!response.ok) throw responseError('API 源配置保存', response);
+    apisDirty = false;
     if (notify) showToast('API 源配置已保存', 'success');
     loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
-    showToast(error.message || 'API 源配置保存失败', 'error');
+    showToast(error.message || 'API 源配置保存失败', 'error', () => saveApis(notify));
   }
 }
 
@@ -1728,6 +1778,7 @@ function readJsonFile(event, onData, label) {
 }
 
 function setBlacklistDirty(dirty = true) {
+  blacklistDirty = dirty;
   const status = $('blacklistSaveStatus');
   const button = $('saveBlacklistButton');
   if (status) {
@@ -1828,7 +1879,7 @@ function importBlacklist(event) {
 
 async function saveBlacklist() {
   const button = $('saveBlacklistButton');
-  if (button) button.disabled = true;
+  setButtonBusy(button, true);
   const normalized = normalizeBlacklistClient(blacklist);
   if (normalized.length !== blacklist.length || normalized.some((word, index) => word !== blacklist[index])) {
     blacklist = normalized;
@@ -1847,7 +1898,10 @@ async function saveBlacklist() {
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
     setBlacklistDirty(true);
-    showToast(error.message || '黑名单配置保存失败', 'error');
+    showToast(error.message || '黑名单配置保存失败', 'error', saveBlacklist);
+  } finally {
+    setButtonBusy(button, false);
+    if (button) button.disabled = !blacklistDirty;
   }
 }
 
@@ -1875,6 +1929,7 @@ function normalizeFilterRulesClient(value) {
   }, []);
 }
 function setFilterRulesDirty(dirty = true) {
+  filterRulesDirty = dirty;
   const status = $('filterRulesSaveStatus');
   const button = $('saveFilterRulesButton');
   if (status) { status.textContent = dirty ? '有未保存的修改' : '配置已保存'; status.classList.toggle('dirty', dirty); }
@@ -1911,13 +1966,15 @@ function addFilterRule() {
 }
 async function saveFilterRules() {
   const button = $('saveFilterRulesButton'); if (button) button.disabled = true;
+  setButtonBusy(button, true);
   filterRules = normalizeFilterRulesClient(filterRules); renderFilterRules();
   try {
     const response = await fetch('/api/filter-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(filterRules) });
     if (!response.ok) throw responseError('备注过滤规则保存', response);
     setFilterRulesDirty(false); showToast('备注过滤规则已保存', 'success');
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
-  } catch (error) { setFilterRulesDirty(true); showToast(error.message || '备注过滤规则保存失败', 'error'); }
+  } catch (error) { setFilterRulesDirty(true); showToast(error.message || '备注过滤规则保存失败', 'error', saveFilterRules); }
+  finally { setButtonBusy(button, false); if (button) button.disabled = !filterRulesDirty; }
 }
 function initFilterRulesForm() {
   const input = $('newFilterRule');
@@ -1941,6 +1998,11 @@ function importFilterRules(event) {
 // 页面初始化
 window.addEventListener('DOMContentLoaded', () => {
   const page = document.body.dataset.page || 'overview';
+  window.addEventListener('beforeunload', (event) => {
+    if (!hasUnsavedChanges()) return;
+    event.preventDefault();
+    event.returnValue = '当前有未保存的修改，确定离开吗？';
+  });
   const intro = $('pageIntro');
   const intros = {
     overview: '集中查看订阅聚合结果和节点状态。',
