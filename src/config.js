@@ -17,7 +17,7 @@ export const DEFAULT_BLACKLIST = [
   "t.me", "免费", "telegram", "channel", "premium", "nodes", "进群", "获取", "频道",
   "官方", "共享", "提供", "联系", "tg", "云",
 ];
-export const DEFAULT_FILTER_RULES = ["空格", "【", "|", "符号"];
+export const DEFAULT_FILTER_RULES = ["空格", "【", "|", "符号", "@", "加入", "telegram"];
 
 const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);

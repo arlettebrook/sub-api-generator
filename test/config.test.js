@@ -47,7 +47,11 @@ test("normalizes blacklist entries and falls back to defaults", () => {
 
 test("normalizes configurable remark filter rules", () => {
   assert.deepEqual(normalizeFilterRules([" 🐲 ", "🐲", "", 1, "-VIP"]), ["🐲", "-VIP"]);
-  assert.ok(normalizeFilterRules(null).includes("符号"));
+  const defaults = normalizeFilterRules(null);
+  assert.ok(defaults.includes("符号"));
+  assert.ok(defaults.includes("@"));
+  assert.ok(defaults.includes("加入"));
+  assert.ok(defaults.includes("telegram"));
 });
 
 test("normalizes source identifiers at the configuration boundary", () => {

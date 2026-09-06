@@ -148,7 +148,7 @@ export const adminHTML = `
       <div class="setting-block-heading">
         <div class="setting-copy">
           <strong>备注过滤规则</strong>
-          <small>清理节点备注中的分隔符、符号或自定义内容。</small>
+          <small>清理节点备注中的分隔符、emoji、国旗、商标符号或自定义内容。“符号”规则会自动处理这类符号，无需逐个添加。</small>
         </div>
         <span class="section-summary" id="filterRulesSummary">0 项</span>
       </div>

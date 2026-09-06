@@ -1,5 +1,6 @@
 import {
   DEFAULT_BLACKLIST,
+  DEFAULT_FILTER_RULES,
   isPlainObject,
   KV_KEY_APIS,
   KV_KEY_BLACKLIST,
@@ -21,7 +22,6 @@ const HTTP_PROTOCOL_REGEX = /^https?:\/\//i;
 const NODE_ADDRESS_REGEX = /:\/\/[^@]+@([^?]+)/;
 const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
-const LINE_CLEAN_REGEX = /(\s*@.*|加入.*|telegram.*)$/i;
 const REMARK_SYMBOL_REGEX = /[\p{So}\uFE0F]+/gu;
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const AGGREGATE_CACHE_MAX_ENTRIES = 128;
@@ -57,7 +57,7 @@ function cleanPreferredRemark(value, filterRules = []) {
   return remark.trim();
 }
 
-function parsePreferredIpLine(line, filterRules = ["空格", "【", "|", "符号"]) {
+function parsePreferredIpLine(line, filterRules = DEFAULT_FILTER_RULES) {
   if (!line.includes(FIXED_UUID) || !line.includes(FIXED_HOST)) return null;
   const addressMatch = NODE_ADDRESS_REGEX.exec(line);
   if (!addressMatch) return null;
@@ -84,7 +84,7 @@ function decodeSubscriptionBody(content) {
   return text;
 }
 
-async function fetchPreferredSubs(host, filterRules) {
+async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
   const rawHost = String(host || "").trim().replace(/\/+$/, "");
   const baseHost = HTTP_PROTOCOL_REGEX.test(rawHost) ? rawHost : `https://${rawHost}`;
   const content = await fetchSourceText(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
@@ -214,7 +214,7 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
   return result;
 }
 
-function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null) {
+function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = DEFAULT_FILTER_RULES) {
   const result = [];
   const seen = new Set();
   const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
@@ -225,10 +225,11 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     if (!match) continue;
     const node = match[0];
     const hashIndex = line.indexOf("#");
-    const remark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
-    const full = remark ? `${node}#${remark}` : node;
-    if (isBlacklisted(full, blacklistRegex)) continue;
-    const cleaned = full.replace(LINE_CLEAN_REGEX, "").trim();
+    const rawRemark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
+    const rawFull = rawRemark ? `${node}#${rawRemark}` : node;
+    if (isBlacklisted(rawFull, blacklistRegex)) continue;
+    const remark = rawRemark ? cleanPreferredRemark(rawRemark, filterRules) : "";
+    const cleaned = remark ? `${node}#${remark}` : node;
     if (seen.has(cleaned)) continue;
     seen.add(cleaned);
     result.push(cleaned);
@@ -340,7 +341,7 @@ export async function handleRoot(env, sourceSelection) {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchPreferredSubs(host, filterRules);
-          const values = filterPreferredIps(rawValues, blacklist, blacklistRegex);
+          const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
           const timestamp = new Date().toISOString();
           recordSourceStatus("subs", host, {
             state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),

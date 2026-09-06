@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearAggregateCache, fetchPreferredSubs, filterPreferredIps, handleRoot } from "../src/subscriptions.js";
+import { clearAggregateCache, fetchPreferredSubs, filterPreferredIps, handleRoot, parsePreferredIpLine } from "../src/subscriptions.js";
 
 test("filters invalid, blacklisted, and duplicate nodes", () => {
   assert.deepEqual(filterPreferredIps([
@@ -42,6 +42,13 @@ test("removes emoji and trademark symbols attached to preferred remarks", async 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("applies all built-in remark cleanup rules by default", () => {
+  const base = "vless://00000000-0000-4000-8000-000000000000@8.218.36.133:9010?security=tls&sni=example.com#";
+  assert.equal(parsePreferredIpLine(`${base}HK@source`), "8.218.36.133:9010#HK");
+  assert.equal(parsePreferredIpLine(`${base}HK加入群组`), "8.218.36.133:9010#HK");
+  assert.equal(parsePreferredIpLine(`${base}HKtelegram`), "8.218.36.133:9010#HK");
 });
 
 test("decodes Base64 responses from API sources", async () => {
