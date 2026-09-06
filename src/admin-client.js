@@ -659,7 +659,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
   picker.appendChild(head);
   const modeActions = document.createElement('div');
   modeActions.className = 'source-mode-actions';
-  [['all-enabled', '全部启用源'], ['selected', '手动选择']].forEach(([mode, text]) => {
+  [['all-enabled', '全部数据源'], ['selected', '手动选择']].forEach(([mode, text]) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'source-mode-action';
@@ -700,7 +700,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
     const checked = picker.querySelectorAll('input[type="checkbox"]:checked').length;
     const total = picker.querySelectorAll('input[type="checkbox"]').length;
     count.textContent = picker.dataset.sourceMode === 'all-enabled'
-      ? '动态跟随启用源'
+      ? '动态跟随全部源'
       : (total ? checked + '/' + total : '0 个');
     modeActions.querySelectorAll('[data-source-mode]').forEach((button) => {
       button.classList.toggle('active', button.dataset.sourceMode === picker.dataset.sourceMode);

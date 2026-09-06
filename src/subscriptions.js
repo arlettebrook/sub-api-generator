@@ -273,7 +273,6 @@ export async function handleRoot(env, sourceSelection) {
         "content-type": "text/plain; charset=utf-8",
         "cache-control": "no-store",
       };
-      setSourceErrorHeaders(headers, cached.sourceErrors || []);
       return new Response(cached.output, {
         headers: withSecurityHeaders(headers),
       });
@@ -370,7 +369,7 @@ export async function handleRoot(env, sourceSelection) {
     }
 
     const filtered = filterPreferredIps(preferred, normalizeBlacklist(blacklistConfig));
-    const output = filtered.join("\n") + (extra.length ? `\n${extra.join("\n")}` : "");
+    const output = [...filtered, ...extra].join("\n");
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
       aggregateCache.set(cacheKey, { output, sourceErrors, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
@@ -382,7 +381,6 @@ export async function handleRoot(env, sourceSelection) {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
     };
-    setSourceErrorHeaders(headers, sourceErrors);
     return new Response(output, {
       headers: withSecurityHeaders(headers),
     });

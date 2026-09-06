@@ -257,12 +257,38 @@ test("reports failed sources without discarding healthy source output", async ()
     clearAggregateCache();
     const response = await handleRoot(runtime);
     assert.equal(response.status, 200);
-    assert.match(decodeURIComponent(response.headers.get("x-source-errors")), /broken\.example\.com/);
+    assert.equal(response.headers.get("x-source-errors"), null);
     assert.equal(await response.text(), "");
 
     const cachedResponse = await handleRoot(runtime);
-    assert.match(decodeURIComponent(cachedResponse.headers.get("x-source-errors")), /HTTP 503/);
+    assert.equal(cachedResponse.headers.get("x-source-errors"), null);
     assert.equal(fetchCount, 6, "failed empty results should not be cached and each request retries upstream");
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("returns healthy output silently when one of multiple sources fails", async () => {
+  const originalFetch = globalThis.fetch;
+  const values = {
+    subs: {},
+    apis: {
+      "https://api.example/healthy": { enabled: true },
+      "https://api.example/broken": { enabled: true },
+    },
+  };
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/broken")) return new Response("unavailable", { status: 503 });
+    return new Response("trojan://healthy.example:443#healthy", { status: 200 });
+  };
+  const runtime = { KV: { async get(key) { return values[key] ?? null; } } };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "trojan://healthy.example:443#healthy");
+    assert.equal(response.headers.get("x-source-errors"), null);
   } finally {
     clearAggregateCache();
     globalThis.fetch = originalFetch;

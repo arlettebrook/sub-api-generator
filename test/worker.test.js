@@ -120,7 +120,10 @@ test("creates and serves custom API access paths", async () => {
 
 test("keeps multiple custom API paths independently usable", async () => {
   const values = {
-    subs: { "one.example": { enabled: true, remark: "one" } },
+    subs: {
+      "one.example": { enabled: true, remark: "one" },
+      "disabled.example": { enabled: false, remark: "disabled" },
+    },
     apis: { "https://api.example/source": { enabled: true, remark: "api" } },
     custom_apis: {},
   };
@@ -141,7 +144,9 @@ test("keeps multiple custom API paths independently usable", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     if (String(url).includes("/sub?")) {
-      return new Response(btoa("vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#one"), { status: 200 });
+      const host = String(url).startsWith("https://disabled.example/") ? "5.6.7.8:443" : "1.2.3.4:443";
+      const remark = String(url).startsWith("https://disabled.example/") ? "disabled" : "one";
+      return new Response(btoa(`vless://00000000-0000-4000-8000-000000000000@${host}?security=tls&sni=example.com#${remark}`), { status: 200 });
     }
     return new Response("trojan://example.com:443#api", { status: 200 });
   };
@@ -157,6 +162,7 @@ test("keeps multiple custom API paths independently usable", async () => {
     const autoText = await autoResponse.text();
     assert.match(autoText, /1\.2\.3\.4:443#one/);
     assert.match(autoText, /trojan:\/\/example\.com:443#api/);
+    assert.match(autoText, /5\.6\.7\.8:443#disabled/);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -99,7 +99,17 @@ async function handleCustomApiPath(path, env) {
   const configured = normalizeCustomApiData(data);
   if (!configured[apiPath]?.enabled) return null;
   const api = configured[apiPath];
-  const sourceSelection = api.sourceMode === SOURCE_MODE_SELECTED ? api.sources : null;
+  let sourceSelection = api.sources;
+  if (api.sourceMode !== SOURCE_MODE_SELECTED) {
+    const [subs, apis] = await Promise.all([
+      env.KV.get(KV_KEY_SUBS, "json"),
+      env.KV.get(KV_KEY_APIS, "json"),
+    ]);
+    sourceSelection = [
+      ...Object.keys(normalizeKvData(subs, "subs")).map((key) => ({ type: "subs", key })),
+      ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
+    ];
+  }
   return subscriptions.handleRoot(env, sourceSelection);
 }
 
