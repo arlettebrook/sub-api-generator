@@ -28,11 +28,11 @@ import { loginPage } from "./login-page.js";
 
 async function handleGetSubs(env) {
   const data = await env.KV.get(KV_KEY_SUBS, "json");
-  return pagesJsonResponse(normalizeKvData(data));
+  return pagesJsonResponse(normalizeKvData(data, "subs"));
 }
 
 async function handlePostSubs(request, env) {
-  const body = await readPagesJsonObject(request);
+  const body = await readPagesJsonObject(request, "subs");
   await env.KV.put(KV_KEY_SUBS, JSON.stringify(body));
   subscriptions.clearAggregateCache();
   return pagesJsonResponse({ ok: true });
@@ -40,11 +40,11 @@ async function handlePostSubs(request, env) {
 
 async function handleGetApis(env) {
   const data = await env.KV.get(KV_KEY_APIS, "json");
-  return pagesJsonResponse(normalizeKvData(data));
+  return pagesJsonResponse(normalizeKvData(data, "apis"));
 }
 
 async function handlePostApis(request, env) {
-  const body = await readPagesJsonObject(request);
+  const body = await readPagesJsonObject(request, "apis");
   await env.KV.put(KV_KEY_APIS, JSON.stringify(body));
   subscriptions.clearAggregateCache();
   return pagesJsonResponse({ ok: true });

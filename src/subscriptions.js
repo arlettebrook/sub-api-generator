@@ -6,6 +6,7 @@ import {
   KV_KEY_SUBS,
   normalizeBlacklist,
   normalizeKvData,
+  normalizeSourceKey,
 } from "./config.js";
 import { textResponse, withSecurityHeaders } from "./http.js";
 
@@ -172,14 +173,6 @@ function enabledEntries(config) {
   });
 }
 
-function normalizeSelectedSourceKey(type, key) {
-  const value = String(key || "").trim();
-  if (type === "subs") {
-    return value.replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
-  }
-  return value.replace(/\/+$/, "").toLowerCase();
-}
-
 export async function handleRoot(env, sourceSelection) {
   try {
     const cacheKey = Array.isArray(sourceSelection)
@@ -207,14 +200,14 @@ export async function handleRoot(env, sourceSelection) {
 
     const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
     const selectedKeys = selected
-      ? new Set(selected.map((source) => `${source?.type}:${normalizeSelectedSourceKey(source?.type, source?.key)}`))
+      ? new Set(selected.map((source) => `${source?.type}:${normalizeSourceKey(source?.type, source?.key)}`))
       : null;
     const selectedEntries = (config, type) => {
       const entries = selectedKeys === null ? enabledEntries(config) : Object.entries(config || {});
       return entries.filter(([key, entry]) => {
         if (selectedKeys === null) return entry === true || (isPlainObject(entry) && entry.enabled === true);
         // Explicit selections on a custom API are independent from UUID source toggles.
-        return selectedKeys.has(`${type}:${normalizeSelectedSourceKey(type, key)}`)
+        return selectedKeys.has(`${type}:${normalizeSourceKey(type, key)}`)
           && (typeof entry === "boolean" || isPlainObject(entry));
       });
     };

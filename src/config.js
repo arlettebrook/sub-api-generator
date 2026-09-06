@@ -22,21 +22,35 @@ export function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function normalizeKvData(data) {
+export function normalizeKvData(data, sourceType) {
   if (!isPlainObject(data)) return {};
 
   const normalized = {};
   for (const [key, value] of Object.entries(data)) {
+    const normalizedKey = sourceType ? normalizeSourceKey(sourceType, key) : key;
+    if (!normalizedKey) continue;
     if (typeof value === "boolean") {
-      normalized[key] = { enabled: value, remark: "" };
+      normalized[normalizedKey] = { enabled: value, remark: "" };
     } else if (isPlainObject(value)) {
-      normalized[key] = {
+      normalized[normalizedKey] = {
         enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",
       };
     }
   }
   return normalized;
+}
+
+export function normalizeSourceKey(type, key) {
+  const value = String(key || "").trim();
+  if (type === "subs") {
+    return value.replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+  }
+  if (type === "apis") {
+    const match = value.match(/^(https?):\/\/([^/]+)(.*)$/i);
+    if (match) return `${match[1].toLowerCase()}://${match[2].toLowerCase()}${match[3]}`;
+  }
+  return value;
 }
 
 export function normalizeBlacklist(data) {
@@ -90,7 +104,7 @@ export function getRuntimeConfig(env) {
   return { uuid, password };
 }
 
-export function validateConfigPayload(body) {
+export function validateConfigPayload(body, sourceType) {
   if (!isPlainObject(body)) {
     throw new Error("配置必须是 JSON 对象");
   }
@@ -102,17 +116,21 @@ export function validateConfigPayload(body) {
 
   const normalized = {};
   for (const [key, value] of entries) {
-    if (!key.trim() || key.length > MAX_CONFIG_KEY_LENGTH) {
+    const normalizedKey = sourceType ? normalizeSourceKey(sourceType, key) : key;
+    if (!normalizedKey || normalizedKey.length > MAX_CONFIG_KEY_LENGTH) {
       throw new Error("配置键为空或过长");
     }
+    if (normalized[normalizedKey]) {
+      throw new Error(`配置键重复: ${key}`);
+    }
     if (typeof value === "boolean") {
-      normalized[key] = { enabled: value, remark: "" };
+      normalized[normalizedKey] = { enabled: value, remark: "" };
       continue;
     }
     if (!isPlainObject(value)) {
       throw new Error(`配置项无效: ${key}`);
     }
-    normalized[key] = {
+    normalized[normalizedKey] = {
       enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
     };
@@ -149,7 +167,7 @@ export function validateApiPathPayload(body) {
       if (!isPlainObject(source) || !["subs", "apis"].includes(source.type) || typeof source.key !== "string") {
         throw new Error(`数据源配置无效: ${rawPath}`);
       }
-      const key = source.key.trim();
+      const key = normalizeSourceKey(source.type, source.key);
       if (!key || key.length > MAX_CONFIG_KEY_LENGTH) throw new Error(`数据源配置无效: ${rawPath}`);
       if (!normalizedSources.some((item) => item.type === source.type && item.key === key)) {
         normalizedSources.push({ type: source.type, key });
@@ -181,7 +199,7 @@ export function normalizeCustomApiData(data) {
         sourceMode,
         sources: sourceMode === SOURCE_MODE_SELECTED && Array.isArray(value.sources)
           ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis"].includes(source.type) && typeof source.key === "string")
-              .map((source) => ({ type: source.type, key: source.key }))
+              .map((source) => ({ type: source.type, key: normalizeSourceKey(source.type, source.key) }))
           : [],
       };
     }
@@ -193,9 +211,9 @@ export function isAllowedApiPath(path) {
   return API_PATH_REGEX.test(path) && !RESERVED_API_PATHS.has(path.toLowerCase());
 }
 
-export async function readJsonObject(request) {
+export async function readJsonObject(request, sourceType) {
   try {
-    return validateConfigPayload(await request.json());
+    return validateConfigPayload(await request.json(), sourceType);
   } catch (error) {
     throw new Error(`请求 JSON 无效: ${error.message}`);
   }

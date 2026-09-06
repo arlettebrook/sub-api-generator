@@ -590,8 +590,18 @@ function sourceEntries() {
   ];
 }
 
+function normalizeSourceKeyClient(type, key) {
+  const value = String(key || '').trim();
+  if (type === 'subs') return value.replace(/^https?:\\\/\\\//i, '').replace(/\\\/+$/, '').toLowerCase();
+  if (type === 'apis') {
+    const match = value.match(/^(https?):\\\/\\\/([^/]+)(.*)$/i);
+    if (match) return match[1].toLowerCase() + '://' + match[2].toLowerCase() + match[3];
+  }
+  return value;
+}
+
 function sourcePicker(selectedSources = [], title = '选择数据源', sourceMode = 'selected') {
-  const selected = new Set(selectedSources.map((source) => source.type + ':' + source.key));
+  const selected = new Set(selectedSources.map((source) => source.type + ':' + normalizeSourceKeyClient(source.type, source.key)));
   const picker = document.createElement('div');
   picker.className = 'source-picker';
   picker.dataset.sourceMode = sourceMode;
@@ -648,7 +658,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
     checkbox.type = 'checkbox';
     checkbox.dataset.sourceType = source.type;
     checkbox.dataset.sourceKey = source.key;
-    checkbox.checked = selected.has(source.type + ':' + source.key);
+    checkbox.checked = selected.has(source.type + ':' + normalizeSourceKeyClient(source.type, source.key));
     label.append(checkbox, document.createTextNode(source.label));
     options.appendChild(label);
   });

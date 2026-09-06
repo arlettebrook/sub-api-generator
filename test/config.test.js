@@ -4,6 +4,7 @@ import {
   getRuntimeConfig,
   normalizeBlacklist,
   normalizeKvData,
+  normalizeSourceKey,
   readJsonObject,
   validateApiPathPayload,
   validateConfigPayload,
@@ -41,6 +42,38 @@ test("normalizes blacklist entries and falls back to defaults", () => {
   assert.deepEqual(validateBlacklistPayload([" foo ", "FOO", "bar"]), ["foo", "bar"]);
   assert.throws(() => validateBlacklistPayload({}), /字符串数组/);
   assert.throws(() => validateBlacklistPayload([""]), /非空字符串/);
+});
+
+test("normalizes source identifiers at the configuration boundary", () => {
+  assert.equal(normalizeSourceKey("subs", " HTTPS://E.YE.GS/// "), "e.ye.gs");
+  assert.equal(normalizeSourceKey("apis", " HTTPS://API.Example.COM/v1 "), "https://api.example.com/v1");
+  assert.deepEqual(validateApiPathPayload({
+    "source-test": {
+      enabled: true,
+      sourceMode: "selected",
+      sources: [
+        { type: "subs", key: "https://E.YE.GS/" },
+        { type: "subs", key: "e.ye.gs" },
+        { type: "apis", key: "HTTPS://API.Example.COM/v1" },
+      ],
+    },
+  })["source-test"].sources, [
+    { type: "subs", key: "e.ye.gs" },
+    { type: "apis", key: "https://api.example.com/v1" },
+  ]);
+});
+
+test("normalizes subscription and API source configuration keys", () => {
+  assert.deepEqual(normalizeKvData({ "https://E.YE.GS/": true }, "subs"), {
+    "e.ye.gs": { enabled: true, remark: "" },
+  });
+  assert.deepEqual(normalizeKvData({ "HTTPS://API.Example.COM/v1": true }, "apis"), {
+    "https://api.example.com/v1": { enabled: true, remark: "" },
+  });
+  assert.throws(() => validateConfigPayload({
+    "e.ye.gs": true,
+    "https://E.YE.GS/": true,
+  }, "subs"), /配置键重复/);
 });
 
 test("validates custom API access paths", () => {
