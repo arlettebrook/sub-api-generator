@@ -317,6 +317,7 @@ export async function handleRoot(env, sourceSelection) {
         "content-type": "text/plain; charset=utf-8",
         "cache-control": "no-store",
       };
+      if (cached.nodeSources?.length) headers["x-node-sources"] = encodeURIComponent(JSON.stringify(cached.nodeSources));
       return new Response(cached.output, {
         headers: withSecurityHeaders(headers),
       });
@@ -400,17 +401,24 @@ export async function handleRoot(env, sourceSelection) {
     ]);
 
     const preferred = [];
+    const nodeSources = [];
     const sourceErrors = [];
     if (selected && selected.length === 0) {
       sourceErrors.push({ type: "config", key: "", message: "未选择任何数据源" });
     }
     for (const result of subsResults) {
-      if (result.status === "fulfilled") preferred.push(...result.value.values);
+      if (result.status === "fulfilled") {
+        preferred.push(...result.value.values);
+        result.value.values.forEach((value) => nodeSources.push({ value, type: "subs", key: result.value.key }));
+      }
       else sourceErrors.push({ type: "subs", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
     const extra = [];
     for (const result of apiResults) {
-      if (result.status === "fulfilled") extra.push(...result.value.values);
+      if (result.status === "fulfilled") {
+        extra.push(...result.value.values);
+        result.value.values.forEach((value) => nodeSources.push({ value, type: "apis", key: result.value.key }));
+      }
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
 
@@ -418,7 +426,7 @@ export async function handleRoot(env, sourceSelection) {
     const output = [...filtered, ...extra].join("\n");
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
-      aggregateCache.set(cacheKey, { output, sourceErrors, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
+      aggregateCache.set(cacheKey, { output, sourceErrors, nodeSources, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
       pruneAggregateCache();
     } else {
       aggregateCache.delete(cacheKey);
@@ -427,6 +435,7 @@ export async function handleRoot(env, sourceSelection) {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
     };
+    if (nodeSources.length) headers["x-node-sources"] = encodeURIComponent(JSON.stringify(nodeSources.slice(0, 1000)));
     return new Response(output, {
       headers: withSecurityHeaders(headers),
     });

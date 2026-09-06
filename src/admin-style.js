@@ -1901,6 +1901,23 @@ export const adminStyle = `
     font-size: 14px;
   }
 
+  .nodes-empty { display: grid; gap: 8px; justify-items: center; }
+  .nodes-empty strong { color: var(--text-primary); font-size: 15px; }
+  .nodes-empty span { color: var(--text-secondary); font-size: 13px; }
+  .nodes-empty button { margin-top: 4px; }
+  .nodes-empty-link { text-decoration: none; }
+
+  .node-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .node-source { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-size: 10px; }
+  .node-copy { height: 28px; padding: 0 8px; font-size: 11px; opacity: 0; }
+  .node-item:hover .node-copy, .node-item:focus-within .node-copy { opacity: 1; }
+  .node-item:focus-within { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-light); }
+
+  .list-search { flex: 1 1 220px; min-width: 160px; }
+  .list-sort { min-width: 140px; }
+  .batch-button { height: 34px; padding: 0 10px; font-size: 12px; }
+  .source-select { flex: 0 0 auto !important; min-width: 16px !important; width: 16px; height: 16px; }
+
   .nodes-skeleton {
     display: grid;
     gap: 12px;
@@ -2111,6 +2128,9 @@ export const adminStyle = `
     .add-row button {
       flex: 1 1 100%;
     }
+    .add-field { max-width: none; width: 100%; flex-basis: 100%; }
+    .list-search, .list-sort, .batch-button { width: 100%; }
+    .node-copy { opacity: 1; }
     .form-grid {
       grid-template-columns: 1fr;
     }

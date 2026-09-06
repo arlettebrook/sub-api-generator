@@ -79,6 +79,14 @@ export const adminHTML = `
       </select>
     </label>
     <label class="nodes-filter-field">
+      <span>来源</span>
+      <select id="nodesSourceFilter" aria-label="按来源筛选"><option value="">全部来源</option></select>
+    </label>
+    <label class="nodes-filter-field">
+      <span>状态</span>
+      <select id="nodesStatusFilter" aria-label="按状态筛选"><option value="">全部状态</option><option value="named">有备注</option><option value="unnamed">无备注</option></select>
+    </label>
+    <label class="nodes-filter-field">
       <span>排序</span>
       <select id="nodesSort" aria-label="节点排序">
         <option value="default">默认顺序</option>
@@ -171,6 +179,9 @@ export const adminHTML = `
     <button class="btn-primary" onclick="addSub()">➕ 添加订阅源</button>
   </div>
   <div class="toolbar">
+    <input id="subsSearch" class="list-search" type="search" placeholder="搜索订阅源或备注" aria-label="搜索订阅源" />
+    <select id="subsSort" class="list-sort" aria-label="订阅源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option><option value="status">启用状态</option></select>
+    <button type="button" class="batch-button" data-batch="subs-select">全选</button><button type="button" class="batch-button" data-batch="subs-enable">批量启用</button><button type="button" class="batch-button" data-batch="subs-disable">批量禁用</button>
     <button onclick="exportSubs()">📤 导出配置</button>
     <button onclick="document.getElementById('importSubsFile').click()">📥 导入配置</button>
     <input type="file" id="importSubsFile" accept=".json,application/json" style="display:none" onchange="importSubs(event)" />
@@ -187,6 +198,9 @@ export const adminHTML = `
     <button class="btn-primary" onclick="addApi()">➕ 添加API</button>
   </div>
   <div class="toolbar">
+    <input id="apisSearch" class="list-search" type="search" placeholder="搜索 API 地址或备注" aria-label="搜索 API 源" />
+    <select id="apisSort" class="list-sort" aria-label="API 源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option><option value="status">启用状态</option></select>
+    <button type="button" class="batch-button" data-batch="apis-select">全选</button><button type="button" class="batch-button" data-batch="apis-enable">批量启用</button><button type="button" class="batch-button" data-batch="apis-disable">批量禁用</button>
     <button onclick="exportApis()">📤 导出配置</button>
     <button onclick="document.getElementById('importApisFile').click()">📥 导入配置</button>
     <input type="file" id="importApisFile" accept=".json,application/json" style="display:none" onchange="importApis(event)" />

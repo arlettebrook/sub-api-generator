@@ -3,7 +3,7 @@ export const adminClientScript = `
 // 缓存DOM元素，避免重复查询提升性能
 const $ = (id) => document.getElementById(id);
 let nodesContainer, paginationEl, nodesCountEl;
-let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl;
+let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl, nodesSourceFilterEl, nodesStatusFilterEl;
 
 // 地区匹配映射表（替代长串if-else，匹配效率提升60%+）
 const regionMap = [
@@ -117,6 +117,8 @@ function setInputError(input, message) {
   input.setAttribute('aria-invalid', message ? 'true' : 'false');
   input.classList.toggle('has-error', Boolean(message));
 }
+
+function clearInputError(input) { setInputError(input, ''); }
 
 let subsSavePending = 0;
 let apisSavePending = 0;
@@ -443,9 +445,14 @@ function getVisibleNodes() {
   const query = (nodesSearchEl?.value || '').trim().toLowerCase();
   const region = nodesRegionFilterEl?.value || '';
   const sort = nodesSortEl?.value || 'default';
+  const source = nodesSourceFilterEl?.value || '';
+  const status = nodesStatusFilterEl?.value || '';
   const visible = currentNodes.filter((node) => {
     const text = (String(node.host || '') + ' ' + String(node.remark || '')).toLowerCase();
-    return (!query || text.includes(query)) && (!region || getNodeRegion(node) === region);
+    const named = node.remark && node.remark !== '未命名';
+    return (!query || text.includes(query)) && (!region || getNodeRegion(node) === region)
+      && (!source || (node.sourceType + ':' + node.sourceKey) === source)
+      && (!status || (status === 'named' ? named : !named));
   });
   if (sort !== 'default') {
     const [field, direction] = sort.split('-');
@@ -466,6 +473,18 @@ function updateRegionOptions() {
   if (regions.includes(selected)) nodesRegionFilterEl.value = selected;
 }
 
+function updateNodeFilterOptions() {
+  if (!nodesSourceFilterEl) return;
+  const selected = nodesSourceFilterEl.value;
+  const sources = [...new Map(currentNodes.filter((node) => node.sourceKey).map((node) => [node.sourceType + ':' + node.sourceKey, node])).values()];
+  nodesSourceFilterEl.innerHTML = '<option value="">全部来源</option>' + sources.map((node) => {
+    const value = node.sourceType + ':' + node.sourceKey;
+    const label = (node.sourceType === 'apis' ? 'API 源 · ' : '订阅源 · ') + node.sourceKey;
+    return '<option value="' + value.replace(/"/g, '&quot;') + '">' + label.replace(/</g, '&lt;') + '</option>';
+  }).join('');
+  if (sources.some((node) => node.sourceType + ':' + node.sourceKey === selected)) nodesSourceFilterEl.value = selected;
+}
+
 function renderNodeView() {
   currentPage = 1;
   const visible = getVisibleNodes();
@@ -475,7 +494,7 @@ function renderNodeView() {
       ? \`共 \${currentNodes.length} 个节点\`
       : \`显示 \${visible.length} / 共 \${currentNodes.length} 个节点\`;
   }
-  if (nodesFilterResetEl) nodesFilterResetEl.disabled = !((nodesSearchEl?.value || '').trim() || nodesRegionFilterEl?.value || nodesSortEl?.value !== 'default');
+  if (nodesFilterResetEl) nodesFilterResetEl.disabled = !((nodesSearchEl?.value || '').trim() || nodesRegionFilterEl?.value || nodesSourceFilterEl?.value || nodesStatusFilterEl?.value || nodesSortEl?.value !== 'default');
 }
 
 async function getPreviewApiUrl(signal) {
@@ -504,6 +523,7 @@ async function fetchNodes(emptyRetry = 0) {
     const nodeRes = await fetch(apiUrl, { signal: controller.signal, cache: 'no-store' });
     if (!nodeRes.ok) throw new Error('请求失败: ' + nodeRes.status);
     const sourceErrors = parseSourceErrors(nodeRes.headers.get('x-source-errors'));
+    const nodeSources = parseSourceErrors(nodeRes.headers.get('x-node-sources'));
     renderPreviewSourceErrors(sourceErrors);
     const text = await nodeRes.text();
     
@@ -524,8 +544,14 @@ async function fetchNodes(emptyRetry = 0) {
       }
     }
     
+    const sourceMap = new Map(nodeSources.map((item) => [item.value, item]));
+    nodes.forEach((node) => {
+      const source = sourceMap.get(node.host + (node.remark !== '未命名' ? '#' + node.remark : ''));
+      if (source) { node.sourceType = source.type; node.sourceKey = source.key; }
+    });
     currentNodes = nodes;
     updateRegionOptions();
+    updateNodeFilterOptions();
     currentPage = 1;
     if (nodes.length === 0 && sourceErrors.length === 0 && emptyRetry < emptyNodeRetryDelays.length) {
       nodesContainer.innerHTML = nodeSkeletonMarkup(4) + '<div class="nodes-loading retry-loading">暂未获取到节点，正在重试...</div>';
@@ -558,7 +584,8 @@ async function fetchNodes(emptyRetry = 0) {
 
 function renderNodes(nodes) {
   if (nodes.length === 0) {
-    nodesContainer.innerHTML = '<div class="nodes-empty">暂无节点数据</div>';
+    const filtered = currentNodes.length > 0;
+    nodesContainer.innerHTML = '<div class="nodes-empty"><strong>' + (filtered ? '暂无匹配节点' : '暂无节点数据') + '</strong><span>' + (filtered ? '可以清除筛选后查看全部节点。' : '请先添加或启用数据源，然后重新加载。') + '</span>' + (filtered ? '<button type="button" class="btn-outline" onclick="nodesFilterResetEl?.click()">清除筛选</button>' : '<a class="btn-outline nodes-empty-link" href="/admin/manage">管理数据源</a>') + '<button type="button" class="btn-outline" onclick="fetchNodes()">重新加载</button></div>';
     return;
   }
   
@@ -576,6 +603,8 @@ function renderNodes(nodes) {
     const node = pageData[i];
     const item = document.createElement('div');
     item.className = 'node-item';
+    item.tabIndex = 0;
+    item.setAttribute('role', 'article');
     
     const hostEl = document.createElement('div');
     hostEl.className = 'node-host';
@@ -589,9 +618,23 @@ function renderNodes(nodes) {
     // 匹配地区样式
     const regionClass = getRegionClass(node.remark);
     if (regionClass) tagEl.classList.add(regionClass);
+
+    const sourceEl = document.createElement('small');
+    sourceEl.className = 'node-source';
+    sourceEl.textContent = node.sourceKey ? (node.sourceType === 'apis' ? 'API 源' : '订阅源') : '来源未知';
+    sourceEl.title = node.sourceKey || '来源未知';
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button'; copyBtn.className = 'node-copy'; copyBtn.textContent = '复制';
+    copyBtn.title = '复制此节点';
+    copyBtn.setAttribute('aria-label', '复制节点 ' + node.host);
+    copyBtn.onclick = async () => {
+      try { await navigator.clipboard.writeText(node.host + (node.remark !== '未命名' ? '#' + node.remark : '')); copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制'; }, 1200); }
+      catch (error) { showToast('复制失败：' + error.message, 'error'); }
+    };
+    const meta = document.createElement('div'); meta.className = 'node-meta'; meta.append(tagEl, sourceEl, copyBtn);
     
     item.appendChild(hostEl);
-    item.appendChild(tagEl);
+    item.appendChild(meta);
     fragment.appendChild(item);
   }
   
@@ -1445,9 +1488,15 @@ async function loadSubs() {
 function renderSubs() {
   const el = $('subsList');
   el.innerHTML = '';
-  Object.entries(subs).forEach(([host, entry]) => {
+  const query = ($('subsSearch')?.value || '').trim().toLowerCase();
+  const sort = $('subsSort')?.value || 'default';
+  let entries = Object.entries(subs).filter(([host, entry]) => !query || (host + ' ' + (entry.remark || '')).toLowerCase().includes(query));
+  if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
+  if (sort === 'status') entries.sort((a, b) => Number(b[1].enabled) - Number(a[1].enabled));
+  entries.forEach(([host, entry]) => {
     const row = document.createElement('div');
     row.className = 'row';
+    const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'source-select'; select.checked = false; select.dataset.key = host; select.setAttribute('aria-label', '选择订阅源 ' + host);
 
     const remarkInput = document.createElement('input');
     remarkInput.className = 'remark-input';
@@ -1503,13 +1552,24 @@ function renderSubs() {
       void queueSubsSave();
     };
 
-    row.appendChild(remarkInput);
+    row.appendChild(select); row.appendChild(remarkInput);
     row.appendChild(hostInput);
     row.appendChild(statusBtn);
     row.appendChild(health);
     row.appendChild(delBtn);
     el.appendChild(row);
   });
+}
+
+function applySourceBatch(type, action) {
+  const data = type === 'subs' ? subs : apis;
+  const list = $(type === 'subs' ? 'subsList' : 'apisList');
+  const selected = [...list.querySelectorAll('.source-select:checked')].map((input) => input.dataset.key);
+  if (action === 'select') { list.querySelectorAll('.source-select').forEach((input) => { input.checked = true; }); return; }
+  if (!selected.length) { showToast('请先选择数据源', 'warning'); return; }
+  selected.forEach((key) => { if (data[key]) data[key].enabled = action === 'enable'; });
+  if (type === 'subs') { renderSubs(); void queueSubsSave(); } else { renderApis(); void queueApisSave(); }
+  showToast('已更新 ' + selected.length + ' 个数据源', 'success');
 }
 
 function addSub() {
@@ -1631,9 +1691,15 @@ async function loadApis() {
 function renderApis() {
   const el = $('apisList');
   el.innerHTML = '';
-  Object.entries(apis).forEach(([url, entry]) => {
+  const query = ($('apisSearch')?.value || '').trim().toLowerCase();
+  const sort = $('apisSort')?.value || 'default';
+  let entries = Object.entries(apis).filter(([url, entry]) => !query || (url + ' ' + (entry.remark || '')).toLowerCase().includes(query));
+  if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
+  if (sort === 'status') entries.sort((a, b) => Number(b[1].enabled) - Number(a[1].enabled));
+  entries.forEach(([url, entry]) => {
     const row = document.createElement('div');
     row.className = 'row';
+    const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'source-select'; select.dataset.key = url; select.setAttribute('aria-label', '选择 API 源 ' + url);
 
     const remarkInput = document.createElement('input');
     remarkInput.className = 'remark-input';
@@ -1689,7 +1755,7 @@ function renderApis() {
       void queueApisSave();
     };
 
-    row.appendChild(remarkInput);
+    row.appendChild(select); row.appendChild(remarkInput);
     row.appendChild(urlInput);
     row.appendChild(statusBtn);
     row.appendChild(health);
@@ -2077,12 +2143,31 @@ window.addEventListener('DOMContentLoaded', () => {
   nodesRegionFilterEl = $('nodesRegionFilter');
   nodesSortEl = $('nodesSort');
   nodesFilterResetEl = $('nodesFilterReset');
-  [nodesSearchEl, nodesRegionFilterEl, nodesSortEl].forEach((element) => element?.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', renderNodeView));
+  nodesSourceFilterEl = $('nodesSourceFilter');
+  nodesStatusFilterEl = $('nodesStatusFilter');
+  [nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesSourceFilterEl, nodesStatusFilterEl].forEach((element) => element?.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', renderNodeView));
   nodesFilterResetEl?.addEventListener('click', () => {
     if (nodesSearchEl) nodesSearchEl.value = '';
     if (nodesRegionFilterEl) nodesRegionFilterEl.value = '';
     if (nodesSortEl) nodesSortEl.value = 'default';
+    if (nodesSourceFilterEl) nodesSourceFilterEl.value = '';
+    if (nodesStatusFilterEl) nodesStatusFilterEl.value = '';
     renderNodeView();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+      event.preventDefault();
+      nodesSearchEl?.focus();
+    }
+    if (event.key === 'Escape' && nodesSearchEl?.value && document.activeElement === nodesSearchEl) {
+      nodesSearchEl.value = '';
+      renderNodeView();
+    }
+  });
+  ['subs', 'apis'].forEach((type) => {
+    $(type + 'Search')?.addEventListener('input', type === 'subs' ? renderSubs : renderApis);
+    $(type + 'Sort')?.addEventListener('change', type === 'subs' ? renderSubs : renderApis);
+    document.querySelectorAll('[data-batch^="' + type + '-"]').forEach((button) => button.addEventListener('click', () => applySourceBatch(type, button.dataset.batch.replace(type + '-', ''))));
   });
 
   $('themeSwitch')?.addEventListener('click', toggleTheme);
