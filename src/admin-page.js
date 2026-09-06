@@ -151,12 +151,12 @@ export const adminHTML = `
       <div class="setting-block-heading">
         <div class="setting-copy">
           <strong>备注过滤规则</strong>
-          <small>清理节点备注中的分隔符、emoji、国旗、商标符号或自定义内容。“符号”规则会自动处理这类符号，无需逐个添加。</small>
+          <small>备注过滤规则用于分割并截断节点备注：匹配到规则后，只保留规则前面的内容。例如添加 <code>|</code> 或 <code>【</code>，会在对应分隔符处截断；“空格”表示从第一个空白字符处截断，“符号”会移除 emoji、国旗和商标符号。</small>
         </div>
         <span class="section-summary" id="filterRulesSummary">0 项</span>
       </div>
       <div class="blacklist-add-row">
-        <input id="newFilterRule" type="text" maxlength="128" placeholder="例如：🐲 或 ™️" autocomplete="off" />
+        <input id="newFilterRule" type="text" maxlength="128" placeholder="例如：| 或 【" autocomplete="off" />
         <button class="btn-primary" id="addFilterRuleButton" type="button" onclick="addFilterRule()">➕ 添加</button>
       </div>
       <div id="filterRulesList" class="blacklist-list"></div>

@@ -2,14 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { clearAggregateCache, fetchPreferredSubs, filterPreferredIps, handleRoot, parsePreferredIpLine } from "../src/subscriptions.js";
 
-test("filters invalid, blacklisted, and duplicate nodes", () => {
+test("filters invalid and duplicate nodes", () => {
   assert.deepEqual(filterPreferredIps([
     "1.2.3.4:443#good",
     "1.2.3.4:443#good",
     "5.6.7.8:8443#telegram",
     "not-a-node",
     "9.9.9.9:443#good @extra",
-  ]), ["1.2.3.4:443#good", "9.9.9.9:443#good"]);
+  ], ["telegram"], null, ["空格"]), ["1.2.3.4:443#good", "9.9.9.9:443#good"]);
 });
 
 test("parses Base64 responses from preferred subscription providers", async () => {
@@ -32,23 +32,23 @@ test("parses Base64 responses from preferred subscription providers", async () =
   }
 });
 
-test("removes emoji and trademark symbols attached to preferred remarks", async () => {
+test("removes emoji and trademark symbols when the symbol rule is configured", async () => {
   const originalFetch = globalThis.fetch;
   const remark = encodeURIComponent("HK🐲™️");
   const source = `vless://00000000-0000-4000-8000-000000000000@8.218.36.133:9010?security=tls&sni=example.com#${remark}`;
   globalThis.fetch = async () => new Response(btoa(source), { status: 200 });
   try {
-    assert.deepEqual(await fetchPreferredSubs("e.ye.gs"), ["8.218.36.133:9010#HK"]);
+    assert.deepEqual(await fetchPreferredSubs("e.ye.gs", ["符号"]), ["8.218.36.133:9010#HK"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("applies all built-in remark cleanup rules by default", () => {
+test("applies configured remark cleanup rules", () => {
   const base = "vless://00000000-0000-4000-8000-000000000000@8.218.36.133:9010?security=tls&sni=example.com#";
-  assert.equal(parsePreferredIpLine(`${base}HK@source`), "8.218.36.133:9010#HK");
-  assert.equal(parsePreferredIpLine(`${base}HK加入群组`), "8.218.36.133:9010#HK");
-  assert.equal(parsePreferredIpLine(`${base}HKtelegram`), "8.218.36.133:9010#HK");
+  assert.equal(parsePreferredIpLine(`${base}HK@source`, ["@"]), "8.218.36.133:9010#HK");
+  assert.equal(parsePreferredIpLine(`${base}HK加入群组`, ["加入"]), "8.218.36.133:9010#HK");
+  assert.equal(parsePreferredIpLine(`${base}HKtelegram`, ["telegram"]), "8.218.36.133:9010#HK");
 });
 
 test("decodes Base64 responses from API sources", async () => {

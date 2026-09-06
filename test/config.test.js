@@ -37,9 +37,9 @@ test("validates and normalizes configuration payloads", () => {
   assert.throws(() => validateConfigPayload({ bad: null }), /配置项无效/);
 });
 
-test("normalizes blacklist entries and falls back to defaults", () => {
+test("normalizes blacklist entries and uses an empty default", () => {
   assert.deepEqual(normalizeBlacklist([" foo ", "FOO", "", 1, "bar"]), ["foo", "bar"]);
-  assert.ok(normalizeBlacklist(null).length > 0);
+  assert.deepEqual(normalizeBlacklist(null), []);
   assert.deepEqual(validateBlacklistPayload([" foo ", "FOO", "bar"]), ["foo", "bar"]);
   assert.throws(() => validateBlacklistPayload({}), /字符串数组/);
   assert.throws(() => validateBlacklistPayload([""]), /非空字符串/);
@@ -48,10 +48,7 @@ test("normalizes blacklist entries and falls back to defaults", () => {
 test("normalizes configurable remark filter rules", () => {
   assert.deepEqual(normalizeFilterRules([" 🐲 ", "🐲", "", 1, "-VIP"]), ["🐲", "-VIP"]);
   const defaults = normalizeFilterRules(null);
-  assert.ok(defaults.includes("符号"));
-  assert.ok(defaults.includes("@"));
-  assert.ok(defaults.includes("加入"));
-  assert.ok(defaults.includes("telegram"));
+  assert.deepEqual(defaults, []);
 });
 
 test("normalizes source identifiers at the configuration boundary", () => {

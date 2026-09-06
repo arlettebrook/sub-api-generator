@@ -207,7 +207,7 @@ test("reads and updates blacklist configuration", async () => {
     headers: authHeaders,
   }), runtime);
   assert.equal(defaultResponse.status, 200);
-  assert.ok((await defaultResponse.json()).includes("官网"));
+  assert.deepEqual(await defaultResponse.json(), []);
 
   const saveResponse = await worker.fetch(new Request("https://example.test/api/blacklist", {
     method: "POST",
@@ -232,7 +232,7 @@ test("reads and updates remark filter rules", async () => {
     headers: authHeaders,
   }), runtime);
   assert.equal(defaultResponse.status, 200);
-  assert.ok((await defaultResponse.json()).includes("符号"));
+  assert.deepEqual(await defaultResponse.json(), []);
 
   const saveResponse = await worker.fetch(new Request("https://example.test/api/filter-rules", {
     method: "POST",

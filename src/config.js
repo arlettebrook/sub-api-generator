@@ -12,12 +12,8 @@ export const MAX_FILTER_RULE_LENGTH = 128;
 export const SOURCE_MODE_ALL_ENABLED = "all-enabled";
 export const SOURCE_MODE_SELECTED = "selected";
 
-export const DEFAULT_BLACKLIST = [
-  "问题", "每日", "重置", "官网", "群组", "流量", "到期", "客服", "kefu", "加入",
-  "t.me", "免费", "telegram", "channel", "premium", "nodes", "进群", "获取", "频道",
-  "官方", "共享", "提供", "联系", "tg", "云",
-];
-export const DEFAULT_FILTER_RULES = ["空格", "【", "|", "符号", "@", "加入", "telegram"];
+export const DEFAULT_BLACKLIST = [];
+export const DEFAULT_FILTER_RULES = [];
 
 const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);

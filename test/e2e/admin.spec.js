@@ -58,17 +58,13 @@ test("edits and saves the blacklist from settings", async ({ page }, testInfo) =
   await page.locator('a[data-nav-page="settings"]').click();
   await expect(page).toHaveURL(/\/admin\/settings$/);
   await expect(page.locator("#blacklistSettings")).toBeVisible();
-  await expect(page.locator("#blacklistList .blacklist-row")).not.toHaveCount(0);
-
-  const firstInput = page.locator("#blacklistList .blacklist-row input").first();
-  const originalWord = await firstInput.inputValue();
-  await firstInput.fill(originalWord + "-编辑");
-  await expect(page.locator("#blacklistSaveStatus")).toHaveText("有未保存的修改");
-
   const addedWord = "e2e-blacklist-" + Date.now().toString(36) + "-" + testInfo.project.name;
   await page.locator("#newBlacklistWord").fill(addedWord);
   await page.locator("#addBlacklistButton").click();
   await expect(page.locator("#blacklistList input").last()).toHaveValue(addedWord);
+  await expect(page.locator("#blacklistSaveStatus")).toHaveText("有未保存的修改");
+  await page.locator("#blacklistList input").last().fill(addedWord + "-编辑");
+  await expect(page.locator("#blacklistList input").last()).toHaveValue(addedWord + "-编辑");
   await page.locator("#blacklistList .blacklist-row").last().getByRole("button", { name: "删除" }).click();
   await page.locator("#saveBlacklistButton").click();
   await expect(page.locator("#blacklistSaveStatus")).toHaveText("配置已保存");
