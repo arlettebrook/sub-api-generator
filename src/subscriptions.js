@@ -21,6 +21,7 @@ const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
 const LINE_CLEAN_REGEX = /(\s*@.*|加入.*|telegram.*)$/i;
 const AGGREGATE_CACHE_TTL_MS = 15000;
+const AGGREGATE_CACHE_MAX_ENTRIES = 128;
 const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
 const sourceInflight = new Map();
@@ -207,6 +208,17 @@ function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklis
   });
 }
 
+function pruneAggregateCache(now = Date.now()) {
+  for (const [key, entry] of aggregateCache) {
+    if (entry.expiresAt <= now) aggregateCache.delete(key);
+  }
+  while (aggregateCache.size > AGGREGATE_CACHE_MAX_ENTRIES) {
+    const oldestKey = aggregateCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    aggregateCache.delete(oldestKey);
+  }
+}
+
 export async function handleRoot(env, sourceSelection) {
   try {
     const [subsConfig, apisConfig, blacklistConfig] = await Promise.all([
@@ -219,8 +231,12 @@ export async function handleRoot(env, sourceSelection) {
     }
 
     const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklistConfig);
+    pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
+      // Refresh insertion order so active entries are retained when the cache is full.
+      aggregateCache.delete(cacheKey);
+      aggregateCache.set(cacheKey, cached);
       const headers = {
         "content-type": "text/plain; charset=utf-8",
         "cache-control": "no-store",
@@ -285,6 +301,7 @@ export async function handleRoot(env, sourceSelection) {
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
       aggregateCache.set(cacheKey, { output, sourceErrors, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
+      pruneAggregateCache();
     } else {
       aggregateCache.delete(cacheKey);
     }

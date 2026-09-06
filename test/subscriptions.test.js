@@ -163,6 +163,41 @@ test("reuses aggregate cache when selected source order changes", async () => {
   }
 });
 
+test("bounds aggregate cache entries and evicts the least recently used selection", async () => {
+  const originalFetch = globalThis.fetch;
+  const apis = Object.fromEntries(Array.from({ length: 129 }, (_, index) => [
+    `https://api.example/${index}`,
+    { enabled: true },
+  ]));
+  const runtime = {
+    KV: {
+      async get(key) {
+        if (key === "subs") return {};
+        if (key === "apis") return apis;
+        if (key === "blacklist") return [];
+        return null;
+      },
+    },
+  };
+  let calls = 0;
+  globalThis.fetch = async (url) => {
+    calls += 1;
+    const index = Number(new URL(url).pathname.slice(1));
+    return new Response(`192.0.2.${(index % 254) + 1}:443#${index}`, { status: 200 });
+  };
+  try {
+    clearAggregateCache();
+    for (let index = 0; index < 129; index += 1) {
+      await handleRoot(runtime, [{ type: "apis", key: `https://api.example/${index}` }]);
+    }
+    await handleRoot(runtime, [{ type: "apis", key: "https://api.example/0" }]);
+    assert.equal(calls, 130);
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("retries an empty preferred subscription response", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#CN";
