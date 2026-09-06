@@ -90,6 +90,31 @@ export const adminHTML = `
       </div>
     </div>
   </dialog>
+  <dialog class="custom-api-dialog custom-api-edit-dialog" id="customApiEditDialog" aria-labelledby="customApiEditDialogTitle">
+    <div class="custom-api-dialog-head">
+      <h3 id="customApiEditDialogTitle">编辑优选 API</h3>
+      <button class="dialog-close" type="button" onclick="closeCustomApiEditDialog()" title="关闭" aria-label="关闭">×</button>
+    </div>
+    <div class="custom-api-create custom-api-edit-body">
+      <div class="form-grid">
+        <label class="form-field">
+          <span>访问路径</span>
+          <span class="path-input"><b>/</b><input id="editCustomApiPath" placeholder="例如 my-api" autocomplete="off" /></span>
+          <small id="editCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
+        </label>
+        <label class="form-field">
+          <span>备注</span>
+          <input id="editCustomApiRemark" placeholder="可选" autocomplete="off" />
+        </label>
+      </div>
+      <div class="custom-api-edit-url" id="editCustomApiUrl"></div>
+      <div id="editCustomApiSources"><span class="nodes-loading">正在加载数据源...</span></div>
+      <div class="create-actions">
+        <button class="btn-outline" type="button" onclick="closeCustomApiEditDialog()">取消</button>
+        <button class="btn-primary" type="button" id="saveCustomApiEditButton" onclick="saveCustomApiEdit()">💾 保存修改</button>
+      </div>
+    </div>
+  </dialog>
   <div class="toolbar custom-api-toolbar">
     <span class="save-status" id="customApiSaveStatus">配置已保存</span>
     <button class="btn-primary" type="button" id="saveCustomApisButton" onclick="saveCustomApis()">💾 保存配置</button>

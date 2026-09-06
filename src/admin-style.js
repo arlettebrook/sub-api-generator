@@ -662,17 +662,45 @@ export const adminStyle = `
   }
 
   .custom-api-row {
-    align-items: stretch;
+    align-items: center;
     padding: 16px;
     gap: 12px;
   }
 
   .custom-api-row-main {
     display: grid;
-    grid-template-columns: minmax(150px, 1fr) minmax(150px, 0.8fr) minmax(180px, 1.2fr);
-    align-items: end;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 1.1fr);
+    align-items: center;
     gap: 10px;
     width: 100%;
+  }
+
+  .custom-api-identity {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .custom-api-row-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .custom-api-row-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .custom-api-source-summary {
+    color: var(--text-tertiary);
+    font-size: 11px;
   }
 
   .form-field.compact {
@@ -680,7 +708,7 @@ export const adminStyle = `
   }
 
   .custom-api-url {
-    align-self: end;
+    align-self: center;
     min-width: 0;
     padding: 10px 12px;
     border: 1px solid var(--border-color);
@@ -694,9 +722,10 @@ export const adminStyle = `
 
   .custom-api-actions {
     display: flex;
-    align-items: end;
+    align-items: center;
     gap: 6px;
     flex-shrink: 0;
+    flex-wrap: wrap;
   }
 
   .custom-api-actions .del-btn {
@@ -714,6 +743,23 @@ export const adminStyle = `
   .custom-api-row .source-picker {
     flex: 1 1 100%;
     margin: 0;
+  }
+
+  .custom-api-edit-url {
+    min-width: 0;
+    margin-top: 12px;
+    padding: 9px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .custom-api-edit-dialog .source-picker {
+    margin-top: 16px;
   }
 
   .custom-api-empty {
@@ -773,24 +819,6 @@ export const adminStyle = `
 
   .source-option-name {
     min-width: 0;
-  }
-
-  .source-option-status {
-    flex-shrink: 0;
-    padding: 1px 6px;
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 600;
-  }
-
-  .source-option-status.enabled {
-    background: rgba(16, 185, 129, 0.12);
-    color: var(--success);
-  }
-
-  .source-option-status.disabled {
-    background: var(--danger-light);
-    color: var(--danger);
   }
 
   .source-action.active {
@@ -1021,6 +1049,13 @@ export const adminStyle = `
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 4px var(--accent-light);
     background: var(--bg-secondary);
+  }
+
+  /* 路径输入框由外层容器统一绘制焦点状态，避免出现双重边框和阴影。 */
+  .path-input input:focus {
+    border-color: transparent;
+    box-shadow: none;
+    background: transparent;
   }
 
   input::placeholder {

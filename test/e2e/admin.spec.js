@@ -25,10 +25,13 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#customApiDialog")).not.toBeVisible();
   await page.getByRole("button", { name: "新建优选 API" }).click();
   await expect(page.locator("#customApiDialog")).toBeVisible();
+  await expect.poll(() => page.locator("#newCustomApiPath").evaluate((input) => getComputedStyle(input).boxShadow)).toBe("none");
   await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(2);
   await expect(page.locator("#newCustomApiSources .source-group-title")).toHaveCount(2);
   await expect(page.locator("#newCustomApiSources .source-option").first()).not.toContainText("订阅源 ·");
   await expect(page.locator("#newCustomApiSources .source-option").last()).not.toContainText("API 源 ·");
+  await expect(page.locator("#newCustomApiSources")).not.toContainText("已启用");
+  await expect(page.locator("#newCustomApiSources")).not.toContainText("已禁用");
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(0);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "清空" }).click();
   await page.locator("#newCustomApiSources").getByRole("button", { name: "仅显示已选" }).click();
@@ -48,7 +51,13 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#customApiDialog")).not.toBeVisible();
   await expect(page.locator("#customApisList .row")).toHaveCount(initialApiCount + 1);
   await expect(page.locator("#customApiSaveStatus")).toHaveText("有未保存的修改");
-  await page.locator("#saveCustomApisButton").click();
+  await page.locator("#customApisList .custom-api-row").last().getByRole("button", { name: "✎ 编辑" }).click();
+  await expect(page.locator("#customApiEditDialog")).toBeVisible();
+  await expect(page.locator("#editCustomApiSources input[type=checkbox]")).toHaveCount(2);
+  await page.locator("#editCustomApiSources").getByRole("button", { name: "清空" }).click();
+  await page.locator("#editCustomApiSources input[type=checkbox]").last().check();
+  await page.locator("#saveCustomApiEditButton").click();
+  await expect(page.locator("#customApiEditDialog")).not.toBeVisible();
   await expect(page.locator("#customApiSaveStatus")).toHaveText("配置已保存");
   const savedConfig = await page.evaluate(async (path) => {
     const response = await fetch('/api/custom-apis', { cache: 'no-store' });
@@ -57,6 +66,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   }, customPath);
   expect(savedConfig.sourceMode).toBe("selected");
   expect(savedConfig.sources).toHaveLength(1);
+  expect(savedConfig.sources[0].type).toBe("apis");
 });
 
 test("edits and saves the blacklist from settings", async ({ page }, testInfo) => {

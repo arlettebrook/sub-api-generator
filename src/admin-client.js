@@ -727,10 +727,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
         const text = document.createElement('span');
         text.className = 'source-option-name';
         text.textContent = source.label;
-        const status = document.createElement('span');
-        status.className = 'source-option-status ' + (source.enabled ? 'enabled' : 'disabled');
-        status.textContent = source.enabled ? '已启用' : '已禁用';
-        label.append(checkbox, text, status);
+        label.append(checkbox, text);
         options.appendChild(label);
       }
     }
@@ -826,6 +823,9 @@ function renderCustomApiSelect() {
   if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
+let editingCustomApiPath = '';
+let editingCustomApiPicker = null;
+
 function renderCustomApis() {
   const el = $('customApisList');
   const summary = $('customApiSummary');
@@ -848,36 +848,25 @@ function renderCustomApis() {
     row.dataset.path = path;
 
     const main = document.createElement('div');
-    main.className = 'custom-api-row-main';
-
-    const pathField = document.createElement('label');
-    pathField.className = 'form-field compact';
-    const pathLabel = document.createElement('span');
-    pathLabel.textContent = '访问路径';
-
-    const pathInput = document.createElement('input');
-    pathInput.className = 'host-input';
-    pathInput.value = path;
-    pathInput.placeholder = '访问路径';
-    pathInput.setAttribute('aria-label', '访问路径');
-    pathField.append(pathLabel, pathInput);
-
+    main.className = 'custom-api-row-main custom-api-row-summary';
+    const identity = document.createElement('div');
+    identity.className = 'custom-api-identity';
+    const title = document.createElement('strong');
+    title.className = 'custom-api-row-title';
+    title.textContent = entry.remark || '/' + path;
+    const pathText = document.createElement('code');
+    pathText.className = 'custom-api-row-path';
+    pathText.textContent = '/' + path;
+    const sourceSummary = document.createElement('span');
+    sourceSummary.className = 'custom-api-source-summary';
+    sourceSummary.textContent = entry.sourceMode === 'selected'
+      ? '已选择 ' + (Array.isArray(entry.sources) ? entry.sources.length : 0) + ' 个数据源'
+      : '跟随全部启用数据源';
+    identity.append(title, pathText, sourceSummary);
     const url = document.createElement('code');
     url.className = 'custom-api-url';
     url.textContent = window.location.origin + '/' + path;
-
-    const remarkField = document.createElement('label');
-    remarkField.className = 'form-field compact';
-    const remarkLabel = document.createElement('span');
-    remarkLabel.textContent = '备注';
-    const remarkInput = document.createElement('input');
-    remarkInput.className = 'remark-input';
-    remarkInput.value = entry.remark || '';
-    remarkInput.placeholder = '备注（可选）';
-    remarkInput.setAttribute('aria-label', '备注');
-    remarkField.append(remarkLabel, remarkInput);
-
-    main.append(pathField, remarkField, url);
+    main.append(identity, url);
 
     const actions = document.createElement('div');
     actions.className = 'custom-api-actions';
@@ -893,6 +882,12 @@ function renderCustomApis() {
       renderCustomApis();
       renderCustomApiSelect();
     };
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'btn-primary icon-action';
+    editBtn.textContent = '✎ 编辑';
+    editBtn.onclick = () => openCustomApiEditDialog(path);
 
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
@@ -917,48 +912,80 @@ function renderCustomApis() {
       renderCustomApiSelect();
       showToast('已删除优选 API', 'success');
     };
-    actions.append(statusBtn, copyBtn, openBtn, delBtn);
-
-    pathInput.onchange = () => {
-      const newPath = normalizeCustomApiPath(pathInput.value);
-      if (!newPath || newPath === path) return;
-      const error = validateCustomApiPath(newPath, path);
-      if (error) {
-        showToast(error, 'error');
-        pathInput.value = path;
-        return;
-      }
-      customApis[newPath] = customApis[path];
-      delete customApis[path];
-      setCustomApisDirty();
-      renderCustomApis();
-      renderCustomApiSelect();
-    };
-
-    remarkInput.oninput = () => {
-      customApis[path].remark = remarkInput.value;
-      setCustomApisDirty();
-      renderCustomApiSelect();
-    };
-
-    const sourceMode = entry.sourceMode === 'selected' ? 'selected' : 'all-enabled';
-    const selectedSources = sourceMode === 'selected' && Array.isArray(entry.sources)
-      ? entry.sources
-      : [];
-    const picker = sourcePicker(selectedSources, '选择此 API 使用的数据源', sourceMode);
-    const updateSelection = () => {
-      const selection = readSourcePickerSelection(picker);
-      customApis[path].sourceMode = selection.sourceMode;
-      customApis[path].sources = selection.sources;
-      setCustomApisDirty();
-    };
-    picker.addEventListener('change', updateSelection);
-    picker.addEventListener('source-mode-change', updateSelection);
+    actions.append(statusBtn, editBtn, copyBtn, openBtn, delBtn);
 
     row.append(main, actions);
-    row.appendChild(picker);
     el.appendChild(row);
   });
+}
+
+function openCustomApiEditDialog(path) {
+  const entry = customApis[path];
+  const dialog = $('customApiEditDialog');
+  if (!entry || !dialog) return;
+  editingCustomApiPath = path;
+  const pathInput = $('editCustomApiPath');
+  const remarkInput = $('editCustomApiRemark');
+  const hint = $('editCustomApiPathHint');
+  if (pathInput) pathInput.value = path;
+  if (remarkInput) remarkInput.value = entry.remark || '';
+  if (hint) {
+    hint.textContent = '仅支持字母、数字、短横线和下划线。';
+    hint.className = '';
+  }
+  const url = $('editCustomApiUrl');
+  if (url) url.textContent = window.location.origin + '/' + path;
+  const sourceMode = entry.sourceMode === 'selected' ? 'selected' : 'all-enabled';
+  const selectedSources = sourceMode === 'selected' && Array.isArray(entry.sources) ? entry.sources : [];
+  editingCustomApiPicker = sourcePicker(selectedSources, '选择此 API 使用的数据源', sourceMode);
+  const container = $('editCustomApiSources');
+  if (container) {
+    container.innerHTML = '';
+    container.appendChild(editingCustomApiPicker);
+  }
+  dialog.showModal();
+  pathInput?.focus();
+}
+
+function closeCustomApiEditDialog() {
+  const dialog = $('customApiEditDialog');
+  if (dialog?.open) dialog.close();
+  editingCustomApiPath = '';
+  editingCustomApiPicker = null;
+}
+
+async function saveCustomApiEdit() {
+  if (!editingCustomApiPath || !customApis[editingCustomApiPath]) return;
+  const pathInput = $('editCustomApiPath');
+  const remarkInput = $('editCustomApiRemark');
+  const newPath = normalizeCustomApiPath(pathInput?.value);
+  const error = validateCustomApiPath(newPath, editingCustomApiPath);
+  if (error) {
+    showToast(error, 'error');
+    pathInput?.focus();
+    return;
+  }
+  const entry = customApis[editingCustomApiPath];
+  const selection = editingCustomApiPicker ? readSourcePickerSelection(editingCustomApiPicker) : {
+    sourceMode: entry.sourceMode === 'selected' ? 'selected' : 'all-enabled',
+    sources: Array.isArray(entry.sources) ? entry.sources : [],
+  };
+  entry.remark = remarkInput?.value.trim() || '';
+  entry.sourceMode = selection.sourceMode;
+  entry.sources = selection.sources;
+  if (newPath !== editingCustomApiPath) {
+    customApis[newPath] = entry;
+    delete customApis[editingCustomApiPath];
+    editingCustomApiPath = newPath;
+  }
+  setCustomApisDirty(true);
+  renderCustomApis();
+  renderCustomApiSelect();
+  const saved = await saveCustomApis(false);
+  if (saved) {
+    closeCustomApiEditDialog();
+    showToast('优选 API 配置已保存', 'success');
+  }
 }
 
 async function copyCustomApiUrl(path) {
@@ -994,7 +1021,7 @@ function addCustomApi() {
   showToast('优选 API 创建成功', 'success');
 }
 
-async function saveCustomApis() {
+async function saveCustomApis(notify = true) {
   const button = $('saveCustomApisButton');
   if (button) button.disabled = true;
   try {
@@ -1005,10 +1032,14 @@ async function saveCustomApis() {
     });
     if (!response.ok) throw new Error('请求失败');
     setCustomApisDirty(false);
-    showToast('优选 API 配置已保存', 'success');
+    if (notify) showToast('优选 API 配置已保存', 'success');
+    return true;
   } catch (error) {
     setCustomApisDirty(true);
     showToast('优选 API 配置保存失败', 'error');
+    return false;
+  } finally {
+    if (button) button.disabled = !customApisDirty;
   }
 }
 
@@ -1035,6 +1066,33 @@ function initCustomApiForm() {
     if (event.target === dialog) closeCustomApiDialog();
   });
   dialog?.addEventListener('close', () => resetCustomApiForm());
+  const editDialog = $('customApiEditDialog');
+  const editPathInput = $('editCustomApiPath');
+  const editHint = $('editCustomApiPathHint');
+  const updateEditHint = () => {
+    if (!editPathInput || !editHint) return;
+    const path = normalizeCustomApiPath(editPathInput.value);
+    const error = path ? validateCustomApiPath(path, editingCustomApiPath) : '';
+    editPathInput.setAttribute('aria-invalid', error ? 'true' : 'false');
+    editHint.textContent = error || '仅支持字母、数字、短横线和下划线。';
+    editHint.className = error ? 'input-hint error' : '';
+    const url = $('editCustomApiUrl');
+    if (url && path) url.textContent = window.location.origin + '/' + path;
+  };
+  editPathInput?.addEventListener('input', updateEditHint);
+  editPathInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      saveCustomApiEdit();
+    }
+  });
+  editDialog?.addEventListener('click', (event) => {
+    if (event.target === editDialog) closeCustomApiEditDialog();
+  });
+  editDialog?.addEventListener('close', () => {
+    editingCustomApiPath = '';
+    editingCustomApiPicker = null;
+  });
 }
 
 function resetCustomApiForm() {
