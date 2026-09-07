@@ -229,14 +229,58 @@ export const adminStyle = `
     gap: 3px;
   }
 
-  .setting-copy strong {
-    font-size: 14px;
+  .setting-copy h4 {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.35;
     color: var(--text-primary);
   }
 
-  .setting-copy small {
+  .setting-copy p {
+    margin: 0;
     color: var(--text-secondary);
     font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .setting-copy code {
+    padding: 1px 5px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background: var(--bg-secondary);
+    color: var(--accent-primary);
+    font-size: 12px;
+  }
+
+  .theme-mode-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .theme-mode-options label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .theme-mode-options label:has(input:checked) {
+    border-color: var(--accent-border);
+    background: var(--accent-light);
+    color: var(--accent-primary);
+  }
+
+  .theme-mode-options input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
   }
 
   .setting-block {
@@ -249,10 +293,23 @@ export const adminStyle = `
   }
 
   .setting-block-heading {
+    position: relative;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
+    padding-left: 12px;
+  }
+
+  .setting-block-heading::before {
+    position: absolute;
+    top: 2px;
+    bottom: 14px;
+    left: 0;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--accent-gradient);
+    content: '';
   }
 
   .blacklist-add-row {
@@ -264,6 +321,125 @@ export const adminStyle = `
   .blacklist-add-row input {
     flex: 1;
     min-width: 0;
+  }
+
+  .rule-list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rule-search {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 160px;
+    height: 36px;
+    padding: 0 10px;
+    gap: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+  }
+
+  .rule-search input {
+    width: 100%;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .rule-search:focus-within {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--accent-light);
+  }
+
+  .rule-list-toolbar > button {
+    height: 34px;
+    padding: 0 9px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .blacklist-row .rule-select {
+    flex: 0 0 auto;
+    width: 16px !important;
+    height: 16px !important;
+    padding: 0 !important;
+    accent-color: var(--accent-primary);
+  }
+
+  .filter-rule-presets {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .rule-preset {
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .rule-preset:hover,
+  .rule-preset:focus-visible {
+    border-color: var(--accent-border);
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .filter-preview {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px dashed var(--border-hover);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+  }
+
+  .filter-preview-heading,
+  .filter-preview-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .filter-preview-heading strong {
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .filter-preview-heading span,
+  .filter-preview-result span {
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .filter-preview input {
+    width: 100%;
+  }
+
+  .filter-preview-result code {
+    max-width: 72%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--success);
+    font-size: 13px;
   }
 
   .blacklist-list {
@@ -314,6 +490,35 @@ export const adminStyle = `
 
   .blacklist-toolbar .save-status {
     margin-right: auto;
+  }
+
+  .setting-add-button {
+    flex: 0 0 auto;
+  }
+
+  .btn-subtle {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-tertiary);
+  }
+
+  .btn-subtle:hover,
+  .btn-subtle:focus-visible {
+    border-color: var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    box-shadow: none;
+  }
+
+  .setting-tool-button {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .blacklist-toolbar .btn-primary {
+    min-width: 138px;
+    font-weight: 600;
   }
 
   .source-picker {
@@ -773,12 +978,22 @@ export const adminStyle = `
   }
 
   .save-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.08);
     margin-right: auto;
     color: var(--success);
     font-size: 13px;
+    white-space: nowrap;
   }
 
   .save-status.dirty {
+    border-color: var(--accent-border);
+    background: var(--accent-light);
     color: var(--accent-primary);
   }
 
@@ -2353,6 +2568,28 @@ export const adminStyle = `
     }
     .setting-block-heading {
       gap: 8px;
+    }
+    .theme-mode-options {
+      grid-template-columns: 1fr;
+    }
+    .rule-list-toolbar {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
+    .rule-search {
+      flex-basis: 100%;
+    }
+    .rule-list-toolbar > button {
+      flex: 1;
+    }
+    .filter-preview-heading,
+    .filter-preview-result {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .filter-preview-result code {
+      max-width: 100%;
     }
     .blacklist-add-row {
       align-items: stretch;

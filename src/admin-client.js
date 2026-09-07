@@ -420,7 +420,17 @@ function applyTheme(mode) {
     switcher.title = '主题：' + labels[themeMode] + '（点击切换）';
     switcher.setAttribute('aria-pressed', String(isDark));
   }
+  syncThemeSettings();
   return isDark;
+}
+
+function syncThemeSettings() {
+  const labels = { light: '亮色', dark: '暗色', system: '跟随系统' };
+  document.querySelectorAll('input[name="themeModeSetting"]').forEach((input) => {
+    input.checked = input.value === themeMode;
+  });
+  const summary = $('themeModeSummary');
+  if (summary) summary.textContent = labels[themeMode] || labels.system;
 }
 
 function toggleTheme() {
@@ -1921,6 +1931,9 @@ function importApis(event) {
 
 // ======================== 黑名单管理 ========================
 let blacklist = [];
+let savedBlacklist = [];
+let blacklistSearchTerm = '';
+const selectedBlacklist = new Set();
 
 function normalizeBlacklistClient(value) {
   if (!Array.isArray(value)) return [];
@@ -1974,6 +1987,7 @@ function setBlacklistDirty(dirty = true) {
     status.classList.toggle('dirty', dirty);
   }
   if (button) button.disabled = !dirty;
+  updateSettingsActionState();
 }
 
 function renderBlacklist() {
@@ -1982,9 +1996,22 @@ function renderBlacklist() {
   const summary = $('blacklistSummary');
   if (!list) return;
   list.innerHTML = '';
-  blacklist.forEach((word, index) => {
+  const query = blacklistSearchTerm.trim().toLowerCase();
+  const visible = blacklist
+    .map((word, index) => ({ word, index }))
+    .filter(({ word }) => !query || word.toLowerCase().includes(query));
+  visible.forEach(({ word, index }) => {
     const row = document.createElement('div');
     row.className = 'blacklist-row';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'rule-select';
+    checkbox.checked = selectedBlacklist.has(word);
+    checkbox.setAttribute('aria-label', '选择黑名单词条 ' + (index + 1));
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) selectedBlacklist.add(word); else selectedBlacklist.delete(word);
+    });
 
     const input = document.createElement('input');
     input.type = 'text';
@@ -1993,8 +2020,11 @@ function renderBlacklist() {
     input.setAttribute('aria-label', '黑名单词条 ' + (index + 1));
     input.addEventListener('input', () => {
       blacklist[index] = input.value.slice(0, 128);
+      selectedBlacklist.delete(word);
+      clearInputError(input);
       setBlacklistDirty(true);
     });
+    input.addEventListener('blur', () => validateRuleInput(input, blacklist, index, '黑名单关键词'));
 
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
@@ -2007,17 +2037,19 @@ function renderBlacklist() {
       setBlacklistDirty(true);
     });
 
-    row.append(input, deleteButton);
+    row.append(checkbox, input, deleteButton);
     list.appendChild(row);
   });
-  if (empty) empty.hidden = blacklist.length !== 0;
-  if (summary) summary.textContent = blacklist.length + ' 项';
+  if (empty) empty.hidden = blacklist.length !== 0 || Boolean(query);
+  if (summary) summary.textContent = query ? visible.length + ' / ' + blacklist.length + ' 项' : blacklist.length + ' 项';
 }
 
 async function loadBlacklist() {
   if ($('blacklistList')) $('blacklistList').innerHTML = listSkeletonMarkup(2);
   try {
     blacklist = normalizeBlacklistClient(await readJsonResponse('/api/blacklist', '黑名单配置'));
+    savedBlacklist = [...blacklist];
+    selectedBlacklist.clear();
     renderBlacklist();
     setBlacklistDirty(false);
   } catch (error) {
@@ -2031,6 +2063,7 @@ function addBlacklistWord() {
   if (!input) return;
   const word = input.value.trim().slice(0, 128);
   if (!word) {
+    setInputError(input, '请输入黑名单关键词');
     showToast('请输入黑名单关键词', 'error');
     input.focus();
     return;
@@ -2040,11 +2073,13 @@ function addBlacklistWord() {
     return;
   }
   if (blacklist.some((item) => item.toLowerCase() === word.toLowerCase())) {
+    setInputError(input, '该关键词已存在');
     showToast('该关键词已存在', 'error');
     input.focus();
     return;
   }
   blacklist.push(word);
+  clearInputError(input);
   input.value = '';
   renderBlacklist();
   setBlacklistDirty(true);
@@ -2060,6 +2095,7 @@ function importBlacklist(event) {
   readJsonFile(event, (data) => {
     if (!Array.isArray(data)) throw new Error('文件内容必须是字符串数组');
     blacklist = normalizeBlacklistClient(data);
+    selectedBlacklist.clear();
     renderBlacklist();
     setBlacklistDirty(true);
   }, '黑名单');
@@ -2082,6 +2118,7 @@ async function saveBlacklist() {
     });
     if (!response.ok) throw responseError('黑名单配置保存', response);
     setBlacklistDirty(false);
+    savedBlacklist = [...blacklist];
     showToast('黑名单配置已保存', 'success');
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
@@ -2093,9 +2130,57 @@ async function saveBlacklist() {
   }
 }
 
+function validateRuleInput(input, values, index, label) {
+  const value = input?.value.trim() || '';
+  if (!value) { setInputError(input, label + '不能为空'); return false; }
+  const duplicate = values.some((item, itemIndex) => itemIndex !== index && item.trim().toLowerCase() === value.toLowerCase());
+  if (duplicate) { setInputError(input, '该项已存在'); return false; }
+  clearInputError(input);
+  return true;
+}
+
+function undoBlacklistChanges() {
+  if (!blacklistDirty) return;
+  blacklist = [...savedBlacklist];
+  selectedBlacklist.clear();
+  renderBlacklist();
+  setBlacklistDirty(false);
+  showToast('已撤销黑名单修改', 'info');
+}
+
+function resetBlacklistDefaults() {
+  if (!settingConfirm('确定恢复默认黑名单吗？当前未保存的修改也会被替换。')) return;
+  blacklist = [];
+  selectedBlacklist.clear();
+  renderBlacklist();
+  setBlacklistDirty(true);
+  showToast('已恢复默认黑名单，请保存后生效', 'info');
+}
+
+function selectAllBlacklist() {
+  const query = blacklistSearchTerm.trim().toLowerCase();
+  blacklist.filter((word) => !query || word.toLowerCase().includes(query)).forEach((word) => selectedBlacklist.add(word));
+  renderBlacklist();
+}
+
+function clearBlacklistSelection() { selectedBlacklist.clear(); renderBlacklist(); }
+
+function deleteSelectedBlacklist() {
+  if (!selectedBlacklist.size) { showToast('请先选择要删除的黑名单', 'warning'); return; }
+  if (!settingConfirm('确定删除选中的 ' + selectedBlacklist.size + ' 个黑名单词条吗？')) return;
+  blacklist = blacklist.filter((word) => !selectedBlacklist.has(word));
+  selectedBlacklist.clear();
+  renderBlacklist();
+  setBlacklistDirty(true);
+}
+
 function initBlacklistForm() {
   const input = $('newBlacklistWord');
   if (!input) return;
+  if (input.dataset.bound !== 'true') {
+    input.dataset.bound = 'true';
+    input.addEventListener('input', () => clearInputError(input));
+  }
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -2105,6 +2190,40 @@ function initBlacklistForm() {
 }
 
 let filterRules = [];
+let savedFilterRules = [];
+let filterRulesSearchTerm = '';
+const selectedFilterRules = new Set();
+
+function settingConfirm(message) {
+  return typeof window.confirm !== 'function' || window.confirm(message);
+}
+
+function updateSettingsActionState() {
+  const blacklistUndo = $('blacklistSettings')?.querySelector('.setting-undo-button');
+  const filterUndo = $('filterRulesSettings')?.querySelector('.setting-undo-button');
+  if (blacklistUndo) blacklistUndo.disabled = !blacklistDirty;
+  if (filterUndo) filterUndo.disabled = !filterRulesDirty;
+}
+
+function filterRuleText(value, ruleList) {
+  let result = String(value || '');
+  let cutIndex = -1;
+  for (const rule of ruleList) {
+    if (rule === '符号') continue;
+    const index = rule === '空格' ? result.search(/\s/u) : result.toLowerCase().indexOf(rule.toLowerCase());
+    if (index >= 0 && (cutIndex < 0 || index < cutIndex)) cutIndex = index;
+  }
+  if (cutIndex >= 0) result = result.slice(0, cutIndex);
+  if (ruleList.includes('符号')) result = result.replace(/[\p{So}\uFE0F]+/gu, '');
+  return result.trim();
+}
+
+function updateFilterPreview() {
+  const input = $('filterPreviewInput');
+  const output = $('filterPreviewOutput');
+  if (!input || !output) return;
+  output.textContent = filterRuleText(input.value, filterRules);
+}
 function normalizeFilterRulesClient(value) {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -2122,35 +2241,45 @@ function setFilterRulesDirty(dirty = true) {
   const button = $('saveFilterRulesButton');
   if (status) { status.textContent = dirty ? '有未保存的修改' : '配置已保存'; status.classList.toggle('dirty', dirty); }
   if (button) button.disabled = !dirty;
+  updateSettingsActionState();
 }
 function renderFilterRules() {
   const list = $('filterRulesList');
   if (!list) return;
   list.innerHTML = '';
-  filterRules.forEach((rule, index) => {
+  const query = filterRulesSearchTerm.trim().toLowerCase();
+  const visible = filterRules
+    .map((rule, index) => ({ rule, index }))
+    .filter(({ rule }) => !query || rule.toLowerCase().includes(query));
+  visible.forEach(({ rule, index }) => {
     const row = document.createElement('div'); row.className = 'blacklist-row';
+    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'rule-select';
+    checkbox.checked = selectedFilterRules.has(rule); checkbox.setAttribute('aria-label', '选择过滤规则 ' + (index + 1));
+    checkbox.addEventListener('change', () => { if (checkbox.checked) selectedFilterRules.add(rule); else selectedFilterRules.delete(rule); });
     const input = document.createElement('input'); input.type = 'text'; input.maxLength = 128; input.value = rule;
     input.setAttribute('aria-label', '过滤规则 ' + (index + 1));
-    input.addEventListener('input', () => { filterRules[index] = input.value.slice(0, 128); setFilterRulesDirty(); });
+    input.addEventListener('input', () => { filterRules[index] = input.value.slice(0, 128); selectedFilterRules.delete(rule); clearInputError(input); setFilterRulesDirty(); updateFilterPreview(); });
+    input.addEventListener('blur', () => validateRuleInput(input, filterRules, index, '过滤规则'));
     const button = document.createElement('button'); button.type = 'button'; button.className = 'del-btn'; button.textContent = '删除';
     button.onclick = () => { filterRules.splice(index, 1); renderFilterRules(); setFilterRulesDirty(); };
-    row.append(input, button); list.appendChild(row);
+    row.append(checkbox, input, button); list.appendChild(row);
   });
-  if ($('filterRulesEmpty')) $('filterRulesEmpty').hidden = filterRules.length !== 0;
-  if ($('filterRulesSummary')) $('filterRulesSummary').textContent = filterRules.length + ' 项';
+  if ($('filterRulesEmpty')) $('filterRulesEmpty').hidden = filterRules.length !== 0 || Boolean(query);
+  if ($('filterRulesSummary')) $('filterRulesSummary').textContent = query ? visible.length + ' / ' + filterRules.length + ' 项' : filterRules.length + ' 项';
+  updateFilterPreview();
 }
 async function loadFilterRules() {
   if ($('filterRulesList')) $('filterRulesList').innerHTML = listSkeletonMarkup(2);
-  try { filterRules = normalizeFilterRulesClient(await readJsonResponse('/api/filter-rules', '备注过滤规则')); renderFilterRules(); setFilterRulesDirty(false); }
+  try { filterRules = normalizeFilterRulesClient(await readJsonResponse('/api/filter-rules', '备注过滤规则')); savedFilterRules = [...filterRules]; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(false); }
   catch (error) { renderLoadError('filterRulesList', error.message, loadFilterRules); showToast(error.message, 'error'); }
 }
 function addFilterRule() {
   const input = $('newFilterRule'); if (!input) return;
   const rule = input.value.trim().slice(0, 128);
-  if (!rule) { showToast('请输入过滤规则', 'error'); input.focus(); return; }
+  if (!rule) { setInputError(input, '请输入过滤规则'); showToast('请输入过滤规则', 'error'); input.focus(); return; }
   if (filterRules.length >= 200) { showToast('过滤规则不能超过 200 个', 'error'); return; }
-  if (filterRules.some((item) => item.toLowerCase() === rule.toLowerCase())) { showToast('该规则已存在', 'error'); input.focus(); return; }
-  filterRules.push(rule); input.value = ''; renderFilterRules(); setFilterRulesDirty(); input.focus();
+  if (filterRules.some((item) => item.toLowerCase() === rule.toLowerCase())) { setInputError(input, '该规则已存在'); showToast('该规则已存在', 'error'); input.focus(); return; }
+  filterRules.push(rule); clearInputError(input); input.value = ''; renderFilterRules(); setFilterRulesDirty(); input.focus();
 }
 async function saveFilterRules() {
   const button = $('saveFilterRulesButton'); if (button) button.disabled = true;
@@ -2159,14 +2288,78 @@ async function saveFilterRules() {
   try {
     const response = await fetch('/api/filter-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(filterRules) });
     if (!response.ok) throw responseError('备注过滤规则保存', response);
-    setFilterRulesDirty(false); showToast('备注过滤规则已保存', 'success');
+    setFilterRulesDirty(false); savedFilterRules = [...filterRules]; showToast('备注过滤规则已保存', 'success');
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) { setFilterRulesDirty(true); showToast(error.message || '备注过滤规则保存失败', 'error', saveFilterRules); }
   finally { setButtonBusy(button, false); if (button) button.disabled = !filterRulesDirty; }
 }
 function initFilterRulesForm() {
   const input = $('newFilterRule');
-  input?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addFilterRule(); } });
+  if (!input) return;
+  if (input.dataset.bound !== 'true') {
+    input.dataset.bound = 'true';
+    input.addEventListener('input', () => clearInputError(input));
+  }
+  input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addFilterRule(); } });
+}
+
+function undoFilterRulesChanges() {
+  if (!filterRulesDirty) return;
+  filterRules = [...savedFilterRules]; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(false); showToast('已撤销过滤规则修改', 'info');
+}
+
+function resetFilterRulesDefaults() {
+  if (!settingConfirm('确定恢复默认过滤规则吗？当前未保存的修改也会被替换。')) return;
+  filterRules = []; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(true); showToast('已恢复默认过滤规则，请保存后生效', 'info');
+}
+
+function selectAllFilterRules() {
+  const query = filterRulesSearchTerm.trim().toLowerCase();
+  filterRules.filter((rule) => !query || rule.toLowerCase().includes(query)).forEach((rule) => selectedFilterRules.add(rule));
+  renderFilterRules();
+}
+
+function clearFilterRulesSelection() { selectedFilterRules.clear(); renderFilterRules(); }
+
+function deleteSelectedFilterRules() {
+  if (!selectedFilterRules.size) { showToast('请先选择要删除的过滤规则', 'warning'); return; }
+  if (!settingConfirm('确定删除选中的 ' + selectedFilterRules.size + ' 条过滤规则吗？')) return;
+  filterRules = filterRules.filter((rule) => !selectedFilterRules.has(rule)); selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(true);
+}
+
+function initSettingsEnhancements() {
+  const blacklistSearch = $('blacklistSearch');
+  if (blacklistSearch && blacklistSearch.dataset.bound !== 'true') {
+    blacklistSearch.dataset.bound = 'true';
+    blacklistSearch.value = blacklistSearchTerm;
+    blacklistSearch.addEventListener('input', () => { blacklistSearchTerm = blacklistSearch.value; renderBlacklist(); });
+  }
+  const filterSearch = $('filterRulesSearch');
+  if (filterSearch && filterSearch.dataset.bound !== 'true') {
+    filterSearch.dataset.bound = 'true';
+    filterSearch.value = filterRulesSearchTerm;
+    filterSearch.addEventListener('input', () => { filterRulesSearchTerm = filterSearch.value; renderFilterRules(); });
+  }
+  const previewInput = $('filterPreviewInput');
+  if (previewInput && previewInput.dataset.bound !== 'true') {
+    previewInput.dataset.bound = 'true'; previewInput.addEventListener('input', updateFilterPreview);
+  }
+  document.querySelectorAll('.rule-preset').forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    button.addEventListener('click', () => {
+      const input = $('newFilterRule');
+      if (!input) return;
+      input.value = button.dataset.filterRule || '';
+      clearInputError(input); addFilterRule();
+    });
+  });
+  document.querySelectorAll('input[name="themeModeSetting"]').forEach((input) => {
+    if (input.dataset.bound === 'true') return;
+    input.dataset.bound = 'true';
+    input.addEventListener('change', () => { applyTheme(input.value); try { localStorage.setItem('theme', input.value); } catch {} });
+  });
+  syncThemeSettings();
 }
 
 function exportFilterRules() {
@@ -2189,7 +2382,7 @@ const pageIntros = {
   apis: '管理额外 API 源，控制启用状态并维护备注。',
   manage: '统一管理优选订阅源和 API 源。',
   customApis: '创建并管理优选 API 的访问路径。',
-  settings: '调整管理面板的界面显示设置。'
+  settings: '管理节点过滤关键词和备注清理规则，修改后会影响后续数据预览结果。'
 };
 let pageNavigationRequest = null;
 let currentRouteUrl = window.location.href;
@@ -2324,6 +2517,7 @@ function bindPageControls() {
 
 function loadActivePage(page) {
   if (page === 'settings') {
+    initSettingsEnhancements();
     initBlacklistForm();
     void loadBlacklist();
     initFilterRulesForm();
