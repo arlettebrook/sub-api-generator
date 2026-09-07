@@ -27,7 +27,7 @@ test("returns a clear error when Pages variables are missing", async () => {
   assert.match(await response.text(), /PASSWORD/);
 });
 
-test("serves the login page and authenticated preview endpoint", async () => {
+test("does not expose a default preview endpoint", async () => {
   const runtime = env({ KV: createKv({ subs: {}, apis: {} }) });
   const loginPage = await worker.fetch(new Request("https://example.test/"), runtime);
   assert.equal(loginPage.status, 200);
@@ -37,7 +37,7 @@ test("serves the login page and authenticated preview endpoint", async () => {
   const response = await worker.fetch(new Request("https://example.test/api/preview", {
     headers: { Cookie: `auth=${hash}` },
   }), runtime);
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 404);
 });
 
 test("serves separate responsive admin pages", async () => {
@@ -55,8 +55,10 @@ test("serves separate responsive admin pages", async () => {
     if (page === "manage") {
       assert.match(html, /id="subsSection"/);
       assert.match(html, /id="apisSection"/);
+      assert.match(html, /id="sourceStatusSection"/);
       assert.match(html, /data-nav-page="manage"/);
     }
+    if (page === "overview") assert.doesNotMatch(html, /id="sourceStatusSection"/);
     if (page === "customApis") {
       assert.match(html, /id="customApiSection"/);
       assert.match(html, /data-nav-page="customApis"/);
@@ -168,7 +170,7 @@ test("keeps multiple custom API paths independently usable", async () => {
   }
 });
 
-test("reports latest source status after an aggregate request", async () => {
+test("manually checks and reports source status", async () => {
   const values = {
     subs: { "e.ye.gs": { remark: "e.ye.gs" } },
     apis: {},
@@ -181,10 +183,6 @@ test("reports latest source status after an aggregate request", async () => {
     "vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#ok",
   ), { status: 200 });
   try {
-    const previewResponse = await worker.fetch(new Request("https://example.test/api/preview", {
-      headers: { Cookie: `auth=${hash}` },
-    }), runtime);
-    assert.equal(previewResponse.status, 200);
     const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status", {
       headers: { Cookie: `auth=${hash}` },
     }), runtime);
@@ -263,7 +261,7 @@ test("rejects invalid blacklist payloads", async () => {
 
 test("rejects unsupported methods", async () => {
   const hash = await sha256Hex("secret");
-  const response = await worker.fetch(new Request("https://example.test/api/preview", {
+  const response = await worker.fetch(new Request("https://example.test/api/source-status", {
     method: "POST",
     headers: { Cookie: `auth=${hash}` },
   }), env());

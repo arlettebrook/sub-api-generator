@@ -60,6 +60,8 @@ async function handleGetApis(env) {
 }
 
 async function handleGetSourceStatuses(env) {
+  subscriptions.clearAggregateCache();
+  await subscriptions.handleRoot(env);
   const [subs, apis] = await Promise.all([
     env.KV.get(KV_KEY_SUBS, "json"),
     env.KV.get(KV_KEY_APIS, "json"),
@@ -113,10 +115,6 @@ async function handleGetCustomApis(env) {
   return pagesJsonResponse(normalizeCustomApiData(data));
 }
 
-async function handleGetPreview(env) {
-  return await subscriptions.handleRoot(env);
-}
-
 async function handlePostCustomApis(request, env) {
   let body;
   try {
@@ -161,7 +159,7 @@ function handleAdmin(page = "overview") {
 }
 
 function renderAdminPage(page) {
-  const activeSections = new Set(page === "manage" ? ["subs", "apis"] : [page]);
+  const activeSections = new Set(page === "manage" ? ["subs", "apis", "sourceStatus"] : [page]);
   let html = adminHTML
     .replaceAll("__ADMIN_ASSET_VERSION__", ADMIN_ASSET_VERSION)
     .replace('data-page="__PAGE__"', `data-page="${page}"`);
@@ -254,9 +252,6 @@ export default {
           if (method === "GET") return await handleGetCustomApis(env);
           if (method === "POST") return await handlePostCustomApis(request, env);
           return pagesMethodNotAllowed("GET, POST");
-        case "/api/preview":
-          if (method === "GET") return await handleGetPreview(env);
-          return pagesMethodNotAllowed("GET");
         case "/":
         case "/admin":
           if (method !== "GET") return pagesMethodNotAllowed("GET");

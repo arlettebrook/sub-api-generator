@@ -96,7 +96,6 @@ npm run test:e2e
 - `/admin/manage`：优选订阅源和 API 源统一管理页，需要登录
 - `/admin/custom-apis`：优选 API 访问路径管理页，需要登录
 - `/admin/subs`、`/admin/apis`：兼容保留的独立管理页，需要登录
-- `/api/preview`：登录后读取默认订阅聚合结果
 - `/api/subs`、`/api/apis`：后台配置接口，需要登录
 - `/api/blacklist`：节点黑名单配置接口，需要登录
 - `/api/filter-rules`：节点备注过滤规则配置接口，需要登录

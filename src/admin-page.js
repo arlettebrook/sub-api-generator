@@ -109,7 +109,6 @@ export const adminHTML = `
     <button class="btn-outline nodes-filter-reset" id="nodesFilterReset" type="button">清除筛选</button>
   </div>
   <div id="sourceErrorNotice" class="source-error-notice" role="status" hidden></div>
-  <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
   <div id="nodesContainer">
     <div class="nodes-loading nodes-skeleton" aria-label="正在加载节点"></div>
   </div>
@@ -224,6 +223,20 @@ export const adminHTML = `
   <div id="apisList"></div>
 </div>
 <!-- ADMIN_SECTION:apis:END -->
+
+<!-- ADMIN_SECTION:sourceStatus:START -->
+<!-- ==================== 数据源状态 ==================== -->
+<div class="card" id="sourceStatusSection">
+  <div class="section-heading">
+    <div>
+      <h3>📊 数据源状态</h3>
+      <p class="section-caption">手动检测订阅源和 API 源的最新响应。</p>
+    </div>
+    <button class="btn-primary" type="button" id="sourceStatusRefreshButton">🔄 检测数据源</button>
+  </div>
+  <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
+</div>
+<!-- ADMIN_SECTION:sourceStatus:END -->
 
 <!-- ADMIN_SECTION:settings:START -->
 <!-- ==================== 设置 ==================== -->

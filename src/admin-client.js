@@ -368,7 +368,8 @@ async function copySubUrl(event) {
   const originalText = btn.innerHTML;
   
   try {
-    const fullSubUrl = await getPreviewApiUrl();
+    const fullSubUrl = getPreviewApiUrl();
+    if (!fullSubUrl) throw new Error('暂无可用优选 API，请先创建并启用一个优选 API');
     await navigator.clipboard.writeText(fullSubUrl);
     
     btn.innerHTML = '<span>✅</span> 已复制';
@@ -554,7 +555,7 @@ function renderNodeView() {
 function getPreviewApiUrl() {
   const selectedPath = $('previewApiSelect')?.value || '';
   if (selectedPath) return window.location.origin + '/' + selectedPath;
-  return window.location.origin + '/api/preview';
+  return null;
 }
 
 async function fetchNodes(emptyRetry = 0) {
@@ -565,10 +566,17 @@ async function fetchNodes(emptyRetry = 0) {
   nodesContainer.innerHTML = nodeSkeletonMarkup();
   paginationEl.innerHTML = '';
   renderPreviewSourceErrors();
+  const apiUrl = getPreviewApiUrl();
+  if (!apiUrl) {
+    currentNodes = [];
+    updateRegionOptions();
+    updateNodeFilterOptions();
+    renderNodeView();
+    if (activeNodeRequest === controller) activeNodeRequest = null;
+    return;
+  }
   
   try {
-    const apiUrl = getPreviewApiUrl();
-    
     // 请求节点原始数据
     const nodeRes = await fetch(apiUrl, { signal: controller.signal, cache: 'no-store' });
     if (!nodeRes.ok) throw new Error('请求失败: ' + nodeRes.status);
@@ -612,7 +620,6 @@ async function fetchNodes(emptyRetry = 0) {
       return;
     }
     renderNodeView();
-    void loadSourceStatuses();
   } catch (err) {
     if (err.name === 'AbortError') return;
     nodesContainer.innerHTML = '';
@@ -927,7 +934,13 @@ function createSourceHealth(type, key) {
   return health;
 }
 
-async function loadSourceStatuses() {
+async function loadSourceStatuses(manual = false) {
+  const refreshButton = $('sourceStatusRefreshButton');
+  const idleText = refreshButton?.textContent;
+  if (manual && refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = '检测中…';
+  }
   try {
     sourceStatuses = await readJsonResponse('/api/source-status', '数据源状态');
     renderSourceStatusSummary();
@@ -937,6 +950,11 @@ async function loadSourceStatuses() {
   } catch {
     renderSourceStatusSummary();
     // 状态接口不可用时保留配置页面，不阻断管理操作。
+  } finally {
+    if (manual && refreshButton) {
+      refreshButton.disabled = false;
+      refreshButton.textContent = idleText || '检测数据源';
+    }
   }
 }
 
@@ -1676,7 +1694,6 @@ async function saveSubs(notify = true) {
     if (!response.ok) throw responseError('订阅源配置保存', response);
     subsDirty = false;
     if (notify) showToast('订阅源配置已保存', 'success');
-    loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
     return true;
   } catch (error) {
@@ -1853,7 +1870,6 @@ async function saveApis(notify = true) {
     if (!response.ok) throw responseError('API 源配置保存', response);
     apisDirty = false;
     if (notify) showToast('API 源配置已保存', 'success');
-    loadSourceStatuses();
     if (nodesContainer && typeof fetchNodes === 'function') fetchNodes();
     return true;
   } catch (error) {
@@ -2594,6 +2610,11 @@ function bindPageControls() {
     previewSelect.dataset.bound = 'true';
     previewSelect.addEventListener('change', syncRouteState);
   }
+  const sourceStatusRefreshButton = $('sourceStatusRefreshButton');
+  if (sourceStatusRefreshButton && sourceStatusRefreshButton.dataset.bound !== 'true') {
+    sourceStatusRefreshButton.dataset.bound = 'true';
+    sourceStatusRefreshButton.addEventListener('click', () => { void loadSourceStatuses(true); });
+  }
 }
 
 function loadActivePage(page) {
@@ -2618,7 +2639,6 @@ function loadActivePage(page) {
     void fetchNodes();
     void loadCustomApis().then(() => hydratePageState(page)).catch(() => { renderCustomApiSelect(); });
   }
-  if (page === 'subs' || page === 'apis' || page === 'manage') void loadSourceStatuses();
 }
 
 async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.location.href } = {}) {
