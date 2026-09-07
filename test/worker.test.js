@@ -71,6 +71,11 @@ test("serves separate responsive admin pages", async () => {
 test("keeps the generated admin script valid JavaScript", () => {
   assert.doesNotThrow(() => new vm.Script(adminClientScript));
   assert.match(adminClientScript, /entry\.remark \? entry\.remark \+ ' \(\/' \+ path/);
+  const overviewStart = adminClientScript.indexOf("} else if (page === 'overview') {");
+  const customApiLoad = adminClientScript.indexOf("void loadCustomApis()", overviewStart);
+  const nodeLoad = adminClientScript.indexOf("return fetchNodes();", customApiLoad);
+  assert.ok(overviewStart >= 0 && customApiLoad > overviewStart && nodeLoad > customApiLoad);
+  assert.equal(adminClientScript.indexOf("void fetchNodes();", overviewStart), -1);
 });
 
 test("serves admin frontend assets", async () => {

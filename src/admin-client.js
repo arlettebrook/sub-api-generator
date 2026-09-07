@@ -2636,8 +2636,16 @@ function loadActivePage(page) {
     void loadSubs();
     void loadApis();
   } else if (page === 'overview') {
-    void fetchNodes();
-    void loadCustomApis().then(() => hydratePageState(page)).catch(() => { renderCustomApiSelect(); });
+    void loadCustomApis()
+      .then(() => {
+        hydratePageState(page);
+        return fetchNodes();
+      })
+      .catch(() => {
+        renderCustomApiSelect();
+        hydratePageState(page);
+        return fetchNodes();
+      });
   }
 }
 
