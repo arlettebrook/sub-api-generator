@@ -1602,6 +1602,10 @@ export const adminStyle = `
     background: var(--bg-tertiary);
   }
 
+  .source-check-button {
+    white-space: nowrap;
+  }
+
   #subsList .row:nth-child(even),
   #apisList .row:nth-child(even),
   #customApisList .row:nth-child(even) {

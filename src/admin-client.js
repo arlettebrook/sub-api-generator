@@ -934,7 +934,8 @@ function createSourceHealth(type, key) {
   return health;
 }
 
-async function loadSourceStatuses(manual = false) {
+async function loadSourceStatuses(mode = 'read', sources = []) {
+  const manual = mode !== 'read';
   const refreshButton = $('sourceStatusRefreshButton');
   const idleText = refreshButton?.textContent;
   if (manual && refreshButton) {
@@ -942,10 +943,15 @@ async function loadSourceStatuses(manual = false) {
     refreshButton.textContent = '检测中…';
   }
   try {
+    const requestOptions = mode === 'read' ? {} : {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mode === 'selected' ? { scope: 'selected', sources } : { scope: mode }),
+    };
     sourceStatuses = await readJsonResponse(
       manual ? '/api/source-status/check' : '/api/source-status',
       '数据源状态',
-      manual ? { method: 'POST' } : {},
+      requestOptions,
     );
     renderSourceStatusSummary();
     if ($('subsList')) renderSubs();
@@ -960,6 +966,23 @@ async function loadSourceStatuses(manual = false) {
       refreshButton.textContent = idleText || '检测数据源';
     }
   }
+}
+
+function createSourceCheckButton(type, key) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn-outline source-check-button';
+  button.textContent = '检测';
+  button.setAttribute('aria-label', '检测数据源 ' + key);
+  button.onclick = async () => {
+    button.disabled = true;
+    const idleText = button.textContent;
+    button.textContent = '检测中…';
+    await loadSourceStatuses('selected', [{ type, key }]);
+    button.disabled = false;
+    button.textContent = idleText;
+  };
+  return button;
 }
 
 function normalizeSourceKeyClient(type, key) {
@@ -1629,6 +1652,7 @@ function renderSubs() {
     row.appendChild(hostInput);
     row.appendChild(createCopyButton(host, '订阅源地址'));
     row.appendChild(health);
+    row.appendChild(createSourceCheckButton('subs', host));
     row.appendChild(delBtn);
     el.appendChild(row);
   });
@@ -1838,6 +1862,7 @@ function renderApis() {
     row.appendChild(urlInput);
     row.appendChild(createCopyButton(url, 'API 地址'));
     row.appendChild(health);
+    row.appendChild(createSourceCheckButton('apis', url));
     row.appendChild(delBtn);
     el.appendChild(row);
   });
@@ -2609,7 +2634,9 @@ function bindPageControls() {
   const sourceStatusRefreshButton = $('sourceStatusRefreshButton');
   if (sourceStatusRefreshButton && sourceStatusRefreshButton.dataset.bound !== 'true') {
     sourceStatusRefreshButton.dataset.bound = 'true';
-    sourceStatusRefreshButton.addEventListener('click', () => { void loadSourceStatuses(true); });
+    sourceStatusRefreshButton.addEventListener('click', () => {
+      void loadSourceStatuses($('sourceStatusScope')?.value || 'used');
+    });
   }
 }
 
@@ -2631,7 +2658,7 @@ function loadActivePage(page) {
   } else if (page === 'manage') {
     void loadSubs();
     void loadApis();
-    void loadSourceStatuses();
+    void loadSourceStatuses('read');
   } else if (page === 'overview') {
     void loadCustomApis()
       .then(() => {

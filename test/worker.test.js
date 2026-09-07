@@ -221,7 +221,8 @@ test("manually checks and reports source status", async () => {
   try {
     const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status/check", {
       method: "POST",
-      headers: { Cookie: `auth=${hash}` },
+      headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+      body: JSON.stringify({ scope: "all" }),
     }), runtime);
     assert.equal(statusResponse.status, 200);
     const status = await statusResponse.json();
@@ -229,6 +230,48 @@ test("manually checks and reports source status", async () => {
     assert.equal(status.subs["e.ye.gs"].nodeCount, 1);
     assert.equal(typeof status.subs["e.ye.gs"].durationMs, "number");
     assert.match(status.subs["e.ye.gs"].lastAttemptAt, /^20/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("checks only sources used by enabled custom APIs by default", async () => {
+  const values = {
+    subs: {
+      "used.example": { remark: "使用中" },
+      "unused.example": { remark: "未使用" },
+    },
+    apis: {},
+    custom_apis: {
+      demo: {
+        enabled: true,
+        sourceMode: "selected",
+        sources: [{ type: "subs", key: "used.example" }],
+      },
+    },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (resource) => {
+    requests.push(String(resource));
+    return new Response(btoa(
+      "vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#ok",
+    ), { status: 200 });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://example.test/api/source-status/check", {
+      method: "POST",
+      headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+      body: JSON.stringify({ scope: "used" }),
+    }), runtime);
+    assert.equal(response.status, 200);
+    assert.equal(requests.length, 1);
+    assert.match(requests[0], /used\.example/);
+    const status = await response.json();
+    assert.equal(status.subs["used.example"].state, "success");
+    assert.equal(status.subs["unused.example"].state, "idle");
   } finally {
     globalThis.fetch = originalFetch;
   }

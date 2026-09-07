@@ -10,6 +10,7 @@ import {
   normalizeBlacklist,
   normalizeFilterRules,
   normalizeKvData,
+  isPlainObject,
   readJsonObject as readPagesJsonObject,
   SOURCE_MODE_SELECTED,
   validateApiPathPayload,
@@ -71,9 +72,47 @@ async function handleGetSourceStatuses(env) {
   return readSourceStatuses(env);
 }
 
-async function handleCheckSourceStatuses(env) {
+async function checkSourceStatuses(env, request) {
   subscriptions.clearAggregateCache();
-  const checkResponse = await subscriptions.handleRoot(env);
+  let body = {};
+  if (request) {
+    try {
+      body = await request.json();
+    } catch {
+      return pagesTextResponse("请求 JSON 无效", 400);
+    }
+  }
+  const scope = body?.scope || "used";
+  let sourceSelection = null;
+  if (scope === "all") {
+    sourceSelection = null;
+  } else if (scope === "selected") {
+    if (!Array.isArray(body?.sources)) return pagesTextResponse("数据源选择无效", 400);
+    sourceSelection = body.sources.filter((source) => source && ["subs", "apis"].includes(source.type) && typeof source.key === "string");
+  } else if (scope === "used") {
+    const [customApis, subs, apis] = await Promise.all([
+      env.KV.get(KV_KEY_CUSTOM_APIS, "json"),
+      env.KV.get(KV_KEY_SUBS, "json"),
+      env.KV.get(KV_KEY_APIS, "json"),
+    ]);
+    const configuredSources = [];
+    let usesAllSources = false;
+    for (const entry of Object.values(normalizeCustomApiData(customApis))) {
+      if (entry.enabled !== true) continue;
+      if (entry.sourceMode !== SOURCE_MODE_SELECTED) {
+        usesAllSources = true;
+        break;
+      }
+      configuredSources.push(...(entry.sources || []));
+    }
+    if (usesAllSources) sourceSelection = null;
+    else sourceSelection = configuredSources;
+    // Ensure malformed source configuration does not cause a broad check.
+    if (!isPlainObject(subs) && !isPlainObject(apis)) sourceSelection = [];
+  } else {
+    return pagesTextResponse("检测范围无效", 400);
+  }
+  const checkResponse = await subscriptions.handleRoot(env, sourceSelection);
   if (!checkResponse.ok) return checkResponse;
   return readSourceStatuses(env);
 }
@@ -250,7 +289,7 @@ export default {
           if (method === "GET") return await handleGetSourceStatuses(env);
           return pagesMethodNotAllowed("GET");
         case "/api/source-status/check":
-          if (method === "POST") return await handleCheckSourceStatuses(env);
+          if (method === "POST") return await checkSourceStatuses(env, request);
           return pagesMethodNotAllowed("POST");
         case "/api/blacklist":
           if (method === "GET") return await handleGetBlacklist(env);

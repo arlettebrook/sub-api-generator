@@ -124,7 +124,13 @@ export const adminHTML = `
       <h3>📊 数据源状态</h3>
       <p class="section-caption">手动检测订阅源和 API 源的最新响应。</p>
     </div>
-    <button class="btn-primary" type="button" id="sourceStatusRefreshButton">🔄 检测数据源</button>
+    <div class="section-heading-actions">
+      <select id="sourceStatusScope" aria-label="检测范围">
+        <option value="used">检测已使用数据源</option>
+        <option value="all">检测全部数据源</option>
+      </select>
+      <button class="btn-primary" type="button" id="sourceStatusRefreshButton">🔄 检测数据源</button>
+    </div>
   </div>
   <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
 </div>
