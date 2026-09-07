@@ -128,7 +128,7 @@ test("reads and validates JSON request bodies", async () => {
 test("requires Pages runtime configuration", () => {
   assert.match(getRuntimeConfig({}).error, /KV/);
   assert.match(getRuntimeConfig({ KV: kv }).error, /PASSWORD/);
-  assert.deepEqual(getRuntimeConfig({ KV: kv, UUID: "ignored", PASSWORD: "secret" }), {
+  assert.deepEqual(getRuntimeConfig({ KV: kv, LEGACY_PATH: "ignored", PASSWORD: "secret" }), {
     password: "secret",
   });
 });

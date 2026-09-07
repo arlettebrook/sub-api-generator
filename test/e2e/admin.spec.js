@@ -12,6 +12,7 @@ async function login(page) {
 test("loads the dashboard and switches theme", async ({ page }) => {
   await login(page);
   await expect(page.locator("#nodesContainer")).toBeVisible();
+  await expect(page.locator("#previewApiSelect")).toBeHidden();
   const wasDark = await page.locator("body").evaluate((body) => body.classList.contains("dark"));
   await page.locator("#themeSwitch").click();
   await expect.poll(() => page.locator("body").evaluate((body) => body.classList.contains("dark"))).toBe(!wasDark);

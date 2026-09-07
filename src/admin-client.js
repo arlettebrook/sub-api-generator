@@ -1129,7 +1129,7 @@ function renderCustomApiSelect() {
   const select = $('previewApiSelect');
   if (!select) return;
   const current = select.value;
-  select.innerHTML = '<option value="">默认优选API</option>';
+  select.innerHTML = '';
   Object.entries(customApis).forEach(([path, entry]) => {
     if (!entry.enabled) return;
     const option = document.createElement('option');
@@ -1137,6 +1137,7 @@ function renderCustomApiSelect() {
     option.textContent = entry.remark ? entry.remark + ' (' + path + ')' : '/' + path;
     select.appendChild(option);
   });
+  select.hidden = select.options.length === 0;
   if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
