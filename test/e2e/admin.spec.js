@@ -19,8 +19,10 @@ test("loads the dashboard and switches theme", async ({ page }) => {
 
 test("navigates to the custom API page and selects data sources", async ({ page }, testInfo) => {
   await login(page);
+  await page.evaluate(() => { window.__spaNavigationMarker = "kept"; });
   await page.locator('a[data-nav-page="customApis"]').click();
   await expect(page).toHaveURL(/\/admin\/custom-apis$/);
+  await expect.poll(() => page.evaluate(() => window.__spaNavigationMarker)).toBe("kept");
   await expect(page.locator("#customApiSection")).toBeVisible();
   await expect(page.locator("#customApiDialog")).not.toBeVisible();
   await page.getByRole("button", { name: "新建优选 API" }).click();

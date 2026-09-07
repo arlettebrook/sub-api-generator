@@ -14,22 +14,12 @@ export const adminHTML = `
     } catch (_) {}
   })();
 </script>
-<link rel="stylesheet" href="/admin.css" />
+<link rel="stylesheet" href="/admin.css?v=__ADMIN_ASSET_VERSION__" />
 </head>
 <body data-page="__PAGE__">
 
 <!-- Toast 提示容器 -->
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-
-<dialog class="confirm-dialog" id="customApiDeleteDialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
-  <div class="confirm-dialog-icon" aria-hidden="true">!</div>
-  <h3 id="customApiDeleteTitle">删除优选 API？</h3>
-  <p id="customApiDeleteMessage">此操作会移除当前访问路径及其数据源配置。</p>
-  <div class="confirm-dialog-actions">
-    <button class="btn-outline" type="button" id="cancelCustomApiDeleteButton">取消</button>
-    <button class="btn-danger" type="button" id="confirmCustomApiDeleteButton">确认删除</button>
-  </div>
-</dialog>
 
 <div class="page-header">
   <div class="header-left">
@@ -54,6 +44,20 @@ export const adminHTML = `
 
 <p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
 
+<main id="adminPageContent">
+<!-- ADMIN_SECTION:customApiDialog:START -->
+<dialog class="confirm-dialog" id="customApiDeleteDialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
+  <div class="confirm-dialog-icon" aria-hidden="true">!</div>
+  <h3 id="customApiDeleteTitle">删除优选 API？</h3>
+  <p id="customApiDeleteMessage">此操作会移除当前访问路径及其数据源配置。</p>
+  <div class="confirm-dialog-actions">
+    <button class="btn-outline" type="button" id="cancelCustomApiDeleteButton">取消</button>
+    <button class="btn-danger" type="button" id="confirmCustomApiDeleteButton">确认删除</button>
+  </div>
+</dialog>
+<!-- ADMIN_SECTION:customApiDialog:END -->
+
+<!-- ADMIN_SECTION:overview:START -->
 <!-- ==================== 优选节点预览 ==================== -->
 <div class="card" id="previewSection">
   <h3>🌐 优选API数据预览</h3>
@@ -112,7 +116,9 @@ export const adminHTML = `
   </div>
   <div id="pagination" class="pagination"></div>
 </div>
+<!-- ADMIN_SECTION:overview:END -->
 
+<!-- ADMIN_SECTION:customApis:START -->
 <!-- ==================== 优选 API ==================== -->
 <div class="card" id="customApiSection">
   <div class="section-heading custom-api-section-heading">
@@ -176,7 +182,9 @@ export const adminHTML = `
   </dialog>
   <div id="customApisList"></div>
 </div>
+<!-- ADMIN_SECTION:customApis:END -->
 
+<!-- ADMIN_SECTION:subs:START -->
 <!-- ==================== 订阅源管理 ==================== -->
 <div class="card" id="subsSection">
   <h3>📡 优选订阅器管理</h3>
@@ -195,7 +203,9 @@ export const adminHTML = `
   </div>
   <div id="subsList"></div>
 </div>
+<!-- ADMIN_SECTION:subs:END -->
 
+<!-- ADMIN_SECTION:apis:START -->
 <!-- ==================== API 管理 ==================== -->
 <div class="card" id="apisSection">
   <h3>🔗 优选 API 管理</h3>
@@ -214,7 +224,9 @@ export const adminHTML = `
   </div>
   <div id="apisList"></div>
 </div>
+<!-- ADMIN_SECTION:apis:END -->
 
+<!-- ADMIN_SECTION:settings:START -->
 <!-- ==================== 设置 ==================== -->
 <div class="card" id="settingsSection">
   <h3>⚙️ 界面设置</h3>
@@ -265,8 +277,11 @@ export const adminHTML = `
     </div>
   </div>
 </div>
+<!-- ADMIN_SECTION:settings:END -->
 
-<script src="/admin-client.js" defer></script>
+</main>
+
+<script src="/admin-client.js?v=__ADMIN_ASSET_VERSION__" defer></script>
 </body>
 </html>
 `;

@@ -29,6 +29,19 @@ import { adminClientScript } from "./admin-client.js";
 import { adminStyle } from "./admin-style.js";
 import { loginPage } from "./login-page.js";
 
+function makeAssetVersion(...contents) {
+  let hash = 2166136261;
+  for (const content of contents) {
+    for (let index = 0; index < content.length; index += 1) {
+      hash ^= content.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  return (hash >>> 0).toString(36);
+}
+
+const ADMIN_ASSET_VERSION = makeAssetVersion(adminStyle, adminClientScript);
+
 async function handleGetSubs(env) {
   const data = await env.KV.get(KV_KEY_SUBS, "json");
   return pagesJsonResponse(normalizeKvData(data, "subs"));
@@ -138,13 +151,25 @@ async function handleGetUuid(env) {
 }
 
 function handleAdmin(page = "overview") {
-  const html = adminHTML.replace('data-page="__PAGE__"', `data-page="${page}"`);
+  const html = renderAdminPage(page);
   return new Response(html, {
     headers: pagesSecurityHeaders({
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
     }),
   });
+}
+
+function renderAdminPage(page) {
+  const activeSections = new Set(page === "manage" ? ["subs", "apis"] : [page]);
+  let html = adminHTML
+    .replaceAll("__ADMIN_ASSET_VERSION__", ADMIN_ASSET_VERSION)
+    .replace('data-page="__PAGE__"', `data-page="${page}"`);
+  html = html.replace(/<!-- ADMIN_SECTION:([A-Za-z0-9_-]+):START -->[\s\S]*?<!-- ADMIN_SECTION:\1:END -->/g, (block, section) => {
+    if (section === "customApiDialog") return activeSections.has("customApis") ? block : "";
+    return activeSections.has(section) ? block : "";
+  });
+  return html;
 }
 
 function assetResponse(content, contentType, cacheControl = "public, max-age=300, must-revalidate") {
@@ -164,11 +189,11 @@ export default {
     const method = request.method;
     if (path === "/admin.css") {
       if (method !== "GET") return pagesMethodNotAllowed("GET");
-      return assetResponse(adminStyle, "text/css; charset=utf-8", "no-store");
+      return assetResponse(adminStyle, "text/css; charset=utf-8", "public, max-age=31536000, immutable");
     }
     if (path === "/admin-client.js") {
       if (method !== "GET") return pagesMethodNotAllowed("GET");
-      return assetResponse(adminClientScript, "application/javascript; charset=utf-8", "no-store");
+      return assetResponse(adminClientScript, "application/javascript; charset=utf-8", "public, max-age=31536000, immutable");
     }
     const config = getPagesRuntimeConfig(env);
 

@@ -52,8 +52,8 @@ test("serves separate responsive admin pages", async () => {
     assert.equal(response.status, 200);
     assert.match(html, new RegExp(`data-page="${page}"`));
     assert.match(html, /class="admin-nav"/);
-    assert.match(html, /href="\/admin\.css"/);
-    assert.match(html, /src="\/admin-client\.js"/);
+    assert.match(html, /href="\/admin\.css\?v=[a-z0-9]+"/);
+    assert.match(html, /src="\/admin-client\.js\?v=[a-z0-9]+"/);
     if (page === "manage") {
       assert.match(html, /id="subsSection"/);
       assert.match(html, /id="apisSection"/);
@@ -62,7 +62,8 @@ test("serves separate responsive admin pages", async () => {
     if (page === "customApis") {
       assert.match(html, /id="customApiSection"/);
       assert.match(html, /data-nav-page="customApis"/);
-      assert.match(adminClientScript, /page === 'customApis'\) loadCustomApis\(true\)/);
+      assert.match(adminClientScript, /page === 'customApis'/);
+      assert.match(adminClientScript, /loadCustomApis\(true\)/);
     }
   }
 });
@@ -72,17 +73,18 @@ test("keeps the generated admin script valid JavaScript", () => {
 });
 
 test("serves admin frontend assets", async () => {
-  const css = await worker.fetch(new Request("https://example.test/admin.css"));
+  const css = await worker.fetch(new Request("https://example.test/admin.css?v=cache-test"));
   assert.equal(css.status, 200);
   assert.match(css.headers.get("content-type"), /text\/css/);
+  assert.equal(css.headers.get("cache-control"), "public, max-age=31536000, immutable");
   const cssText = await css.text();
   assert.match(cssText, /--accent-primary/);
   assert.match(cssText, /@media screen and \(max-width: 768px\)/);
 
-  const script = await worker.fetch(new Request("https://example.test/admin-client.js"));
+  const script = await worker.fetch(new Request("https://example.test/admin-client.js?v=cache-test"));
   assert.equal(script.status, 200);
   assert.match(script.headers.get("content-type"), /javascript/);
-  assert.equal(script.headers.get("cache-control"), "no-store");
+  assert.equal(script.headers.get("cache-control"), "public, max-age=31536000, immutable");
   assert.match(await script.text(), /DOMContentLoaded/);
 });
 

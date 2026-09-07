@@ -514,7 +514,7 @@ function getNodeSourceLabel(node) { return node?.sourceKey ? (node.sourceType ==
 
 function updateRegionOptions() {
   if (!nodesRegionFilterEl) return;
-  const selected = nodesRegionFilterEl.value;
+  const selected = nodesRegionFilterEl.value || routeStateValue('region');
   const regions = [...new Set(currentNodes.map(getNodeRegion))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
   nodesRegionFilterEl.innerHTML = '<option value="">全部地区</option>' + regions.map((region) => \`<option value="\${region.replace(/"/g, '&quot;')}">\${region}</option>\`).join('');
   if (regions.includes(selected)) nodesRegionFilterEl.value = selected;
@@ -522,7 +522,7 @@ function updateRegionOptions() {
 
 function updateNodeFilterOptions() {
   if (!nodesSourceFilterEl) return;
-  const selected = nodesSourceFilterEl.value;
+  const selected = nodesSourceFilterEl.value || routeStateValue('source');
   const sources = [...new Map(currentNodes.filter((node) => node.sourceKey).map((node) => [node.sourceType + ':' + node.sourceKey, node])).values()];
   nodesSourceFilterEl.innerHTML = '<option value="">全部来源</option>' + sources.map((node) => {
     const value = node.sourceType + ':' + node.sourceKey;
@@ -2196,6 +2196,223 @@ function importFilterRules(event) {
   }, '备注过滤规则');
 }
 
+const pageIntros = {
+  overview: '集中查看订阅聚合结果和节点状态。',
+  subs: '管理优选订阅源，控制启用状态并维护备注。',
+  apis: '管理额外 API 源，控制启用状态并维护备注。',
+  manage: '统一管理优选订阅源和 API 源。',
+  customApis: '创建并管理优选 API 的访问路径。',
+  settings: '调整管理面板的界面显示设置。'
+};
+let pageNavigationRequest = null;
+let currentRouteUrl = window.location.href;
+
+function setRouteState(updates) {
+  const url = new URL(window.location.href);
+  Object.entries(updates).forEach(([key, value]) => {
+    const normalized = String(value ?? '').trim();
+    if (normalized) url.searchParams.set(key, normalized);
+    else url.searchParams.delete(key);
+  });
+  const nextUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '') + url.hash;
+  window.history.replaceState(window.history.state, '', nextUrl);
+  currentRouteUrl = window.location.href;
+}
+
+function routeStateValue(key) {
+  return new URL(window.location.href).searchParams.get(key) || '';
+}
+
+function syncRouteState() {
+  const page = document.body.dataset.page || 'overview';
+  const updates = {};
+  if (page === 'overview') {
+    updates.q = nodesSearchEl?.value || '';
+    updates.region = nodesRegionFilterEl?.value || '';
+    updates.source = nodesSourceFilterEl?.value || '';
+    updates.status = nodesStatusFilterEl?.value || '';
+    updates.sort = nodesSortEl?.value === 'default' ? '' : nodesSortEl?.value || '';
+    updates.api = $('previewApiSelect')?.value || '';
+  }
+  if (page === 'subs' || page === 'manage') {
+    updates.subsQ = $('subsSearch')?.value || '';
+    updates.subsSort = $('subsSort')?.value === 'default' ? '' : $('subsSort')?.value || '';
+  }
+  if (page === 'apis' || page === 'manage') {
+    updates.apisQ = $('apisSearch')?.value || '';
+    updates.apisSort = $('apisSort')?.value === 'default' ? '' : $('apisSort')?.value || '';
+  }
+  setRouteState(updates);
+}
+
+function hydratePageState(page) {
+  if (page === 'overview') {
+    if (nodesSearchEl) nodesSearchEl.value = routeStateValue('q');
+    if (nodesRegionFilterEl) nodesRegionFilterEl.value = routeStateValue('region');
+    if (nodesSourceFilterEl) nodesSourceFilterEl.value = routeStateValue('source');
+    if (nodesStatusFilterEl) nodesStatusFilterEl.value = routeStateValue('status');
+    if (nodesSortEl) nodesSortEl.value = routeStateValue('sort') || 'default';
+    const previewSelect = $('previewApiSelect');
+    if (previewSelect && routeStateValue('api')) previewSelect.value = routeStateValue('api');
+  }
+  if (page === 'subs' || page === 'manage') {
+    const search = $('subsSearch');
+    const sort = $('subsSort');
+    if (search) search.value = routeStateValue('subsQ');
+    if (sort) sort.value = routeStateValue('subsSort') || 'default';
+  }
+  if (page === 'apis' || page === 'manage') {
+    const search = $('apisSearch');
+    const sort = $('apisSort');
+    if (search) search.value = routeStateValue('apisQ');
+    if (sort) sort.value = routeStateValue('apisSort') || 'default';
+  }
+}
+
+function updatePageChrome(page) {
+  document.body.dataset.page = page;
+  const intro = $('pageIntro');
+  if (intro) intro.textContent = pageIntros[page] || pageIntros.overview;
+  document.querySelectorAll('[data-nav-page]').forEach((link) => {
+    const isActive = link.dataset.navPage === page;
+    link.classList.toggle('active', isActive);
+    if (isActive) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+}
+
+function cachePageElements() {
+  nodesContainer = $('nodesContainer');
+  paginationEl = $('pagination');
+  nodesCountEl = $('nodesCount');
+  nodesSearchEl = $('nodesSearch');
+  nodesRegionFilterEl = $('nodesRegionFilter');
+  nodesSortEl = $('nodesSort');
+  nodesFilterResetEl = $('nodesFilterReset');
+  nodesSourceFilterEl = $('nodesSourceFilter');
+  nodesStatusFilterEl = $('nodesStatusFilter');
+}
+
+function bindPageControls() {
+  [nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesSourceFilterEl, nodesStatusFilterEl].forEach((element) => {
+    if (!element || element.dataset.bound === 'true') return;
+    element.dataset.bound = 'true';
+    element.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', () => { renderNodeView(); syncRouteState(); });
+  });
+  if (nodesFilterResetEl && nodesFilterResetEl.dataset.bound !== 'true') {
+    nodesFilterResetEl.dataset.bound = 'true';
+    nodesFilterResetEl.addEventListener('click', () => {
+      if (nodesSearchEl) nodesSearchEl.value = '';
+      if (nodesRegionFilterEl) nodesRegionFilterEl.value = '';
+      if (nodesSortEl) nodesSortEl.value = 'default';
+      if (nodesSourceFilterEl) nodesSourceFilterEl.value = '';
+      if (nodesStatusFilterEl) nodesStatusFilterEl.value = '';
+      renderNodeView();
+      syncRouteState();
+    });
+  }
+  ['subs', 'apis'].forEach((type) => {
+    const search = $(type + 'Search');
+    const sort = $(type + 'Sort');
+    if (search && search.dataset.bound !== 'true') {
+      search.dataset.bound = 'true';
+      search.addEventListener('input', () => { (type === 'subs' ? renderSubs : renderApis)(); syncRouteState(); });
+    }
+    if (sort && sort.dataset.bound !== 'true') {
+      sort.dataset.bound = 'true';
+      sort.addEventListener('change', () => { (type === 'subs' ? renderSubs : renderApis)(); syncRouteState(); });
+    }
+    document.querySelectorAll('[data-batch^="' + type + '-"]').forEach((button) => {
+      if (button.dataset.bound === 'true') return;
+      button.dataset.bound = 'true';
+      button.addEventListener('click', () => applySourceBatch(type, button.dataset.batch.replace(type + '-', ''), button));
+    });
+  });
+  const previewSelect = $('previewApiSelect');
+  if (previewSelect && previewSelect.dataset.bound !== 'true') {
+    previewSelect.dataset.bound = 'true';
+    previewSelect.addEventListener('change', syncRouteState);
+  }
+}
+
+function loadActivePage(page) {
+  if (page === 'settings') {
+    initBlacklistForm();
+    void loadBlacklist();
+    initFilterRulesForm();
+    void loadFilterRules();
+  }
+  if (page === 'customApis') {
+    initCustomApiForm();
+    void loadCustomApis(true);
+  } else if (page === 'subs') {
+    void loadSubs();
+  } else if (page === 'apis') {
+    void loadApis();
+  } else if (page === 'manage') {
+    void loadSubs();
+    void loadApis();
+  } else if (page === 'overview') {
+    void fetchNodes();
+    void loadCustomApis().then(() => hydratePageState(page)).catch(() => { renderCustomApiSelect(); });
+  }
+  if (page === 'subs' || page === 'apis' || page === 'manage') void loadSourceStatuses();
+}
+
+async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.location.href } = {}) {
+  const target = new URL(url, window.location.href);
+  const currentPage = document.body.dataset.page || 'overview';
+  const nextPage = target.pathname === '/admin' ? 'overview'
+    : target.pathname === '/admin/custom-apis' ? 'customApis'
+      : target.pathname === '/admin/manage' ? 'manage'
+        : target.pathname === '/admin/settings' ? 'settings'
+          : target.pathname === '/admin/subs' ? 'subs'
+            : target.pathname === '/admin/apis' ? 'apis' : '';
+  if (!nextPage || (nextPage === currentPage && target.pathname === window.location.pathname)) return;
+  if (hasUnsavedChanges() && !window.confirm('当前有未保存的修改，确定离开吗？')) {
+    if (historyMode === 'none') window.history.pushState({}, '', restoreUrl);
+    return;
+  }
+  if (pageNavigationRequest) pageNavigationRequest.abort();
+  const navigationController = new AbortController();
+  pageNavigationRequest = navigationController;
+  document.body.classList.add('page-navigating');
+  document.querySelector('.page-load-indicator')?.classList.add('active');
+  try {
+    const response = await fetch(target.href, { signal: navigationController.signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'text/html' } });
+    if (!response.ok) throw new Error('页面请求失败（HTTP ' + response.status + '）');
+    const html = await response.text();
+    const nextDocument = new DOMParser().parseFromString(html, 'text/html');
+    const nextContent = nextDocument.querySelector('#adminPageContent');
+    const currentContent = $('adminPageContent');
+    if (!nextContent || !currentContent) throw new Error('页面内容格式无效');
+    activeNodeRequest?.abort();
+    currentContent.replaceWith(nextContent);
+    updatePageChrome(nextPage);
+    cachePageElements();
+    bindPageControls();
+    loadActivePage(nextPage);
+    if (historyMode === 'push') window.history.pushState({ page: nextPage }, '', target.pathname + target.search + target.hash);
+    currentRouteUrl = window.location.href;
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    updatePagePerf('页面');
+  } catch (error) {
+    if (error.name !== 'AbortError') {
+      if (historyMode === 'none') {
+        window.history.pushState({}, '', restoreUrl);
+        currentRouteUrl = window.location.href;
+      }
+      showToast(error.message || '页面加载失败', 'error', () => navigateToPage(target.href, { historyMode, restoreUrl }));
+    }
+  } finally {
+    if (pageNavigationRequest === navigationController) {
+      document.body.classList.remove('page-navigating');
+      document.querySelector('.page-load-indicator')?.classList.remove('active');
+      pageNavigationRequest = null;
+    }
+  }
+}
+
 // 页面初始化
 window.addEventListener('DOMContentLoaded', () => {
   updatePagePerf('页面');
@@ -2206,47 +2423,31 @@ window.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
     event.returnValue = '当前有未保存的修改，确定离开吗？';
   });
-  const intro = $('pageIntro');
-  const intros = {
-    overview: '集中查看订阅聚合结果和节点状态。',
-    subs: '管理优选订阅源，控制启用状态并维护备注。',
-    apis: '管理额外 API 源，控制启用状态并维护备注。',
-    manage: '统一管理优选订阅源和 API 源。',
-    customApis: '创建并管理优选 API 的访问路径。',
-    settings: '调整管理面板的界面显示设置。'
-  };
-  if (intro) intro.textContent = intros[page] || intros.overview;
+  updatePageChrome(page);
+  hydratePageState(page);
   document.querySelectorAll('[data-nav-page]').forEach((link) => {
-    const isActive = link.dataset.navPage === page;
-    link.classList.toggle('active', isActive);
-    if (isActive) link.setAttribute('aria-current', 'page');
-    else link.removeAttribute('aria-current');
+    if (link.dataset.bound === 'true') return;
+    link.dataset.bound = 'true';
     link.addEventListener('click', (event) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      document.body.classList.add('page-navigating');
-      document.querySelector('.page-load-indicator')?.classList.add('active');
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      void navigateToPage(link.href);
     });
   });
-
-  // 缓存核心DOM元素
-  nodesContainer = $('nodesContainer');
-  paginationEl = $('pagination');
-  nodesCountEl = $('nodesCount');
-  nodesSearchEl = $('nodesSearch');
-  nodesRegionFilterEl = $('nodesRegionFilter');
-  nodesSortEl = $('nodesSort');
-  nodesFilterResetEl = $('nodesFilterReset');
-  nodesSourceFilterEl = $('nodesSourceFilter');
-  nodesStatusFilterEl = $('nodesStatusFilter');
-  [nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesSourceFilterEl, nodesStatusFilterEl].forEach((element) => element?.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', renderNodeView));
-  nodesFilterResetEl?.addEventListener('click', () => {
-    if (nodesSearchEl) nodesSearchEl.value = '';
-    if (nodesRegionFilterEl) nodesRegionFilterEl.value = '';
-    if (nodesSortEl) nodesSortEl.value = 'default';
-    if (nodesSourceFilterEl) nodesSourceFilterEl.value = '';
-    if (nodesStatusFilterEl) nodesStatusFilterEl.value = '';
-    renderNodeView();
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    const link = event.target?.closest?.('a[href^="/admin"]');
+    if (!link || link.dataset.navPage) return;
+    event.preventDefault();
+    void navigateToPage(link.href);
   });
+  window.addEventListener('popstate', () => {
+    const targetUrl = window.location.href;
+    void navigateToPage(targetUrl, { historyMode: 'none', restoreUrl: currentRouteUrl });
+  });
+
+  cachePageElements();
+  bindPageControls();
   document.addEventListener('keydown', (event) => {
     if (event.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
       event.preventDefault();
@@ -2257,36 +2458,9 @@ window.addEventListener('DOMContentLoaded', () => {
       renderNodeView();
     }
   });
-  ['subs', 'apis'].forEach((type) => {
-    $(type + 'Search')?.addEventListener('input', type === 'subs' ? renderSubs : renderApis);
-    $(type + 'Sort')?.addEventListener('change', type === 'subs' ? renderSubs : renderApis);
-    document.querySelectorAll('[data-batch^="' + type + '-"]').forEach((button) => button.addEventListener('click', () => applySourceBatch(type, button.dataset.batch.replace(type + '-', ''), button)));
-  });
-
   $('themeSwitch')?.addEventListener('click', toggleTheme);
   $('logoutButton')?.addEventListener('click', logout);
-  
   initTheme();
-  if (page === 'settings') {
-    initBlacklistForm();
-    loadBlacklist();
-    initFilterRulesForm();
-    loadFilterRules();
-  }
-  if (page === 'customApis') initCustomApiForm();
-  if (page === 'subs') loadSubs();
-  else if (page === 'apis') loadApis();
-  else if (page === 'manage') {
-    loadSubs();
-    loadApis();
-  }
-  else if (page === 'customApis') loadCustomApis(true);
-  else if (page === 'overview') {
-    fetchNodes();
-    loadCustomApis().catch(() => {
-      renderCustomApiSelect();
-    });
-  }
-  if (page === 'subs' || page === 'apis' || page === 'manage') loadSourceStatuses();
+  loadActivePage(page);
 });
 `;
