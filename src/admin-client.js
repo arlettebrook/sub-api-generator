@@ -2,7 +2,6 @@ export const adminClientScript = `
 // ======================== 全局缓存与工具 ========================
 // 缓存DOM元素，避免重复查询提升性能
 const $ = (id) => document.getElementById(id);
-const clientStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 let nodesContainer, paginationEl, nodesCountEl;
 let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl, nodesSourceFilterEl, nodesStatusFilterEl;
 
@@ -146,14 +145,6 @@ let subsSavePending = 0;
 let apisSavePending = 0;
 let subsDirty = false;
 let apisDirty = false;
-
-function updatePagePerf(label = '页面') {
-  const element = $('pagePerf');
-  if (!element) return;
-  const elapsed = ((performance.now() - clientStartTime) / 1000).toFixed(2);
-  element.textContent = label + ' ' + elapsed + 's';
-  element.title = label + '耗时 ' + elapsed + ' 秒';
-}
 
 function hasUnsavedChanges() {
   return customApisDirty || blacklistDirty || filterRulesDirty || subsDirty || apisDirty || subsSavePending > 0 || apisSavePending > 0;
@@ -555,7 +546,6 @@ async function getPreviewApiUrl(signal) {
 }
 
 async function fetchNodes(emptyRetry = 0) {
-  const fetchStartTime = performance.now();
   const sequence = ++nodeLoadSequence;
   if (activeNodeRequest) activeNodeRequest.abort();
   const controller = new AbortController();
@@ -626,9 +616,6 @@ async function fetchNodes(emptyRetry = 0) {
     nodesContainer.appendChild(error);
     nodesCountEl.textContent = '共 0 个节点';
   } finally {
-    updatePagePerf('节点加载');
-    const fetchDuration = performance.now() - fetchStartTime;
-    nodesContainer?.setAttribute('data-load-ms', String(Math.round(fetchDuration)));
     if (activeNodeRequest === controller) activeNodeRequest = null;
   }
 }
@@ -2395,7 +2382,6 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
     if (historyMode === 'push') window.history.pushState({ page: nextPage }, '', target.pathname + target.search + target.hash);
     currentRouteUrl = window.location.href;
     window.scrollTo({ top: 0, behavior: 'auto' });
-    updatePagePerf('页面');
   } catch (error) {
     if (error.name !== 'AbortError') {
       if (historyMode === 'none') {
@@ -2415,8 +2401,6 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
 
 // 页面初始化
 window.addEventListener('DOMContentLoaded', () => {
-  updatePagePerf('页面');
-  window.setTimeout(() => updatePagePerf('页面'), 0);
   const page = document.body.dataset.page || 'overview';
   window.addEventListener('beforeunload', (event) => {
     if (!hasUnsavedChanges()) return;

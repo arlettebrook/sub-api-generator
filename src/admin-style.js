@@ -1083,13 +1083,6 @@ export const adminStyle = `
     gap: 12px;
   }
 
-  .page-perf {
-    color: var(--text-tertiary);
-    font-size: 10px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
   h2 {
     font-size: 30px;
     font-weight: 700;
