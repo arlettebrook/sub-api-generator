@@ -59,14 +59,23 @@ async function handleGetApis(env) {
   return pagesJsonResponse(normalizeKvData(data, "apis"));
 }
 
-async function handleGetSourceStatuses(env) {
-  subscriptions.clearAggregateCache();
-  await subscriptions.handleRoot(env);
+async function readSourceStatuses(env) {
   const [subs, apis] = await Promise.all([
     env.KV.get(KV_KEY_SUBS, "json"),
     env.KV.get(KV_KEY_APIS, "json"),
   ]);
   return pagesJsonResponse(subscriptions.getSourceStatuses(subs, apis));
+}
+
+async function handleGetSourceStatuses(env) {
+  return readSourceStatuses(env);
+}
+
+async function handleCheckSourceStatuses(env) {
+  subscriptions.clearAggregateCache();
+  const checkResponse = await subscriptions.handleRoot(env);
+  if (!checkResponse.ok) return checkResponse;
+  return readSourceStatuses(env);
 }
 
 async function handlePostApis(request, env) {
@@ -240,6 +249,9 @@ export default {
         case "/api/source-status":
           if (method === "GET") return await handleGetSourceStatuses(env);
           return pagesMethodNotAllowed("GET");
+        case "/api/source-status/check":
+          if (method === "POST") return await handleCheckSourceStatuses(env);
+          return pagesMethodNotAllowed("POST");
         case "/api/blacklist":
           if (method === "GET") return await handleGetBlacklist(env);
           if (method === "POST") return await handlePostBlacklist(request, env);

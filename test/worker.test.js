@@ -57,6 +57,7 @@ test("serves separate responsive admin pages", async () => {
       assert.match(html, /id="apisSection"/);
       assert.match(html, /id="sourceStatusSection"/);
       assert.match(html, /data-nav-page="manage"/);
+      assert.ok(html.indexOf('id="sourceStatusSection"') < html.indexOf('id="subsSection"'));
     }
     if (page === "overview") assert.doesNotMatch(html, /id="sourceStatusSection"/);
     if (page === "customApis") {
@@ -177,6 +178,34 @@ test("keeps multiple custom API paths independently usable", async () => {
   }
 });
 
+test("reads source status without contacting upstream sources", async () => {
+  const values = {
+    subs: { "status-read-only.example": { remark: "只读状态测试" } },
+    apis: {},
+    custom_apis: {},
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  let upstreamCalls = 0;
+  globalThis.fetch = async () => {
+    upstreamCalls += 1;
+    throw new Error("GET 不应访问上游");
+  };
+  try {
+    const response = await worker.fetch(new Request("https://example.test/api/source-status", {
+      headers: { Cookie: `auth=${hash}` },
+    }), runtime);
+    assert.equal(response.status, 200);
+    const status = await response.json();
+    assert.equal(status.subs["status-read-only.example"].state, "idle");
+    assert.equal(status.subs["status-read-only.example"].lastAttemptAt, null);
+    assert.equal(upstreamCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("manually checks and reports source status", async () => {
   const values = {
     subs: { "e.ye.gs": { remark: "e.ye.gs" } },
@@ -190,7 +219,8 @@ test("manually checks and reports source status", async () => {
     "vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#ok",
   ), { status: 200 });
   try {
-    const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status", {
+    const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status/check", {
+      method: "POST",
       headers: { Cookie: `auth=${hash}` },
     }), runtime);
     assert.equal(statusResponse.status, 200);
@@ -269,11 +299,18 @@ test("rejects invalid blacklist payloads", async () => {
 test("rejects unsupported methods", async () => {
   const hash = await sha256Hex("secret");
   const response = await worker.fetch(new Request("https://example.test/api/source-status", {
-    method: "POST",
+    method: "PUT",
     headers: { Cookie: `auth=${hash}` },
   }), env());
   assert.equal(response.status, 405);
   assert.equal(response.headers.get("allow"), "GET");
+
+  const checkResponse = await worker.fetch(new Request("https://example.test/api/source-status/check", {
+    method: "GET",
+    headers: { Cookie: `auth=${hash}` },
+  }), env());
+  assert.equal(checkResponse.status, 405);
+  assert.equal(checkResponse.headers.get("allow"), "POST");
 });
 
 test("logs out authenticated sessions", async () => {

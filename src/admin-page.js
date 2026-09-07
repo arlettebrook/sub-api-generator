@@ -116,6 +116,20 @@ export const adminHTML = `
 </div>
 <!-- ADMIN_SECTION:overview:END -->
 
+<!-- ADMIN_SECTION:sourceStatus:START -->
+<!-- ==================== 数据源状态 ==================== -->
+<div class="card" id="sourceStatusSection">
+  <div class="section-heading">
+    <div>
+      <h3>📊 数据源状态</h3>
+      <p class="section-caption">手动检测订阅源和 API 源的最新响应。</p>
+    </div>
+    <button class="btn-primary" type="button" id="sourceStatusRefreshButton">🔄 检测数据源</button>
+  </div>
+  <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
+</div>
+<!-- ADMIN_SECTION:sourceStatus:END -->
+
 <!-- ADMIN_SECTION:customApis:START -->
 <!-- ==================== 优选 API ==================== -->
 <div class="card" id="customApiSection">
@@ -223,20 +237,6 @@ export const adminHTML = `
   <div id="apisList"></div>
 </div>
 <!-- ADMIN_SECTION:apis:END -->
-
-<!-- ADMIN_SECTION:sourceStatus:START -->
-<!-- ==================== 数据源状态 ==================== -->
-<div class="card" id="sourceStatusSection">
-  <div class="section-heading">
-    <div>
-      <h3>📊 数据源状态</h3>
-      <p class="section-caption">手动检测订阅源和 API 源的最新响应。</p>
-    </div>
-    <button class="btn-primary" type="button" id="sourceStatusRefreshButton">🔄 检测数据源</button>
-  </div>
-  <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
-</div>
-<!-- ADMIN_SECTION:sourceStatus:END -->
 
 <!-- ADMIN_SECTION:settings:START -->
 <!-- ==================== 设置 ==================== -->

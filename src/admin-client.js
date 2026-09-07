@@ -161,10 +161,10 @@ function responseError(label, response) {
   return new Error(label + '失败（HTTP ' + response.status + '）');
 }
 
-async function readJsonResponse(url, label) {
+async function readJsonResponse(url, label, options = {}) {
   let response;
   try {
-    response = await fetch(url, { cache: 'no-store' });
+    response = await fetch(url, { cache: 'no-store', ...options });
   } catch (error) {
     throw new Error(label + '连接失败：' + (error.message || '网络异常'));
   }
@@ -942,7 +942,11 @@ async function loadSourceStatuses(manual = false) {
     refreshButton.textContent = '检测中…';
   }
   try {
-    sourceStatuses = await readJsonResponse('/api/source-status', '数据源状态');
+    sourceStatuses = await readJsonResponse(
+      manual ? '/api/source-status/check' : '/api/source-status',
+      '数据源状态',
+      manual ? { method: 'POST' } : {},
+    );
     renderSourceStatusSummary();
     if ($('subsList')) renderSubs();
     if ($('apisList')) renderApis();
@@ -2627,6 +2631,7 @@ function loadActivePage(page) {
   } else if (page === 'manage') {
     void loadSubs();
     void loadApis();
+    void loadSourceStatuses();
   } else if (page === 'overview') {
     void loadCustomApis()
       .then(() => {
