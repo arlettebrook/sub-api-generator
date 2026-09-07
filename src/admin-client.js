@@ -2509,7 +2509,6 @@ function syncRouteState() {
     updates.source = nodesSourceFilterEl?.value || '';
     updates.status = nodesStatusFilterEl?.value || '';
     updates.sort = nodesSortEl?.value === 'default' ? '' : nodesSortEl?.value || '';
-    updates.api = $('previewApiSelect')?.value || '';
   }
   if (page === 'subs' || page === 'manage') {
     updates.subsQ = $('subsSearch')?.value || '';
@@ -2529,8 +2528,6 @@ function hydratePageState(page) {
     if (nodesSourceFilterEl) nodesSourceFilterEl.value = routeStateValue('source');
     if (nodesStatusFilterEl) nodesStatusFilterEl.value = routeStateValue('status');
     if (nodesSortEl) nodesSortEl.value = routeStateValue('sort') || 'default';
-    const previewSelect = $('previewApiSelect');
-    if (previewSelect && routeStateValue('api')) previewSelect.value = routeStateValue('api');
   }
   if (page === 'subs' || page === 'manage') {
     const search = $('subsSearch');
@@ -2605,11 +2602,6 @@ function bindPageControls() {
       button.addEventListener('click', () => applySourceBatch(type, button.dataset.batch.replace(type + '-', ''), button));
     });
   });
-  const previewSelect = $('previewApiSelect');
-  if (previewSelect && previewSelect.dataset.bound !== 'true') {
-    previewSelect.dataset.bound = 'true';
-    previewSelect.addEventListener('change', syncRouteState);
-  }
   const sourceStatusRefreshButton = $('sourceStatusRefreshButton');
   if (sourceStatusRefreshButton && sourceStatusRefreshButton.dataset.bound !== 'true') {
     sourceStatusRefreshButton.dataset.bound = 'true';

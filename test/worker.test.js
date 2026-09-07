@@ -76,6 +76,7 @@ test("keeps the generated admin script valid JavaScript", () => {
   const nodeLoad = adminClientScript.indexOf("return fetchNodes();", customApiLoad);
   assert.ok(overviewStart >= 0 && customApiLoad > overviewStart && nodeLoad > customApiLoad);
   assert.equal(adminClientScript.indexOf("void fetchNodes();", overviewStart), -1);
+  assert.doesNotMatch(adminClientScript, /updates\.api\s*=/);
 });
 
 test("serves admin frontend assets", async () => {
