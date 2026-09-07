@@ -175,8 +175,7 @@ export const adminStyle = `
     text-overflow: ellipsis;
   }
 
-  .nav-copy { display: grid; gap: 1px; min-width: 0; text-align: left; }
-  .nav-copy small { color: var(--text-tertiary); font-size: 10px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+  .admin-nav .nav-label { overflow: hidden; text-overflow: ellipsis; }
   .admin-nav a.active::after { content: ''; position: absolute; left: 18%; right: 18%; bottom: 3px; height: 2px; border-radius: 999px; background: var(--accent-primary); }
   .page-load-indicator { position: fixed; inset: 0 0 auto; height: 2px; z-index: 10001; pointer-events: none; opacity: 0; background: var(--accent-gradient); transform: scaleX(0); transform-origin: left; }
   .page-load-indicator.active { opacity: 1; animation: page-load-progress 0.8s ease-out forwards; }
@@ -925,6 +924,19 @@ export const adminStyle = `
   .custom-api-row .custom-api-actions .custom-api-delete {
     opacity: 1;
     pointer-events: auto;
+    flex: 0 0 auto;
+    min-width: 76px;
+    justify-content: center;
+    border-color: rgba(239, 68, 68, .5);
+    background: rgba(239, 68, 68, .06);
+  }
+
+  .custom-api-row .custom-api-actions .custom-api-delete:hover {
+    background: var(--danger-light);
+    border-color: var(--danger);
+    color: var(--danger);
+    transform: none;
+    box-shadow: none;
   }
 
   .icon-action {
@@ -1926,11 +1938,6 @@ export const adminStyle = `
   .nodes-empty-link { text-decoration: none; }
 
   .node-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .node-source { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-size: 10px; }
-  .node-availability { font-size: 10px; white-space: nowrap; font-weight: 600; }
-  .node-availability-available { color: var(--success); }
-  .node-availability-unavailable { color: var(--danger); }
-  .node-availability-unknown { color: var(--text-tertiary); }
   .node-copy { height: 28px; padding: 0 8px; font-size: 11px; opacity: 0; }
   .node-item:hover .node-copy, .node-item:focus-within .node-copy { opacity: 1; }
   .node-item:focus-within { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-light); }
@@ -2236,6 +2243,10 @@ export const adminStyle = `
     .custom-api-actions button {
       flex: 1;
     }
+    .custom-api-row .custom-api-actions .custom-api-delete {
+      flex: 1 0 100%;
+      min-height: 40px;
+    }
     .custom-api-actions .custom-api-switch {
       order: -1;
       width: 100%;
@@ -2305,8 +2316,6 @@ export const adminStyle = `
     .nav-icon {
       font-size: 15px;
     }
-    .nav-copy { display: contents; }
-    .nav-copy small { display: none; }
     .admin-nav a.active::after { left: 30%; right: 30%; bottom: 2px; }
     .setting-row {
       align-items: flex-start;

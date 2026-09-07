@@ -657,15 +657,6 @@ function renderNodes(nodes) {
     const regionClass = getRegionClass(node.remark);
     if (regionClass) tagEl.classList.add(regionClass);
 
-    const sourceEl = document.createElement('small');
-    sourceEl.className = 'node-source';
-    sourceEl.textContent = getNodeSourceLabel(node);
-    sourceEl.title = node.sourceKey || '来源未知';
-    const availabilityEl = document.createElement('span');
-    const availability = getNodeAvailability(node);
-    availabilityEl.className = 'node-availability node-availability-' + availability;
-    availabilityEl.textContent = availability === 'available' ? '● 可用' : availability === 'unavailable' ? '⚠ 来源异常' : '？ 状态未知';
-    availabilityEl.setAttribute('aria-label', availabilityEl.textContent);
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button'; copyBtn.className = 'node-copy'; copyBtn.textContent = '复制';
     copyBtn.title = '复制此节点';
@@ -674,7 +665,7 @@ function renderNodes(nodes) {
       try { await navigator.clipboard.writeText(node.host + (node.remark !== '未命名' ? '#' + node.remark : '')); copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制'; }, 1200); }
       catch (error) { showToast('复制失败：' + error.message, 'error'); }
     };
-    const meta = document.createElement('div'); meta.className = 'node-meta'; meta.append(tagEl, sourceEl, availabilityEl, copyBtn);
+    const meta = document.createElement('div'); meta.className = 'node-meta'; meta.append(tagEl, copyBtn);
     
     item.appendChild(hostEl);
     item.appendChild(meta);
@@ -1234,6 +1225,7 @@ function renderCustomApis() {
     delBtn.className = 'del-btn custom-api-delete';
     delBtn.textContent = '🗑 删除';
     delBtn.type = 'button';
+    delBtn.setAttribute('aria-label', '🗑 删除');
     delBtn.onclick = () => confirmCustomApiDelete(path);
     actions.append(switchLabel, editBtn, copyBtn, openBtn, delBtn);
 

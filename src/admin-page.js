@@ -44,10 +44,10 @@ export const adminHTML = `
 </div>
 
 <nav class="admin-nav" aria-label="管理导航">
-  <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-copy"><span class="nav-label">数据预览</span><small>节点与来源状态</small></span></a>
-  <a href="/admin/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-copy"><span class="nav-label">优选 API</span><small>访问路径配置</small></span></a>
-  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-copy"><span class="nav-label">优选管理</span><small>订阅源与 API 源</small></span></a>
-  <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-copy"><span class="nav-label">设置</span><small>过滤与界面偏好</small></span></a>
+  <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
+  <a href="/admin/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-label">优选 API</span></a>
+  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
+  <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
 </nav>
 <div class="page-load-indicator" aria-hidden="true"></div>
 
