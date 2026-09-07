@@ -40,6 +40,7 @@ export const adminHTML = `
     <button id="logoutButton" class="btn-outline btn-logout" type="button" title="退出登录">
       <span>🚪</span> 退出登录
     </button>
+    <span id="pagePerf" class="page-perf" role="status" aria-live="polite">加载中…</span>
   </div>
 </div>
 

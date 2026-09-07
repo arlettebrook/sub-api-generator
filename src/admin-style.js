@@ -28,7 +28,7 @@ export const adminStyle = `
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 18px;
-    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
   }
 
   .dark {
@@ -1083,6 +1083,13 @@ export const adminStyle = `
     gap: 12px;
   }
 
+  .page-perf {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
   h2 {
     font-size: 30px;
     font-weight: 700;
@@ -1831,9 +1838,7 @@ export const adminStyle = `
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 12px;
-    /* 开启硬件加速，优化滚动与渲染性能 */
-    transform: translateZ(0);
-    will-change: transform;
+    contain: layout paint;
   }
 
   .node-item {
@@ -1846,8 +1851,7 @@ export const adminStyle = `
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    /* 独立合成层，减少hover时的重绘 */
-    will-change: transform, box-shadow;
+    contain: layout paint;
   }
 
   .node-item:hover {
@@ -2133,6 +2137,35 @@ export const adminStyle = `
     body {
       margin: 8px auto;
       padding: 0 8px calc(84px + env(safe-area-inset-bottom, 0px));
+      background-attachment: scroll;
+    }
+    .card,
+    .admin-nav,
+    button,
+    input,
+    select,
+    .toast {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+    .card,
+    .node-item,
+    .admin-nav a,
+    button,
+    input,
+    select {
+      transition: none;
+    }
+    .card:hover,
+    .node-item:hover,
+    .admin-nav a:hover,
+    button:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    .nodes-grid,
+    .node-item {
+      contain: layout;
     }
     .page-header {
       align-items: center;
