@@ -358,6 +358,7 @@ export const adminStyle = `
     border-radius: var(--radius-md);
     background: var(--bg-secondary);
     color: var(--text-tertiary);
+    overflow: hidden;
   }
 
   .rule-search input {
@@ -368,6 +369,12 @@ export const adminStyle = `
     outline: 0;
     background: transparent;
     box-shadow: none;
+  }
+
+  .rule-search input:focus {
+    border-color: transparent;
+    box-shadow: none;
+    background: transparent;
   }
 
   .rule-search:focus-within {
@@ -431,7 +438,7 @@ export const adminStyle = `
   .filter-preview-result {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 12px;
   }
 
@@ -451,7 +458,9 @@ export const adminStyle = `
   }
 
   .filter-preview-result code {
-    max-width: 72%;
+    max-width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -576,8 +585,8 @@ export const adminStyle = `
   }
 
   .btn-subtle {
-    border-color: transparent;
-    background: transparent;
+    border-color: var(--border-color);
+    background: var(--bg-secondary);
     color: var(--text-tertiary);
   }
 
@@ -593,6 +602,7 @@ export const adminStyle = `
     height: 34px;
     padding: 0 10px;
     font-size: 13px;
+    border-color: var(--border-color);
   }
 
   .blacklist-toolbar .btn-primary {
@@ -2678,10 +2688,26 @@ export const adminStyle = `
     .blacklist-add-row {
       align-items: stretch;
       flex-direction: column;
+      gap: 8px;
+    }
+    .blacklist-add-row input {
+      width: 100%;
+      min-height: 44px;
+      border-color: var(--border-hover);
+      background: var(--bg-secondary);
+      font-size: 16px;
+    }
+    .blacklist-add-row .setting-add-button {
+      min-height: 44px;
+      border-color: var(--border-hover);
+      background: var(--surface-solid);
+      color: var(--text-primary);
     }
     .blacklist-add-row button,
     .blacklist-toolbar button {
       width: 100%;
+      min-height: 40px;
+      border-color: var(--border-hover);
     }
     .blacklist-list {
       grid-template-columns: 1fr;
