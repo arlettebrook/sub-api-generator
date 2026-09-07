@@ -100,7 +100,7 @@ export const adminStyle = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 36px;
+    margin-bottom: 22px;
     flex-wrap: wrap;
     gap: 16px;
   }
@@ -174,6 +174,14 @@ export const adminStyle = `
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  .nav-copy { display: grid; gap: 1px; min-width: 0; text-align: left; }
+  .nav-copy small { color: var(--text-tertiary); font-size: 10px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+  .admin-nav a.active::after { content: ''; position: absolute; left: 18%; right: 18%; bottom: 3px; height: 2px; border-radius: 999px; background: var(--accent-primary); }
+  .page-load-indicator { position: fixed; inset: 0 0 auto; height: 2px; z-index: 10001; pointer-events: none; opacity: 0; background: var(--accent-gradient); transform: scaleX(0); transform-origin: left; }
+  .page-load-indicator.active { opacity: 1; animation: page-load-progress 0.8s ease-out forwards; }
+  @keyframes page-load-progress { to { transform: scaleX(.82); } }
+  .page-navigating .card { opacity: .82; transition: opacity .15s ease; }
 
   body[data-page="overview"] #subsSection,
   body[data-page="overview"] #apisSection,
@@ -1403,6 +1411,8 @@ export const adminStyle = `
     background: transparent;
     border-color: transparent;
   }
+  .row .host-input { min-width: 180px; text-overflow: ellipsis; }
+  .copy-source-button { flex: 0 0 auto; width: 30px; height: 30px; padding: 0; color: var(--text-secondary); }
 
   .row input:hover {
     border-color: var(--border-color);
@@ -1415,7 +1425,8 @@ export const adminStyle = `
   }
 
   .source-health {
-    display: inline-flex;
+    display: grid;
+    gap: 1px;
     align-items: center;
     min-height: 28px;
     max-width: min(100%, 280px);
@@ -1428,7 +1439,11 @@ export const adminStyle = `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.25;
   }
+  .source-health strong { font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .source-health small { color: var(--text-tertiary); font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+  .source-health-error-detail { color: var(--danger) !important; max-width: 320px; }
 
   .source-health-success {
     border-color: rgba(16, 185, 129, 0.35);
@@ -1569,14 +1584,16 @@ export const adminStyle = `
     padding: 0 12px;
     font-size: 13px;
     flex-shrink: 0;
-    opacity: 0;
-    pointer-events: none;
+    opacity: .62;
+    pointer-events: auto;
   }
 
   .row:hover .del-btn {
     opacity: 1;
     pointer-events: auto;
   }
+
+  .batch-delete { color: var(--danger); border-color: rgba(239, 68, 68, .28); }
 
   .row .del-btn:hover {
     background: var(--danger-light);
@@ -1750,6 +1767,7 @@ export const adminStyle = `
   .toast.show {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
   }
 
   .toast-retry {
@@ -1909,6 +1927,10 @@ export const adminStyle = `
 
   .node-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .node-source { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-size: 10px; }
+  .node-availability { font-size: 10px; white-space: nowrap; font-weight: 600; }
+  .node-availability-available { color: var(--success); }
+  .node-availability-unavailable { color: var(--danger); }
+  .node-availability-unknown { color: var(--text-tertiary); }
   .node-copy { height: 28px; padding: 0 8px; font-size: 11px; opacity: 0; }
   .node-item:hover .node-copy, .node-item:focus-within .node-copy { opacity: 1; }
   .node-item:focus-within { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-light); }
@@ -1917,6 +1939,8 @@ export const adminStyle = `
   .list-sort { min-width: 140px; }
   .batch-button { height: 34px; padding: 0 10px; font-size: 12px; }
   .source-select { flex: 0 0 auto !important; min-width: 16px !important; width: 16px; height: 16px; }
+
+  :focus-visible { outline: 3px solid var(--accent-primary); outline-offset: 2px; }
 
   .nodes-skeleton {
     display: grid;
@@ -2281,6 +2305,9 @@ export const adminStyle = `
     .nav-icon {
       font-size: 15px;
     }
+    .nav-copy { display: contents; }
+    .nav-copy small { display: none; }
+    .admin-nav a.active::after { left: 30%; right: 30%; bottom: 2px; }
     .setting-row {
       align-items: flex-start;
       flex-direction: column;

@@ -19,7 +19,7 @@ export const adminHTML = `
 <body data-page="__PAGE__">
 
 <!-- Toast 提示容器 -->
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <dialog class="confirm-dialog" id="customApiDeleteDialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
   <div class="confirm-dialog-icon" aria-hidden="true">!</div>
@@ -44,11 +44,12 @@ export const adminHTML = `
 </div>
 
 <nav class="admin-nav" aria-label="管理导航">
-  <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
-  <a href="/admin/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-label">优选API</span></a>
-  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
-  <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
+  <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-copy"><span class="nav-label">数据预览</span><small>节点与来源状态</small></span></a>
+  <a href="/admin/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-copy"><span class="nav-label">优选 API</span><small>访问路径配置</small></span></a>
+  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-copy"><span class="nav-label">优选管理</span><small>订阅源与 API 源</small></span></a>
+  <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-copy"><span class="nav-label">设置</span><small>过滤与界面偏好</small></span></a>
 </nav>
+<div class="page-load-indicator" aria-hidden="true"></div>
 
 <p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
 
@@ -57,11 +58,11 @@ export const adminHTML = `
   <h3>🌐 优选API数据预览</h3>
   <div class="toolbar">
     <select id="previewApiSelect" onchange="fetchNodes()" aria-label="选择优选API"></select>
-    <button class="btn-primary" onclick="fetchNodes()">🔄 刷新数据</button>
-    <button class="btn-outline" onclick="copySubUrl(event)" title="复制优选API">
+    <button class="btn-primary" onclick="fetchNodes()" aria-label="刷新节点数据">🔄 刷新数据</button>
+    <button class="btn-outline" onclick="copySubUrl(event)" title="复制优选API" aria-label="复制优选 API 地址">
       <span>📋</span> 复制优选API
     </button>
-    <button class="btn-outline" onclick="copyNodeData(event)" title="复制全部优选API数据">
+    <button class="btn-outline" onclick="copyNodeData(event)" title="复制全部优选API数据" aria-label="复制全部节点数据">
       <span>📝</span> 复制优选API数据
     </button>
     <span class="nodes-count" id="nodesCount">共 0 个节点</span>
@@ -84,7 +85,7 @@ export const adminHTML = `
     </label>
     <label class="nodes-filter-field">
       <span>状态</span>
-      <select id="nodesStatusFilter" aria-label="按状态筛选"><option value="">全部状态</option><option value="named">有备注</option><option value="unnamed">无备注</option></select>
+      <select id="nodesStatusFilter" aria-label="按可用状态筛选"><option value="">全部状态</option><option value="available">可用</option><option value="unavailable">来源异常</option><option value="unknown">状态未知</option></select>
     </label>
     <label class="nodes-filter-field">
       <span>排序</span>
@@ -94,6 +95,11 @@ export const adminHTML = `
         <option value="host-desc">地址 Z-A</option>
         <option value="remark-asc">备注 A-Z</option>
         <option value="remark-desc">备注 Z-A</option>
+        <option value="region-asc">地区</option>
+        <option value="source-asc">来源</option>
+        <option value="availability-asc">可用状态</option>
+        <option value="duration-asc">来源请求耗时（低到高）</option>
+        <option value="duration-desc">来源请求耗时（高到低）</option>
       </select>
     </label>
     <button class="btn-outline nodes-filter-reset" id="nodesFilterReset" type="button">清除筛选</button>
@@ -181,9 +187,9 @@ export const adminHTML = `
   <div class="toolbar">
     <input id="subsSearch" class="list-search" type="search" placeholder="搜索订阅源或备注" aria-label="搜索订阅源" />
     <select id="subsSort" class="list-sort" aria-label="订阅源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option><option value="status">启用状态</option></select>
-    <button type="button" class="batch-button" data-batch="subs-select">全选</button><button type="button" class="batch-button" data-batch="subs-enable">批量启用</button><button type="button" class="batch-button" data-batch="subs-disable">批量禁用</button>
-    <button onclick="exportSubs()">📤 导出配置</button>
-    <button onclick="document.getElementById('importSubsFile').click()">📥 导入配置</button>
+    <button type="button" class="batch-button" data-batch="subs-select">全选</button><button type="button" class="batch-button" data-batch="subs-enable">批量启用</button><button type="button" class="batch-button" data-batch="subs-disable">批量禁用</button><button type="button" class="batch-button batch-delete" data-batch="subs-delete">批量删除</button>
+    <button onclick="exportSubs()" aria-label="导出订阅源配置">📤 导出配置</button>
+    <button onclick="document.getElementById('importSubsFile').click()" aria-label="导入订阅源配置">📥 导入配置</button>
     <input type="file" id="importSubsFile" accept=".json,application/json" style="display:none" onchange="importSubs(event)" />
   </div>
   <div id="subsList"></div>
@@ -200,9 +206,9 @@ export const adminHTML = `
   <div class="toolbar">
     <input id="apisSearch" class="list-search" type="search" placeholder="搜索 API 地址或备注" aria-label="搜索 API 源" />
     <select id="apisSort" class="list-sort" aria-label="API 源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option><option value="status">启用状态</option></select>
-    <button type="button" class="batch-button" data-batch="apis-select">全选</button><button type="button" class="batch-button" data-batch="apis-enable">批量启用</button><button type="button" class="batch-button" data-batch="apis-disable">批量禁用</button>
-    <button onclick="exportApis()">📤 导出配置</button>
-    <button onclick="document.getElementById('importApisFile').click()">📥 导入配置</button>
+    <button type="button" class="batch-button" data-batch="apis-select">全选</button><button type="button" class="batch-button" data-batch="apis-enable">批量启用</button><button type="button" class="batch-button" data-batch="apis-disable">批量禁用</button><button type="button" class="batch-button batch-delete" data-batch="apis-delete">批量删除</button>
+    <button onclick="exportApis()" aria-label="导出 API 源配置">📤 导出配置</button>
+    <button onclick="document.getElementById('importApisFile').click()" aria-label="导入 API 源配置">📥 导入配置</button>
     <input type="file" id="importApisFile" accept=".json,application/json" style="display:none" onchange="importApis(event)" />
   </div>
   <div id="apisList"></div>

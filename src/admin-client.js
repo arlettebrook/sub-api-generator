@@ -78,6 +78,7 @@ function showToast(message, type = 'default', retry) {
     toast.appendChild(retryButton);
   }
   toast.className = 'toast ' + type;
+  toast.setAttribute('aria-label', message);
   
   requestAnimationFrame(() => {
     toast.classList.add('show');
@@ -119,6 +120,26 @@ function setInputError(input, message) {
 }
 
 function clearInputError(input) { setInputError(input, ''); }
+
+function createCopyButton(value, label) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'icon-action copy-source-button';
+  button.textContent = '⧉';
+  button.title = '复制' + label;
+  button.setAttribute('aria-label', '复制' + label);
+  button.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      button.textContent = '✓';
+      showToast(label + '已复制', 'success');
+      window.setTimeout(() => { button.textContent = '⧉'; }, 1200);
+    } catch (error) {
+      showToast('复制失败：' + error.message, 'error');
+    }
+  };
+  return button;
+}
 
 let subsSavePending = 0;
 let apisSavePending = 0;
@@ -449,21 +470,38 @@ function getVisibleNodes() {
   const status = nodesStatusFilterEl?.value || '';
   const visible = currentNodes.filter((node) => {
     const text = (String(node.host || '') + ' ' + String(node.remark || '')).toLowerCase();
-    const named = node.remark && node.remark !== '未命名';
+    const availability = getNodeAvailability(node);
     return (!query || text.includes(query)) && (!region || getNodeRegion(node) === region)
       && (!source || (node.sourceType + ':' + node.sourceKey) === source)
-      && (!status || (status === 'named' ? named : !named));
+      && (!status || availability === status);
   });
   if (sort !== 'default') {
     const [field, direction] = sort.split('-');
     visible.sort((a, b) => {
-      const left = String(field === 'host' ? a.host : a.remark || '').toLocaleLowerCase();
-      const right = String(field === 'host' ? b.host : b.remark || '').toLocaleLowerCase();
+      if (field === 'duration' || field === 'availability') {
+        const left = field === 'duration' ? getNodeDuration(a) : getAvailabilityRank(getNodeAvailability(a));
+        const right = field === 'duration' ? getNodeDuration(b) : getAvailabilityRank(getNodeAvailability(b));
+        return (left - right) * (direction === 'desc' ? -1 : 1);
+      }
+      const left = String(field === 'host' ? a.host : field === 'remark' ? a.remark || '' : field === 'region' ? getNodeRegion(a) : getNodeSourceLabel(a)).toLocaleLowerCase();
+      const right = String(field === 'host' ? b.host : field === 'remark' ? b.remark || '' : field === 'region' ? getNodeRegion(b) : getNodeSourceLabel(b)).toLocaleLowerCase();
       return left.localeCompare(right, 'zh-CN') * (direction === 'desc' ? -1 : 1);
     });
   }
   return visible;
 }
+
+function getNodeSourceStatus(node) {
+  return node?.sourceType && node?.sourceKey ? getSourceStatus(node.sourceType, node.sourceKey) : null;
+}
+function getNodeAvailability(node) {
+  const status = getNodeSourceStatus(node);
+  if (!status || !status.state || status.state === 'idle') return 'unknown';
+  return status.state === 'success' ? 'available' : 'unavailable';
+}
+function getAvailabilityRank(value) { return value === 'available' ? 0 : value === 'unavailable' ? 1 : 2; }
+function getNodeDuration(node) { const value = Number(getNodeSourceStatus(node)?.durationMs); return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER; }
+function getNodeSourceLabel(node) { return node?.sourceKey ? (node.sourceType === 'apis' ? 'API 源 · ' : '订阅源 · ') + node.sourceKey : '来源未知'; }
 
 function updateRegionOptions() {
   if (!nodesRegionFilterEl) return;
@@ -621,8 +659,13 @@ function renderNodes(nodes) {
 
     const sourceEl = document.createElement('small');
     sourceEl.className = 'node-source';
-    sourceEl.textContent = node.sourceKey ? (node.sourceType === 'apis' ? 'API 源' : '订阅源') : '来源未知';
+    sourceEl.textContent = getNodeSourceLabel(node);
     sourceEl.title = node.sourceKey || '来源未知';
+    const availabilityEl = document.createElement('span');
+    const availability = getNodeAvailability(node);
+    availabilityEl.className = 'node-availability node-availability-' + availability;
+    availabilityEl.textContent = availability === 'available' ? '● 可用' : availability === 'unavailable' ? '⚠ 来源异常' : '？ 状态未知';
+    availabilityEl.setAttribute('aria-label', availabilityEl.textContent);
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button'; copyBtn.className = 'node-copy'; copyBtn.textContent = '复制';
     copyBtn.title = '复制此节点';
@@ -631,7 +674,7 @@ function renderNodes(nodes) {
       try { await navigator.clipboard.writeText(node.host + (node.remark !== '未命名' ? '#' + node.remark : '')); copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制'; }, 1200); }
       catch (error) { showToast('复制失败：' + error.message, 'error'); }
     };
-    const meta = document.createElement('div'); meta.className = 'node-meta'; meta.append(tagEl, sourceEl, copyBtn);
+    const meta = document.createElement('div'); meta.className = 'node-meta'; meta.append(tagEl, sourceEl, availabilityEl, copyBtn);
     
     item.appendChild(hostEl);
     item.appendChild(meta);
@@ -857,7 +900,7 @@ function getSourceStatus(type, key) {
 function createSourceHealth(type, key) {
   const status = getSourceStatus(type, key);
   const state = ['success', 'filtered', 'empty', 'error'].includes(status.state) ? status.state : 'idle';
-  const health = document.createElement('span');
+  const health = document.createElement('div');
   health.className = 'source-health source-health-' + state;
   let text = '未检测';
   if (state === 'success') text = '正常 · ' + status.nodeCount + ' 个节点';
@@ -865,8 +908,19 @@ function createSourceHealth(type, key) {
   if (state === 'empty') text = '返回空数据';
   if (state === 'error') text = '失败 · ' + (status.error || '请求失败');
   if (status.durationMs !== null && state !== 'idle') text += ' · ' + status.durationMs + ' ms';
-  health.textContent = text;
-  health.title = status.lastAttemptAt ? '最近检测：' + status.lastAttemptAt : '尚未检测此数据源';
+  const primary = document.createElement('strong');
+  primary.textContent = text;
+  const checked = document.createElement('small');
+  checked.textContent = status.lastAttemptAt ? '最后检测：' + formatSourceTime(status.lastAttemptAt) : '尚未检测';
+  health.append(primary, checked);
+  if (status.error) {
+    const error = document.createElement('small');
+    error.className = 'source-health-error-detail';
+    error.textContent = '最近错误：' + status.error;
+    health.appendChild(error);
+  }
+  health.title = (status.lastAttemptAt ? '最后检测：' + formatSourceTime(status.lastAttemptAt) : '尚未检测此数据源') + (status.error ? '；最近错误：' + status.error : '');
+  health.setAttribute('aria-label', health.title);
   return health;
 }
 
@@ -876,6 +930,7 @@ async function loadSourceStatuses() {
     renderSourceStatusSummary();
     if ($('subsList')) renderSubs();
     if ($('apisList')) renderApis();
+    if (nodesContainer && currentNodes.length) renderNodeView();
   } catch {
     renderSourceStatusSummary();
     // 状态接口不可用时保留配置页面，不阻断管理操作。
@@ -1508,10 +1563,12 @@ function renderSubs() {
     hostInput.className = 'host-input';
     hostInput.value = host;
     hostInput.placeholder = '主机地址';
+    hostInput.title = host;
 
     const statusBtn = document.createElement('button');
     statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
     statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
+    statusBtn.setAttribute('aria-label', host + '：' + statusBtn.textContent + '，点击切换');
     statusBtn.onclick = async () => {
       statusBtn.disabled = true;
       statusBtn.textContent = '处理中…';
@@ -1526,6 +1583,7 @@ function renderSubs() {
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn';
     delBtn.textContent = '删除';
+    delBtn.setAttribute('aria-label', '删除订阅源 ' + host);
     delBtn.onclick = async () => {
       delBtn.disabled = true;
       delBtn.textContent = '删除中…';
@@ -1554,6 +1612,7 @@ function renderSubs() {
 
     row.appendChild(select); row.appendChild(remarkInput);
     row.appendChild(hostInput);
+    row.appendChild(createCopyButton(host, '订阅源地址'));
     row.appendChild(statusBtn);
     row.appendChild(health);
     row.appendChild(delBtn);
@@ -1561,15 +1620,33 @@ function renderSubs() {
   });
 }
 
-function applySourceBatch(type, action) {
+async function applySourceBatch(type, action, trigger) {
   const data = type === 'subs' ? subs : apis;
   const list = $(type === 'subs' ? 'subsList' : 'apisList');
   const selected = [...list.querySelectorAll('.source-select:checked')].map((input) => input.dataset.key);
   if (action === 'select') { list.querySelectorAll('.source-select').forEach((input) => { input.checked = true; }); return; }
   if (!selected.length) { showToast('请先选择数据源', 'warning'); return; }
-  selected.forEach((key) => { if (data[key]) data[key].enabled = action === 'enable'; });
-  if (type === 'subs') { renderSubs(); void queueSubsSave(); } else { renderApis(); void queueApisSave(); }
-  showToast('已更新 ' + selected.length + ' 个数据源', 'success');
+  if (action === 'delete' && !window.confirm('确定删除选中的 ' + selected.length + ' 个数据源吗？此操作不可撤销。')) return;
+  const previous = Object.fromEntries(selected.filter((key) => data[key]).map((key) => [key, { ...data[key] }]));
+  const buttons = [...document.querySelectorAll('[data-batch^="' + type + '-"]')];
+  buttons.forEach((button) => { button.disabled = true; });
+  if (trigger) { trigger.dataset.idleText ||= trigger.textContent; trigger.textContent = action === 'delete' ? '删除中…' : '处理中…'; }
+  try {
+    selected.forEach((key) => {
+      if (action === 'delete') delete data[key];
+      else if (data[key]) data[key].enabled = action === 'enable';
+    });
+    const saved = type === 'subs' ? await queueSubsSave() : await queueApisSave();
+    if (!saved) throw new Error('保存失败');
+    type === 'subs' ? renderSubs() : renderApis();
+    showToast(action === 'delete' ? '已删除 ' + selected.length + ' 个数据源' : '已更新 ' + selected.length + ' 个数据源', 'success');
+  } catch (error) {
+    selected.forEach((key) => { if (previous[key]) data[key] = previous[key]; });
+    type === 'subs' ? renderSubs() : renderApis();
+    showToast((action === 'delete' ? '批量删除' : '批量更新') + '失败：' + error.message, 'error', () => applySourceBatch(type, action));
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; if (button.dataset.idleText) button.textContent = button.dataset.idleText; });
+  }
 }
 
 function addSub() {
@@ -1711,10 +1788,12 @@ function renderApis() {
     urlInput.className = 'host-input';
     urlInput.value = url;
     urlInput.placeholder = 'API 地址';
+    urlInput.title = url;
 
     const statusBtn = document.createElement('button');
     statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
     statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
+    statusBtn.setAttribute('aria-label', url + '：' + statusBtn.textContent + '，点击切换');
     statusBtn.onclick = async () => {
       statusBtn.disabled = true;
       statusBtn.textContent = '处理中…';
@@ -1729,6 +1808,7 @@ function renderApis() {
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn';
     delBtn.textContent = '删除';
+    delBtn.setAttribute('aria-label', '删除 API 源 ' + url);
     delBtn.onclick = async () => {
       delBtn.disabled = true;
       delBtn.textContent = '删除中…';
@@ -1757,6 +1837,7 @@ function renderApis() {
 
     row.appendChild(select); row.appendChild(remarkInput);
     row.appendChild(urlInput);
+    row.appendChild(createCopyButton(url, 'API 地址'));
     row.appendChild(statusBtn);
     row.appendChild(health);
     row.appendChild(delBtn);
@@ -2133,6 +2214,11 @@ window.addEventListener('DOMContentLoaded', () => {
     link.classList.toggle('active', isActive);
     if (isActive) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
+    link.addEventListener('click', (event) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      document.body.classList.add('page-navigating');
+      document.querySelector('.page-load-indicator')?.classList.add('active');
+    });
   });
 
   // 缓存核心DOM元素
@@ -2167,7 +2253,7 @@ window.addEventListener('DOMContentLoaded', () => {
   ['subs', 'apis'].forEach((type) => {
     $(type + 'Search')?.addEventListener('input', type === 'subs' ? renderSubs : renderApis);
     $(type + 'Sort')?.addEventListener('change', type === 'subs' ? renderSubs : renderApis);
-    document.querySelectorAll('[data-batch^="' + type + '-"]').forEach((button) => button.addEventListener('click', () => applySourceBatch(type, button.dataset.batch.replace(type + '-', ''))));
+    document.querySelectorAll('[data-batch^="' + type + '-"]').forEach((button) => button.addEventListener('click', () => applySourceBatch(type, button.dataset.batch.replace(type + '-', ''), button)));
   });
 
   $('themeSwitch')?.addEventListener('click', toggleTheme);
