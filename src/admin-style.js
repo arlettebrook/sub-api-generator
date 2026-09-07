@@ -448,6 +448,20 @@ export const adminStyle = `
     gap: 8px;
   }
 
+  .blacklist-list.is-large {
+    max-height: min(460px, 52vh);
+    overflow-y: auto;
+    align-content: start;
+    padding: 4px 6px 4px 0;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .blacklist-list.is-large .blacklist-row {
+    content-visibility: auto;
+    contain-intrinsic-size: 42px;
+  }
+
   .blacklist-row {
     display: flex;
     align-items: center;
@@ -2601,6 +2615,9 @@ export const adminStyle = `
     }
     .blacklist-list {
       grid-template-columns: 1fr;
+    }
+    .blacklist-list.is-large {
+      max-height: min(360px, 46vh);
     }
     .blacklist-toolbar {
       align-items: stretch;

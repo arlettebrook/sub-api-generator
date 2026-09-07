@@ -1997,9 +1997,11 @@ function renderBlacklist() {
   if (!list) return;
   list.innerHTML = '';
   const query = blacklistSearchTerm.trim().toLowerCase();
+  list.classList.toggle('is-large', blacklist.length > 24);
   const visible = blacklist
     .map((word, index) => ({ word, index }))
     .filter(({ word }) => !query || word.toLowerCase().includes(query));
+  const fragment = document.createDocumentFragment();
   visible.forEach(({ word, index }) => {
     const row = document.createElement('div');
     row.className = 'blacklist-row';
@@ -2038,9 +2040,13 @@ function renderBlacklist() {
     });
 
     row.append(checkbox, input, deleteButton);
-    list.appendChild(row);
+    fragment.appendChild(row);
   });
-  if (empty) empty.hidden = blacklist.length !== 0 || Boolean(query);
+  list.appendChild(fragment);
+  if (empty) {
+    empty.textContent = query ? '没有匹配的黑名单词条。' : '暂无黑名单词条，所有节点都将参与聚合。';
+    empty.hidden = visible.length !== 0;
+  }
   if (summary) summary.textContent = query ? visible.length + ' / ' + blacklist.length + ' 项' : blacklist.length + ' 项';
 }
 
@@ -2248,9 +2254,11 @@ function renderFilterRules() {
   if (!list) return;
   list.innerHTML = '';
   const query = filterRulesSearchTerm.trim().toLowerCase();
+  list.classList.toggle('is-large', filterRules.length > 24);
   const visible = filterRules
     .map((rule, index) => ({ rule, index }))
     .filter(({ rule }) => !query || rule.toLowerCase().includes(query));
+  const fragment = document.createDocumentFragment();
   visible.forEach(({ rule, index }) => {
     const row = document.createElement('div'); row.className = 'blacklist-row';
     const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'rule-select';
@@ -2262,9 +2270,13 @@ function renderFilterRules() {
     input.addEventListener('blur', () => validateRuleInput(input, filterRules, index, '过滤规则'));
     const button = document.createElement('button'); button.type = 'button'; button.className = 'del-btn'; button.textContent = '删除';
     button.onclick = () => { filterRules.splice(index, 1); renderFilterRules(); setFilterRulesDirty(); };
-    row.append(checkbox, input, button); list.appendChild(row);
+    row.append(checkbox, input, button); fragment.appendChild(row);
   });
-  if ($('filterRulesEmpty')) $('filterRulesEmpty').hidden = filterRules.length !== 0 || Boolean(query);
+  list.appendChild(fragment);
+  if ($('filterRulesEmpty')) {
+    $('filterRulesEmpty').textContent = query ? '没有匹配的过滤规则。' : '暂无过滤规则。';
+    $('filterRulesEmpty').hidden = visible.length !== 0;
+  }
   if ($('filterRulesSummary')) $('filterRulesSummary').textContent = query ? visible.length + ' / ' + filterRules.length + ' 项' : filterRules.length + ' 项';
   updateFilterPreview();
 }
