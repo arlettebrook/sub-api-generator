@@ -327,6 +327,23 @@ export const adminStyle = `
     display: flex;
     align-items: center;
     gap: 8px;
+    position: sticky;
+    top: 8px;
+    z-index: 3;
+    padding: 6px;
+    margin: -6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface-solid) 94%, transparent);
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(8px);
+  }
+
+  .selection-count {
+    flex: 0 0 auto;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   .rule-search {
@@ -460,6 +477,54 @@ export const adminStyle = `
   .blacklist-list.is-large .blacklist-row {
     content-visibility: auto;
     contain-intrinsic-size: 42px;
+  }
+
+  .rule-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding-top: 4px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .rule-pagination[hidden] {
+    display: none;
+  }
+
+  .rule-pagination button {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .rule-import-dialog {
+    width: min(440px, calc(100vw - 32px));
+  }
+
+  .import-preview-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 12px 0 4px;
+  }
+
+  .import-preview-stats span {
+    display: grid;
+    gap: 2px;
+    padding: 9px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-tertiary);
+    text-align: center;
+    font-size: 11px;
+  }
+
+  .import-preview-stats strong {
+    color: var(--text-primary);
+    font-size: 16px;
   }
 
   .blacklist-row {
@@ -2589,12 +2654,17 @@ export const adminStyle = `
     .rule-list-toolbar {
       align-items: stretch;
       flex-wrap: wrap;
+      top: 4px;
     }
     .rule-search {
       flex-basis: 100%;
     }
     .rule-list-toolbar > button {
       flex: 1;
+    }
+    .selection-count {
+      order: -1;
+      width: 100%;
     }
     .filter-preview-heading,
     .filter-preview-result {
@@ -2619,12 +2689,26 @@ export const adminStyle = `
     .blacklist-list.is-large {
       max-height: min(360px, 46vh);
     }
+    .rule-pagination {
+      padding-bottom: 2px;
+    }
+    .import-preview-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .blacklist-toolbar {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       align-items: stretch;
-      flex-direction: column;
     }
     .blacklist-toolbar .save-status {
+      grid-column: 1 / -1;
       margin-right: 0;
+    }
+    .blacklist-toolbar .btn-primary {
+      grid-column: 1 / -1;
+    }
+    .blacklist-toolbar .setting-batch-delete {
+      grid-column: 1 / -1;
     }
     .page-intro {
       margin: 0 0 10px;

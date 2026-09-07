@@ -2,6 +2,13 @@ export const adminClientScript = `
 // ======================== 全局缓存与工具 ========================
 // 缓存DOM元素，避免重复查询提升性能
 const $ = (id) => document.getElementById(id);
+function debounce(callback, delay = 180) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => callback(...args), delay);
+  };
+}
 let nodesContainer, paginationEl, nodesCountEl;
 let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl, nodesSourceFilterEl, nodesStatusFilterEl;
 
@@ -1933,6 +1940,8 @@ function importApis(event) {
 let blacklist = [];
 let savedBlacklist = [];
 let blacklistSearchTerm = '';
+let blacklistPage = 1;
+const blacklistHistory = [];
 const selectedBlacklist = new Set();
 
 function normalizeBlacklistClient(value) {
@@ -1968,7 +1977,6 @@ function readJsonFile(event, onData, label) {
   reader.onload = (e) => {
     try {
       onData(JSON.parse(e.target.result));
-      showToast('导入成功！', 'success');
     } catch (error) {
       showToast(label + '导入失败：' + error.message, 'error');
     }
@@ -1997,10 +2005,14 @@ function renderBlacklist() {
   if (!list) return;
   list.innerHTML = '';
   const query = blacklistSearchTerm.trim().toLowerCase();
-  list.classList.toggle('is-large', blacklist.length > 24);
-  const visible = blacklist
+  const matches = blacklist
     .map((word, index) => ({ word, index }))
     .filter(({ word }) => !query || word.toLowerCase().includes(query));
+  const totalPages = Math.max(1, Math.ceil(matches.length / RULE_PAGE_SIZE));
+  blacklistPage = Math.min(Math.max(1, blacklistPage), totalPages);
+  const visible = matches.slice((blacklistPage - 1) * RULE_PAGE_SIZE, blacklistPage * RULE_PAGE_SIZE);
+  list.classList.toggle('is-large', matches.length > 24);
+  list.classList.toggle('is-paged', totalPages > 1);
   const fragment = document.createDocumentFragment();
   visible.forEach(({ word, index }) => {
     const row = document.createElement('div');
@@ -2013,6 +2025,7 @@ function renderBlacklist() {
     checkbox.setAttribute('aria-label', '选择黑名单词条 ' + (index + 1));
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) selectedBlacklist.add(word); else selectedBlacklist.delete(word);
+      updateRuleSelectionCount('blacklistSelectionCount', selectedBlacklist.size);
     });
 
     const input = document.createElement('input');
@@ -2021,6 +2034,7 @@ function renderBlacklist() {
     input.value = word;
     input.setAttribute('aria-label', '黑名单词条 ' + (index + 1));
     input.addEventListener('input', () => {
+      if (!input.dataset.historyStarted) { pushRuleHistory(blacklistHistory, blacklist); input.dataset.historyStarted = 'true'; }
       blacklist[index] = input.value.slice(0, 128);
       selectedBlacklist.delete(word);
       clearInputError(input);
@@ -2034,6 +2048,7 @@ function renderBlacklist() {
     deleteButton.textContent = '删除';
     deleteButton.title = '删除此黑名单词条';
     deleteButton.addEventListener('click', () => {
+      pushRuleHistory(blacklistHistory, blacklist);
       blacklist.splice(index, 1);
       renderBlacklist();
       setBlacklistDirty(true);
@@ -2045,9 +2060,11 @@ function renderBlacklist() {
   list.appendChild(fragment);
   if (empty) {
     empty.textContent = query ? '没有匹配的黑名单词条。' : '暂无黑名单词条，所有节点都将参与聚合。';
-    empty.hidden = visible.length !== 0;
+    empty.hidden = matches.length !== 0;
   }
-  if (summary) summary.textContent = query ? visible.length + ' / ' + blacklist.length + ' 项' : blacklist.length + ' 项';
+  if (summary) summary.textContent = query ? matches.length + ' / ' + blacklist.length + ' 项' : blacklist.length + ' 项';
+  renderRulePagination('blacklistPagination', matches.length, blacklistPage, (page) => { blacklistPage = page; renderBlacklist(); });
+  updateRuleSelectionCount('blacklistSelectionCount', selectedBlacklist.size);
 }
 
 async function loadBlacklist() {
@@ -2055,6 +2072,8 @@ async function loadBlacklist() {
   try {
     blacklist = normalizeBlacklistClient(await readJsonResponse('/api/blacklist', '黑名单配置'));
     savedBlacklist = [...blacklist];
+    blacklistHistory.length = 0;
+    blacklistPage = 1;
     selectedBlacklist.clear();
     renderBlacklist();
     setBlacklistDirty(false);
@@ -2084,6 +2103,7 @@ function addBlacklistWord() {
     input.focus();
     return;
   }
+  pushRuleHistory(blacklistHistory, blacklist);
   blacklist.push(word);
   clearInputError(input);
   input.value = '';
@@ -2100,10 +2120,13 @@ function exportBlacklist() {
 function importBlacklist(event) {
   readJsonFile(event, (data) => {
     if (!Array.isArray(data)) throw new Error('文件内容必须是字符串数组');
-    blacklist = normalizeBlacklistClient(data);
-    selectedBlacklist.clear();
-    renderBlacklist();
-    setBlacklistDirty(true);
+    const incoming = normalizeBlacklistClient(data);
+    openRuleImportPreview('黑名单', blacklist, incoming, () => {
+      pushRuleHistory(blacklistHistory, blacklist);
+      blacklist = incoming;
+      selectedBlacklist.clear(); blacklistPage = 1;
+      renderBlacklist(); setBlacklistDirty(true); showToast('黑名单导入成功', 'success');
+    });
   }, '黑名单');
 }
 
@@ -2125,6 +2148,7 @@ async function saveBlacklist() {
     if (!response.ok) throw responseError('黑名单配置保存', response);
     setBlacklistDirty(false);
     savedBlacklist = [...blacklist];
+    blacklistHistory.length = 0;
     showToast('黑名单配置已保存', 'success');
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
@@ -2147,15 +2171,18 @@ function validateRuleInput(input, values, index, label) {
 
 function undoBlacklistChanges() {
   if (!blacklistDirty) return;
-  blacklist = [...savedBlacklist];
+  if (blacklistHistory.length) blacklist = blacklistHistory.pop();
+  else blacklist = [...savedBlacklist];
   selectedBlacklist.clear();
   renderBlacklist();
-  setBlacklistDirty(false);
-  showToast('已撤销黑名单修改', 'info');
+  const dirty = !sameRuleList(blacklist, savedBlacklist);
+  setBlacklistDirty(dirty);
+  showToast(dirty ? '已撤销上一步黑名单修改' : '已恢复到最近保存的黑名单', 'info');
 }
 
 function resetBlacklistDefaults() {
   if (!settingConfirm('确定恢复默认黑名单吗？当前未保存的修改也会被替换。')) return;
+  pushRuleHistory(blacklistHistory, blacklist);
   blacklist = [];
   selectedBlacklist.clear();
   renderBlacklist();
@@ -2174,6 +2201,7 @@ function clearBlacklistSelection() { selectedBlacklist.clear(); renderBlacklist(
 function deleteSelectedBlacklist() {
   if (!selectedBlacklist.size) { showToast('请先选择要删除的黑名单', 'warning'); return; }
   if (!settingConfirm('确定删除选中的 ' + selectedBlacklist.size + ' 个黑名单词条吗？')) return;
+  pushRuleHistory(blacklistHistory, blacklist);
   blacklist = blacklist.filter((word) => !selectedBlacklist.has(word));
   selectedBlacklist.clear();
   renderBlacklist();
@@ -2198,7 +2226,59 @@ function initBlacklistForm() {
 let filterRules = [];
 let savedFilterRules = [];
 let filterRulesSearchTerm = '';
+let filterRulesPage = 1;
+const filterRulesHistory = [];
 const selectedFilterRules = new Set();
+const RULE_PAGE_SIZE = 40;
+
+function pushRuleHistory(history, values) {
+  const snapshot = [...values];
+  if (history.length && JSON.stringify(history[history.length - 1]) === JSON.stringify(snapshot)) return;
+  history.push(snapshot);
+  if (history.length > 10) history.shift();
+}
+
+function sameRuleList(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function renderRulePagination(containerId, total, page, onPage) {
+  const container = $(containerId);
+  if (!container) return;
+  const pages = Math.ceil(total / RULE_PAGE_SIZE);
+  container.innerHTML = '';
+  container.hidden = pages <= 1;
+  if (pages <= 1) return;
+  const previous = document.createElement('button');
+  previous.type = 'button'; previous.className = 'btn-subtle'; previous.textContent = '上一页'; previous.disabled = page <= 1;
+  previous.onclick = () => onPage(page - 1);
+  const label = document.createElement('span'); label.textContent = '第 ' + page + ' / ' + pages + ' 页';
+  const next = document.createElement('button');
+  next.type = 'button'; next.className = 'btn-subtle'; next.textContent = '下一页'; next.disabled = page >= pages;
+  next.onclick = () => onPage(page + 1);
+  container.append(previous, label, next);
+}
+
+function updateRuleSelectionCount(elementId, count) {
+  const element = $(elementId);
+  if (element) element.textContent = count ? '已选择 ' + count + ' 项' : '未选择';
+}
+
+function openRuleImportPreview(label, current, incoming, apply) {
+  const dialog = $('ruleImportPreviewDialog');
+  const added = incoming.filter((item) => !current.some((value) => value.toLowerCase() === item.toLowerCase())).length;
+  const removed = current.filter((item) => !incoming.some((value) => value.toLowerCase() === item.toLowerCase())).length;
+  const unchanged = incoming.length - added;
+  if (!dialog || typeof dialog.showModal !== 'function') {
+    if (settingConfirm('导入预览：' + label + '将新增 ' + added + ' 项、保留 ' + unchanged + ' 项、移除 ' + removed + ' 项。确定导入吗？')) apply();
+    return;
+  }
+  $('ruleImportPreviewTitle').textContent = label + '导入预览';
+  $('ruleImportPreviewMessage').textContent = '确认后将替换当前配置，未保存的修改也会被替换。';
+  $('ruleImportPreviewStats').innerHTML = '<span><strong>' + incoming.length + '</strong> 导入</span><span><strong>' + added + '</strong> 新增</span><span><strong>' + unchanged + '</strong> 保留</span><span><strong>' + removed + '</strong> 移除</span>';
+  dialog._applyRuleImport = apply;
+  dialog.showModal();
+}
 
 function settingConfirm(message) {
   return typeof window.confirm !== 'function' || window.confirm(message);
@@ -2254,35 +2334,41 @@ function renderFilterRules() {
   if (!list) return;
   list.innerHTML = '';
   const query = filterRulesSearchTerm.trim().toLowerCase();
-  list.classList.toggle('is-large', filterRules.length > 24);
-  const visible = filterRules
+  const matches = filterRules
     .map((rule, index) => ({ rule, index }))
     .filter(({ rule }) => !query || rule.toLowerCase().includes(query));
+  const totalPages = Math.max(1, Math.ceil(matches.length / RULE_PAGE_SIZE));
+  filterRulesPage = Math.min(Math.max(1, filterRulesPage), totalPages);
+  const visible = matches.slice((filterRulesPage - 1) * RULE_PAGE_SIZE, filterRulesPage * RULE_PAGE_SIZE);
+  list.classList.toggle('is-large', matches.length > 24);
+  list.classList.toggle('is-paged', totalPages > 1);
   const fragment = document.createDocumentFragment();
   visible.forEach(({ rule, index }) => {
     const row = document.createElement('div'); row.className = 'blacklist-row';
     const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'rule-select';
     checkbox.checked = selectedFilterRules.has(rule); checkbox.setAttribute('aria-label', '选择过滤规则 ' + (index + 1));
-    checkbox.addEventListener('change', () => { if (checkbox.checked) selectedFilterRules.add(rule); else selectedFilterRules.delete(rule); });
+    checkbox.addEventListener('change', () => { if (checkbox.checked) selectedFilterRules.add(rule); else selectedFilterRules.delete(rule); updateRuleSelectionCount('filterRulesSelectionCount', selectedFilterRules.size); });
     const input = document.createElement('input'); input.type = 'text'; input.maxLength = 128; input.value = rule;
     input.setAttribute('aria-label', '过滤规则 ' + (index + 1));
-    input.addEventListener('input', () => { filterRules[index] = input.value.slice(0, 128); selectedFilterRules.delete(rule); clearInputError(input); setFilterRulesDirty(); updateFilterPreview(); });
+    input.addEventListener('input', () => { if (!input.dataset.historyStarted) { pushRuleHistory(filterRulesHistory, filterRules); input.dataset.historyStarted = 'true'; } filterRules[index] = input.value.slice(0, 128); selectedFilterRules.delete(rule); clearInputError(input); setFilterRulesDirty(); updateFilterPreview(); });
     input.addEventListener('blur', () => validateRuleInput(input, filterRules, index, '过滤规则'));
     const button = document.createElement('button'); button.type = 'button'; button.className = 'del-btn'; button.textContent = '删除';
-    button.onclick = () => { filterRules.splice(index, 1); renderFilterRules(); setFilterRulesDirty(); };
+    button.onclick = () => { pushRuleHistory(filterRulesHistory, filterRules); filterRules.splice(index, 1); renderFilterRules(); setFilterRulesDirty(); };
     row.append(checkbox, input, button); fragment.appendChild(row);
   });
   list.appendChild(fragment);
   if ($('filterRulesEmpty')) {
     $('filterRulesEmpty').textContent = query ? '没有匹配的过滤规则。' : '暂无过滤规则。';
-    $('filterRulesEmpty').hidden = visible.length !== 0;
+    $('filterRulesEmpty').hidden = matches.length !== 0;
   }
-  if ($('filterRulesSummary')) $('filterRulesSummary').textContent = query ? visible.length + ' / ' + filterRules.length + ' 项' : filterRules.length + ' 项';
+  if ($('filterRulesSummary')) $('filterRulesSummary').textContent = query ? matches.length + ' / ' + filterRules.length + ' 项' : filterRules.length + ' 项';
+  renderRulePagination('filterRulesPagination', matches.length, filterRulesPage, (page) => { filterRulesPage = page; renderFilterRules(); });
+  updateRuleSelectionCount('filterRulesSelectionCount', selectedFilterRules.size);
   updateFilterPreview();
 }
 async function loadFilterRules() {
   if ($('filterRulesList')) $('filterRulesList').innerHTML = listSkeletonMarkup(2);
-  try { filterRules = normalizeFilterRulesClient(await readJsonResponse('/api/filter-rules', '备注过滤规则')); savedFilterRules = [...filterRules]; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(false); }
+  try { filterRules = normalizeFilterRulesClient(await readJsonResponse('/api/filter-rules', '备注过滤规则')); savedFilterRules = [...filterRules]; filterRulesHistory.length = 0; filterRulesPage = 1; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(false); }
   catch (error) { renderLoadError('filterRulesList', error.message, loadFilterRules); showToast(error.message, 'error'); }
 }
 function addFilterRule() {
@@ -2291,6 +2377,7 @@ function addFilterRule() {
   if (!rule) { setInputError(input, '请输入过滤规则'); showToast('请输入过滤规则', 'error'); input.focus(); return; }
   if (filterRules.length >= 200) { showToast('过滤规则不能超过 200 个', 'error'); return; }
   if (filterRules.some((item) => item.toLowerCase() === rule.toLowerCase())) { setInputError(input, '该规则已存在'); showToast('该规则已存在', 'error'); input.focus(); return; }
+  pushRuleHistory(filterRulesHistory, filterRules);
   filterRules.push(rule); clearInputError(input); input.value = ''; renderFilterRules(); setFilterRulesDirty(); input.focus();
 }
 async function saveFilterRules() {
@@ -2300,7 +2387,7 @@ async function saveFilterRules() {
   try {
     const response = await fetch('/api/filter-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(filterRules) });
     if (!response.ok) throw responseError('备注过滤规则保存', response);
-    setFilterRulesDirty(false); savedFilterRules = [...filterRules]; showToast('备注过滤规则已保存', 'success');
+    setFilterRulesDirty(false); savedFilterRules = [...filterRules]; filterRulesHistory.length = 0; showToast('备注过滤规则已保存', 'success');
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) { setFilterRulesDirty(true); showToast(error.message || '备注过滤规则保存失败', 'error', saveFilterRules); }
   finally { setButtonBusy(button, false); if (button) button.disabled = !filterRulesDirty; }
@@ -2317,12 +2404,13 @@ function initFilterRulesForm() {
 
 function undoFilterRulesChanges() {
   if (!filterRulesDirty) return;
-  filterRules = [...savedFilterRules]; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(false); showToast('已撤销过滤规则修改', 'info');
+  if (filterRulesHistory.length) filterRules = filterRulesHistory.pop(); else filterRules = [...savedFilterRules];
+  selectedFilterRules.clear(); renderFilterRules(); const dirty = !sameRuleList(filterRules, savedFilterRules); setFilterRulesDirty(dirty); showToast(dirty ? '已撤销上一步过滤规则修改' : '已恢复到最近保存的过滤规则', 'info');
 }
 
 function resetFilterRulesDefaults() {
   if (!settingConfirm('确定恢复默认过滤规则吗？当前未保存的修改也会被替换。')) return;
-  filterRules = []; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(true); showToast('已恢复默认过滤规则，请保存后生效', 'info');
+  pushRuleHistory(filterRulesHistory, filterRules); filterRules = []; selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(true); showToast('已恢复默认过滤规则，请保存后生效', 'info');
 }
 
 function selectAllFilterRules() {
@@ -2336,21 +2424,32 @@ function clearFilterRulesSelection() { selectedFilterRules.clear(); renderFilter
 function deleteSelectedFilterRules() {
   if (!selectedFilterRules.size) { showToast('请先选择要删除的过滤规则', 'warning'); return; }
   if (!settingConfirm('确定删除选中的 ' + selectedFilterRules.size + ' 条过滤规则吗？')) return;
-  filterRules = filterRules.filter((rule) => !selectedFilterRules.has(rule)); selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(true);
+  pushRuleHistory(filterRulesHistory, filterRules); filterRules = filterRules.filter((rule) => !selectedFilterRules.has(rule)); selectedFilterRules.clear(); renderFilterRules(); setFilterRulesDirty(true);
 }
 
 function initSettingsEnhancements() {
+  const importDialog = $('ruleImportPreviewDialog');
+  if (importDialog && importDialog.dataset.bound !== 'true') {
+    importDialog.dataset.bound = 'true';
+    $('cancelRuleImportButton')?.addEventListener('click', () => importDialog.close());
+    $('confirmRuleImportButton')?.addEventListener('click', () => {
+      const apply = importDialog._applyRuleImport;
+      importDialog.close();
+      if (typeof apply === 'function') apply();
+    });
+    importDialog.addEventListener('click', (event) => { if (event.target === importDialog) importDialog.close(); });
+  }
   const blacklistSearch = $('blacklistSearch');
   if (blacklistSearch && blacklistSearch.dataset.bound !== 'true') {
     blacklistSearch.dataset.bound = 'true';
     blacklistSearch.value = blacklistSearchTerm;
-    blacklistSearch.addEventListener('input', () => { blacklistSearchTerm = blacklistSearch.value; renderBlacklist(); });
+    blacklistSearch.addEventListener('input', debounce(() => { blacklistSearchTerm = blacklistSearch.value; blacklistPage = 1; renderBlacklist(); }, 180));
   }
   const filterSearch = $('filterRulesSearch');
   if (filterSearch && filterSearch.dataset.bound !== 'true') {
     filterSearch.dataset.bound = 'true';
     filterSearch.value = filterRulesSearchTerm;
-    filterSearch.addEventListener('input', () => { filterRulesSearchTerm = filterSearch.value; renderFilterRules(); });
+    filterSearch.addEventListener('input', debounce(() => { filterRulesSearchTerm = filterSearch.value; filterRulesPage = 1; renderFilterRules(); }, 180));
   }
   const previewInput = $('filterPreviewInput');
   if (previewInput && previewInput.dataset.bound !== 'true') {
@@ -2382,9 +2481,12 @@ function exportFilterRules() {
 function importFilterRules(event) {
   readJsonFile(event, (data) => {
     if (!Array.isArray(data)) throw new Error('文件内容必须是字符串数组');
-    filterRules = normalizeFilterRulesClient(data);
-    renderFilterRules();
-    setFilterRulesDirty(true);
+    const incoming = normalizeFilterRulesClient(data);
+    openRuleImportPreview('备注过滤规则', filterRules, incoming, () => {
+      pushRuleHistory(filterRulesHistory, filterRules);
+      filterRules = incoming; selectedFilterRules.clear(); filterRulesPage = 1;
+      renderFilterRules(); setFilterRulesDirty(true); showToast('备注过滤规则导入成功', 'success');
+    });
   }, '备注过滤规则');
 }
 

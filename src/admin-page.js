@@ -263,10 +263,12 @@ export const adminHTML = `
       </div>
       <div class="rule-list-toolbar">
         <label class="rule-search"><span aria-hidden="true">⌕</span><input id="blacklistSearch" type="search" placeholder="搜索黑名单" autocomplete="off" aria-label="搜索黑名单" /></label>
+        <span class="selection-count" id="blacklistSelectionCount">未选择</span>
         <button class="btn-subtle" type="button" onclick="selectAllBlacklist()">全选</button>
         <button class="btn-subtle" type="button" onclick="clearBlacklistSelection()">清除选择</button>
       </div>
       <div id="blacklistList" class="blacklist-list"></div>
+      <div id="blacklistPagination" class="rule-pagination" hidden></div>
       <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
       <div class="blacklist-toolbar">
         <button class="btn-subtle setting-tool-button" type="button" onclick="exportBlacklist()">📤 导出</button>
@@ -300,10 +302,12 @@ export const adminHTML = `
       </div>
       <div class="rule-list-toolbar">
         <label class="rule-search"><span aria-hidden="true">⌕</span><input id="filterRulesSearch" type="search" placeholder="搜索过滤规则" autocomplete="off" aria-label="搜索过滤规则" /></label>
+        <span class="selection-count" id="filterRulesSelectionCount">未选择</span>
         <button class="btn-subtle" type="button" onclick="selectAllFilterRules()">全选</button>
         <button class="btn-subtle" type="button" onclick="clearFilterRulesSelection()">清除选择</button>
       </div>
       <div id="filterRulesList" class="blacklist-list"></div>
+      <div id="filterRulesPagination" class="rule-pagination" hidden></div>
       <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
       <div class="filter-preview" aria-live="polite">
         <div class="filter-preview-heading"><strong>实时预览</strong><span>根据当前规则截断并清理备注</span></div>
@@ -322,6 +326,16 @@ export const adminHTML = `
       </div>
     </div>
   </div>
+  <dialog class="confirm-dialog rule-import-dialog" id="ruleImportPreviewDialog" aria-labelledby="ruleImportPreviewTitle" aria-describedby="ruleImportPreviewMessage">
+    <div class="confirm-dialog-icon" aria-hidden="true">↓</div>
+    <h3 id="ruleImportPreviewTitle">导入预览</h3>
+    <p id="ruleImportPreviewMessage"></p>
+    <div class="import-preview-stats" id="ruleImportPreviewStats"></div>
+    <div class="confirm-dialog-actions">
+      <button class="btn-outline" type="button" id="cancelRuleImportButton">取消</button>
+      <button class="btn-primary" type="button" id="confirmRuleImportButton">确认导入</button>
+    </div>
+  </dialog>
 </div>
 <!-- ADMIN_SECTION:settings:END -->
 
