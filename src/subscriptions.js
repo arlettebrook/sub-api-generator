@@ -331,7 +331,7 @@ export async function handleRoot(env, sourceSelection) {
       const entries = selectedKeys === null ? enabledEntries(config) : Object.entries(config || {});
       return entries.filter(([key, entry]) => {
         if (selectedKeys === null) return entry === true || (isPlainObject(entry) && entry.enabled === true);
-        // Explicit selections on a custom API are independent from UUID source toggles.
+        // Explicit selections on a custom API are independent from default source toggles.
         return selectedKeys.has(`${type}:${normalizeSourceKey(type, key)}`)
           && (typeof entry === "boolean" || isPlainObject(entry));
       });

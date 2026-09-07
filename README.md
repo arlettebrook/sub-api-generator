@@ -41,11 +41,9 @@ Pages 使用 `env.preview.kv_namespaces` 配置预览绑定，不使用 Worker �
 在 Cloudflare Dashboard 的 Pages 项目中，进入 **Settings -> Variables and Secrets**，分别为
 Production 和 Preview 配置：
 
-- `UUID`：公开订阅路径，例如 `my-subscription`
 - `PASSWORD`：后台登录密码，建议添加为 Secret
 
-`UUID` 和 `PASSWORD` 都是必填配置。当前版本不会使用默认密码或默认订阅路径，缺少任一配置时
-Pages Function 会返回 `503` 配置错误。
+`PASSWORD` 是必填配置，缺少配置时 Pages Function 会返回 `503` 配置错误。
 Pages 不支持 Worker 的 `keep_vars` 配置；环境变量和 Secret 以 Dashboard 中的 Production/Preview
 设置为准。
 
@@ -70,7 +68,6 @@ wrangler pages dev .
 本地开发时，可以在项目根目录创建 `.dev.vars`（不要提交到 Git）：
 
 ```text
-UUID=my-subscription
 PASSWORD=change-this-password
 ```
 
@@ -99,11 +96,10 @@ npm run test:e2e
 - `/admin/manage`：优选订阅源和 API 源统一管理页，需要登录
 - `/admin/custom-apis`：优选 API 访问路径管理页，需要登录
 - `/admin/subs`、`/admin/apis`：兼容保留的独立管理页，需要登录
-- `/<UUID>`：公开订阅聚合接口
+- `/api/preview`：登录后读取默认订阅聚合结果
 - `/api/subs`、`/api/apis`：后台配置接口，需要登录
 - `/api/blacklist`：节点黑名单配置接口，需要登录
 - `/api/filter-rules`：节点备注过滤规则配置接口，需要登录
 - `/api/custom-apis`：优选 API 路径和数据源配置接口，需要登录
-- `/api/uuid`：读取订阅 UUID，需要登录
 
 认证、订阅抓取和 KV 读写全部运行在 Pages Functions 的 Worker 运行时中，不需要额外的服务器。

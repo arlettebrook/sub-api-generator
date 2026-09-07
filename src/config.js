@@ -121,20 +121,16 @@ export function validateBlacklistPayload(body) {
 }
 
 export function getRuntimeConfig(env) {
-  const uuid = typeof env.UUID === "string" ? env.UUID.trim() : "";
   const password = typeof env.PASSWORD === "string" ? env.PASSWORD : "";
 
   if (!env.KV || typeof env.KV.get !== "function" || typeof env.KV.put !== "function") {
     return { error: "KV 绑定未配置，请在 Pages 项目中绑定名为 KV 的 Namespace" };
   }
-  if (!uuid || !/^[A-Za-z0-9_-]{1,128}$/.test(uuid)) {
-    return { error: "UUID 环境变量未配置或格式无效" };
-  }
   if (!password) {
     return { error: "PASSWORD Secret 未配置" };
   }
 
-  return { uuid, password };
+  return { password };
 }
 
 export function validateConfigPayload(body, sourceType) {

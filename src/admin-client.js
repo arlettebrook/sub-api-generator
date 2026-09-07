@@ -467,7 +467,6 @@ function initTheme() {
 let currentNodes = [];
 let currentPage = 1;
 const pageSize = 12; // 每页显示12个节点
-let previewUuid = null;
 let activeNodeRequest = null;
 let nodeLoadSequence = 0;
 const emptyNodeRetryDelays = [500, 1200];
@@ -552,14 +551,10 @@ function renderNodeView() {
   if (nodesFilterResetEl) nodesFilterResetEl.disabled = !((nodesSearchEl?.value || '').trim() || nodesRegionFilterEl?.value || nodesSourceFilterEl?.value || nodesStatusFilterEl?.value || nodesSortEl?.value !== 'default');
 }
 
-async function getPreviewApiUrl(signal) {
+function getPreviewApiUrl() {
   const selectedPath = $('previewApiSelect')?.value || '';
   if (selectedPath) return window.location.origin + '/' + selectedPath;
-  if (previewUuid) return window.location.origin + '/' + previewUuid;
-  const res = await fetch('/api/uuid', { signal, cache: 'no-store' });
-  const data = await res.json();
-  previewUuid = data.uuid;
-  return window.location.origin + '/' + previewUuid;
+  return window.location.origin + '/api/preview';
 }
 
 async function fetchNodes(emptyRetry = 0) {
@@ -572,7 +567,7 @@ async function fetchNodes(emptyRetry = 0) {
   renderPreviewSourceErrors();
   
   try {
-    const apiUrl = await getPreviewApiUrl(controller.signal);
+    const apiUrl = getPreviewApiUrl();
     
     // 请求节点原始数据
     const nodeRes = await fetch(apiUrl, { signal: controller.signal, cache: 'no-store' });

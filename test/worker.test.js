@@ -16,7 +16,6 @@ function createKv(values = {}) {
 function env(overrides = {}) {
   return {
     KV: createKv(),
-    UUID: "test-sub",
     PASSWORD: "secret",
     ...overrides,
   };
@@ -25,21 +24,20 @@ function env(overrides = {}) {
 test("returns a clear error when Pages variables are missing", async () => {
   const response = await worker.fetch(new Request("https://example.test/"), { KV: createKv() });
   assert.equal(response.status, 503);
-  assert.match(await response.text(), /UUID/);
+  assert.match(await response.text(), /PASSWORD/);
 });
 
-test("serves the login page and authenticated UUID endpoint", async () => {
-  const runtime = env();
+test("serves the login page and authenticated preview endpoint", async () => {
+  const runtime = env({ KV: createKv({ subs: {}, apis: {} }) });
   const loginPage = await worker.fetch(new Request("https://example.test/"), runtime);
   assert.equal(loginPage.status, 200);
   assert.match(await loginPage.text(), /管理员密码/);
 
   const hash = await sha256Hex("secret");
-  const response = await worker.fetch(new Request("https://example.test/api/uuid", {
+  const response = await worker.fetch(new Request("https://example.test/api/preview", {
     headers: { Cookie: `auth=${hash}` },
   }), runtime);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { uuid: "test-sub" });
 });
 
 test("serves separate responsive admin pages", async () => {
@@ -183,8 +181,10 @@ test("reports latest source status after an aggregate request", async () => {
     "vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#ok",
   ), { status: 200 });
   try {
-    const publicResponse = await worker.fetch(new Request("https://example.test/test-sub"), runtime);
-    assert.equal(publicResponse.status, 200);
+    const previewResponse = await worker.fetch(new Request("https://example.test/api/preview", {
+      headers: { Cookie: `auth=${hash}` },
+    }), runtime);
+    assert.equal(previewResponse.status, 200);
     const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status", {
       headers: { Cookie: `auth=${hash}` },
     }), runtime);
@@ -263,7 +263,7 @@ test("rejects invalid blacklist payloads", async () => {
 
 test("rejects unsupported methods", async () => {
   const hash = await sha256Hex("secret");
-  const response = await worker.fetch(new Request("https://example.test/api/uuid", {
+  const response = await worker.fetch(new Request("https://example.test/api/preview", {
     method: "POST",
     headers: { Cookie: `auth=${hash}` },
   }), env());

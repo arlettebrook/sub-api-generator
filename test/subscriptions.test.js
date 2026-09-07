@@ -143,7 +143,7 @@ test("matches selected subscription sources across protocol and slash variants",
   }
 });
 
-test("allows custom APIs to use sources disabled for the UUID path", async () => {
+test("allows custom APIs to use sources disabled for the default path", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#API";
   globalThis.fetch = async () => new Response(btoa(source), { status: 200 });

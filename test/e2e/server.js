@@ -8,7 +8,6 @@ const values = {
 };
 
 const env = {
-  UUID: "test-sub",
   PASSWORD: "secret",
   KV: {
     async get(key) { return values[key] ?? null; },

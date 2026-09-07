@@ -113,6 +113,10 @@ async function handleGetCustomApis(env) {
   return pagesJsonResponse(normalizeCustomApiData(data));
 }
 
+async function handleGetPreview(env) {
+  return await subscriptions.handleRoot(env);
+}
+
 async function handlePostCustomApis(request, env) {
   let body;
   try {
@@ -144,10 +148,6 @@ async function handleCustomApiPath(path, env) {
     ];
   }
   return subscriptions.handleRoot(env, sourceSelection);
-}
-
-async function handleGetUuid(env) {
-  return pagesJsonResponse({ uuid: env.UUID.trim() });
 }
 
 function handleAdmin(page = "overview") {
@@ -213,12 +213,6 @@ export default {
     if (path === "/login" || path === "/logout") {
       return pagesMethodNotAllowed("POST");
     }
-    // UUID 订阅路径（公开访问，无需认证）
-    const uuidPath = `/${config.uuid}`;
-    if (path === uuidPath) {
-      if (method !== "GET") return pagesMethodNotAllowed("GET");
-      return await subscriptions.handleRoot(env);
-    }
     if (method === "GET") {
       const customApiResponse = await handleCustomApiPath(path, env);
       if (customApiResponse) return customApiResponse;
@@ -260,8 +254,8 @@ export default {
           if (method === "GET") return await handleGetCustomApis(env);
           if (method === "POST") return await handlePostCustomApis(request, env);
           return pagesMethodNotAllowed("GET, POST");
-        case "/api/uuid":
-          if (method === "GET") return await handleGetUuid(env);
+        case "/api/preview":
+          if (method === "GET") return await handleGetPreview(env);
           return pagesMethodNotAllowed("GET");
         case "/":
         case "/admin":
