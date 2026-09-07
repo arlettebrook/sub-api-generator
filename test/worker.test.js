@@ -121,10 +121,10 @@ test("creates and serves custom API access paths", async () => {
 test("keeps multiple custom API paths independently usable", async () => {
   const values = {
     subs: {
-      "one.example": { enabled: true, remark: "one" },
-      "disabled.example": { enabled: false, remark: "disabled" },
+      "one.example": { remark: "one" },
+      "two.example": { remark: "two" },
     },
-    apis: { "https://api.example/source": { enabled: true, remark: "api" } },
+    apis: { "https://api.example/source": { remark: "api" } },
     custom_apis: {},
   };
   const runtime = env({ KV: createKv(values) });
@@ -144,8 +144,8 @@ test("keeps multiple custom API paths independently usable", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     if (String(url).includes("/sub?")) {
-      const host = String(url).startsWith("https://disabled.example/") ? "5.6.7.8:443" : "1.2.3.4:443";
-      const remark = String(url).startsWith("https://disabled.example/") ? "disabled" : "one";
+      const host = String(url).startsWith("https://two.example/") ? "5.6.7.8:443" : "1.2.3.4:443";
+      const remark = String(url).startsWith("https://two.example/") ? "two" : "one";
       return new Response(btoa(`vless://00000000-0000-4000-8000-000000000000@${host}?security=tls&sni=example.com#${remark}`), { status: 200 });
     }
     return new Response("trojan://example.com:443#api", { status: 200 });
@@ -162,7 +162,7 @@ test("keeps multiple custom API paths independently usable", async () => {
     const autoText = await autoResponse.text();
     assert.match(autoText, /1\.2\.3\.4:443#one/);
     assert.match(autoText, /trojan:\/\/example\.com:443#api/);
-    assert.match(autoText, /5\.6\.7\.8:443#disabled/);
+    assert.match(autoText, /5\.6\.7\.8:443#two/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -170,7 +170,7 @@ test("keeps multiple custom API paths independently usable", async () => {
 
 test("reports latest source status after an aggregate request", async () => {
   const values = {
-    subs: { "e.ye.gs": { enabled: true, remark: "e.ye.gs" } },
+    subs: { "e.ye.gs": { remark: "e.ye.gs" } },
     apis: {},
     custom_apis: {},
   };

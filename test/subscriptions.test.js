@@ -59,7 +59,7 @@ test("decodes Base64 responses from API sources", async () => {
     KV: {
       async get(key) {
         if (key === "subs") return {};
-        if (key === "apis") return { "https://api.example/source": { enabled: true } };
+        if (key === "apis") return { "https://api.example/source": {} };
         return null;
       },
     },
@@ -78,7 +78,7 @@ test("filters blacklisted API source lines while preserving allowed output", asy
   const originalFetch = globalThis.fetch;
   const values = {
     subs: {},
-    apis: { "https://api.example/source": { enabled: true } },
+    apis: { "https://api.example/source": {} },
     blacklist: ["blocked"],
   };
   globalThis.fetch = async () => new Response([
@@ -103,7 +103,7 @@ test("applies configurable remark filter rules to preferred sources", async () =
   const runtime = {
     KV: {
       async get(key) {
-        if (key === "subs") return { "e.ye.gs": { enabled: true } };
+        if (key === "subs") return { "e.ye.gs": {} };
         if (key === "apis") return {};
         if (key === "filter_rules") return ["-VIP"];
         return null;
@@ -127,7 +127,7 @@ test("matches selected subscription sources across protocol and slash variants",
   const runtime = {
     KV: {
       async get(key) {
-        if (key === "subs") return { "https://e.ye.gs/": { enabled: true } };
+        if (key === "subs") return { "https://e.ye.gs/": {} };
         if (key === "apis") return {};
         return null;
       },
@@ -143,14 +143,14 @@ test("matches selected subscription sources across protocol and slash variants",
   }
 });
 
-test("allows custom APIs to use sources disabled for the default path", async () => {
+test("allows custom APIs to select any configured source", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#API";
   globalThis.fetch = async () => new Response(btoa(source), { status: 200 });
   const runtime = {
     KV: {
       async get(key) {
-        if (key === "subs") return { "e.ye.gs": { enabled: false } };
+        if (key === "subs") return { "e.ye.gs": {} };
         if (key === "apis") return {};
         return null;
       },
@@ -170,7 +170,7 @@ test("invalidates aggregate cache when blacklist configuration changes", async (
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#blocked";
   const values = {
-    subs: { "e.ye.gs": { enabled: true } },
+    subs: { "e.ye.gs": {} },
     apis: {},
     blacklist: ["blocked"],
   };
@@ -199,8 +199,8 @@ test("reuses aggregate cache when selected source order changes", async () => {
   const values = {
     subs: {},
     apis: {
-      "https://api.example/one": { enabled: true },
-      "https://api.example/two": { enabled: true },
+      "https://api.example/one": {},
+      "https://api.example/two": {},
     },
     blacklist: [],
   };
@@ -232,7 +232,7 @@ test("bounds aggregate cache entries and evicts the least recently used selectio
   const originalFetch = globalThis.fetch;
   const apis = Object.fromEntries(Array.from({ length: 129 }, (_, index) => [
     `https://api.example/${index}`,
-    { enabled: true },
+    {},
   ]));
   const runtime = {
     KV: {
@@ -304,7 +304,7 @@ test("reports failed sources without discarding healthy source output", async ()
   const originalFetch = globalThis.fetch;
   const values = {
     subs: {
-      "broken.example.com": { enabled: true, remark: "故障订阅源" },
+      "broken.example.com": { remark: "故障订阅源" },
     },
     apis: {},
   };
@@ -339,8 +339,8 @@ test("returns healthy output silently when one of multiple sources fails", async
   const values = {
     subs: {},
     apis: {
-      "https://api.example/healthy": { enabled: true },
-      "https://api.example/broken": { enabled: true },
+      "https://api.example/healthy": {},
+      "https://api.example/broken": {},
     },
   };
   globalThis.fetch = async (url) => {

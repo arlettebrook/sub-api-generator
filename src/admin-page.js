@@ -194,8 +194,8 @@ export const adminHTML = `
   </div>
   <div class="toolbar">
     <input id="subsSearch" class="list-search" type="search" placeholder="搜索订阅源或备注" aria-label="搜索订阅源" />
-    <select id="subsSort" class="list-sort" aria-label="订阅源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option><option value="status">启用状态</option></select>
-    <button type="button" class="batch-button" data-batch="subs-select">全选</button><button type="button" class="batch-button" data-batch="subs-enable">批量启用</button><button type="button" class="batch-button" data-batch="subs-disable">批量禁用</button><button type="button" class="batch-button batch-delete" data-batch="subs-delete">批量删除</button>
+    <select id="subsSort" class="list-sort" aria-label="订阅源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option></select>
+    <button type="button" class="batch-button" data-batch="subs-select">全选</button><button type="button" class="batch-button batch-delete" data-batch="subs-delete">批量删除</button>
     <button onclick="exportSubs()" aria-label="导出订阅源配置">📤 导出配置</button>
     <button onclick="document.getElementById('importSubsFile').click()" aria-label="导入订阅源配置">📥 导入配置</button>
     <input type="file" id="importSubsFile" accept=".json,application/json" style="display:none" onchange="importSubs(event)" />
@@ -215,8 +215,8 @@ export const adminHTML = `
   </div>
   <div class="toolbar">
     <input id="apisSearch" class="list-search" type="search" placeholder="搜索 API 地址或备注" aria-label="搜索 API 源" />
-    <select id="apisSort" class="list-sort" aria-label="API 源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option><option value="status">启用状态</option></select>
-    <button type="button" class="batch-button" data-batch="apis-select">全选</button><button type="button" class="batch-button" data-batch="apis-enable">批量启用</button><button type="button" class="batch-button" data-batch="apis-disable">批量禁用</button><button type="button" class="batch-button batch-delete" data-batch="apis-delete">批量删除</button>
+    <select id="apisSort" class="list-sort" aria-label="API 源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option></select>
+    <button type="button" class="batch-button" data-batch="apis-select">全选</button><button type="button" class="batch-button batch-delete" data-batch="apis-delete">批量删除</button>
     <button onclick="exportApis()" aria-label="导出 API 源配置">📤 导出配置</button>
     <button onclick="document.getElementById('importApisFile').click()" aria-label="导入 API 源配置">📥 导入配置</button>
     <input type="file" id="importApisFile" accept=".json,application/json" style="display:none" onchange="importApis(event)" />

@@ -20,8 +20,8 @@ test("normalizes legacy boolean KV entries", () => {
     "two.example": { enabled: false, remark: "test" },
     ignored: "invalid",
   }), {
-    "one.example": { enabled: true, remark: "" },
-    "two.example": { enabled: false, remark: "test" },
+    "one.example": { remark: "" },
+    "two.example": { remark: "test" },
   });
 });
 
@@ -30,8 +30,8 @@ test("validates and normalizes configuration payloads", () => {
     "one.example": true,
     "two.example": { enabled: 1, remark: "x".repeat(250) },
   }), {
-    "one.example": { enabled: true, remark: "" },
-    "two.example": { enabled: false, remark: "x".repeat(200) },
+    "one.example": { remark: "" },
+    "two.example": { remark: "x".repeat(200) },
   });
   assert.throws(() => validateConfigPayload([]), /配置必须是 JSON 对象/);
   assert.throws(() => validateConfigPayload({ bad: null }), /配置项无效/);
@@ -72,10 +72,10 @@ test("normalizes source identifiers at the configuration boundary", () => {
 
 test("normalizes subscription and API source configuration keys", () => {
   assert.deepEqual(normalizeKvData({ "https://E.YE.GS/": true }, "subs"), {
-    "e.ye.gs": { enabled: true, remark: "" },
+    "e.ye.gs": { remark: "" },
   });
   assert.deepEqual(normalizeKvData({ "HTTPS://API.Example.COM/v1": true }, "apis"), {
-    "https://api.example.com/v1": { enabled: true, remark: "" },
+    "https://api.example.com/v1": { remark: "" },
   });
   assert.throws(() => validateConfigPayload({
     "e.ye.gs": true,
@@ -109,8 +109,8 @@ test("validates custom API access paths", () => {
     first: { enabled: true },
     second: { enabled: true, sources: null },
   }), {
-    first: { enabled: true, remark: "", sourceMode: "all-enabled", sources: [] },
-    second: { enabled: true, remark: "", sourceMode: "all-enabled", sources: [] },
+    first: { enabled: true, remark: "", sourceMode: "all", sources: [] },
+    second: { enabled: true, remark: "", sourceMode: "all", sources: [] },
   });
 });
 
@@ -121,7 +121,7 @@ test("reads and validates JSON request bodies", async () => {
     headers: { "content-type": "application/json" },
   });
   assert.deepEqual(await readJsonObject(request), {
-    "one.example": { enabled: true, remark: "" },
+    "one.example": { remark: "" },
   });
 });
 

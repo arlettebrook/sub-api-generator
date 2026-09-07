@@ -9,7 +9,7 @@ export const MAX_BLACKLIST_ENTRIES = 200;
 export const MAX_BLACKLIST_WORD_LENGTH = 128;
 export const MAX_FILTER_RULES = 200;
 export const MAX_FILTER_RULE_LENGTH = 128;
-export const SOURCE_MODE_ALL_ENABLED = "all-enabled";
+export const SOURCE_MODE_ALL = "all";
 export const SOURCE_MODE_SELECTED = "selected";
 
 export const DEFAULT_BLACKLIST = [];
@@ -30,10 +30,9 @@ export function normalizeKvData(data, sourceType) {
     const normalizedKey = sourceType ? normalizeSourceKey(sourceType, key) : key;
     if (!normalizedKey) continue;
     if (typeof value === "boolean") {
-      normalized[normalizedKey] = { enabled: value, remark: "" };
+      normalized[normalizedKey] = { remark: "" };
     } else if (isPlainObject(value)) {
       normalized[normalizedKey] = {
-        enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",
       };
     }
@@ -153,14 +152,13 @@ export function validateConfigPayload(body, sourceType) {
       throw new Error(`配置键重复: ${key}`);
     }
     if (typeof value === "boolean") {
-      normalized[normalizedKey] = { enabled: value, remark: "" };
+      normalized[normalizedKey] = { remark: "" };
       continue;
     }
     if (!isPlainObject(value)) {
       throw new Error(`配置项无效: ${key}`);
     }
     normalized[normalizedKey] = {
-      enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
     };
   }
@@ -185,9 +183,9 @@ export function validateApiPathPayload(body) {
     const value = typeof rawValue === "boolean" ? { enabled: rawValue, remark: "" } : rawValue;
     if (!isPlainObject(value)) throw new Error(`配置项无效: ${rawPath}`);
     const sourceMode = value.sourceMode === undefined
-      ? (Array.isArray(value.sources) && value.sources.length ? SOURCE_MODE_SELECTED : SOURCE_MODE_ALL_ENABLED)
-      : value.sourceMode;
-    if (![SOURCE_MODE_ALL_ENABLED, SOURCE_MODE_SELECTED].includes(sourceMode)) {
+      ? (Array.isArray(value.sources) && value.sources.length ? SOURCE_MODE_SELECTED : SOURCE_MODE_ALL)
+      : value.sourceMode === "all-enabled" ? SOURCE_MODE_ALL : value.sourceMode;
+    if (![SOURCE_MODE_ALL, SOURCE_MODE_SELECTED].includes(sourceMode)) {
       throw new Error(`数据源模式无效: ${rawPath}`);
     }
     const sources = Array.isArray(value.sources) ? value.sources : [];
@@ -217,11 +215,11 @@ export function normalizeCustomApiData(data) {
   const normalized = {};
   for (const [path, value] of Object.entries(data)) {
     if (typeof value === "boolean") {
-      normalized[path] = { enabled: value, remark: "", sourceMode: SOURCE_MODE_ALL_ENABLED, sources: [] };
+      normalized[path] = { enabled: value, remark: "", sourceMode: SOURCE_MODE_ALL, sources: [] };
     } else if (isPlainObject(value)) {
       const sourceMode = value.sourceMode === SOURCE_MODE_SELECTED
         ? SOURCE_MODE_SELECTED
-        : (Array.isArray(value.sources) && value.sources.length ? SOURCE_MODE_SELECTED : SOURCE_MODE_ALL_ENABLED);
+        : SOURCE_MODE_ALL;
       normalized[path] = {
         enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",

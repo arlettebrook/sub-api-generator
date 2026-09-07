@@ -635,7 +635,7 @@ async function fetchNodes(emptyRetry = 0) {
 function renderNodes(nodes) {
   if (nodes.length === 0) {
     const filtered = currentNodes.length > 0;
-    nodesContainer.innerHTML = '<div class="nodes-empty"><strong>' + (filtered ? '暂无匹配节点' : '暂无节点数据') + '</strong><span>' + (filtered ? '可以清除筛选后查看全部节点。' : '请先添加或启用数据源，然后重新加载。') + '</span>' + (filtered ? '<button type="button" class="btn-outline" onclick="nodesFilterResetEl?.click()">清除筛选</button>' : '<a class="btn-outline nodes-empty-link" href="/admin/manage">管理数据源</a>') + '<button type="button" class="btn-outline" onclick="fetchNodes()">重新加载</button></div>';
+    nodesContainer.innerHTML = '<div class="nodes-empty"><strong>' + (filtered ? '暂无匹配节点' : '暂无节点数据') + '</strong><span>' + (filtered ? '可以清除筛选后查看全部节点。' : '请先添加数据源，然后重新加载。') + '</span>' + (filtered ? '<button type="button" class="btn-outline" onclick="nodesFilterResetEl?.click()">清除筛选</button>' : '<a class="btn-outline nodes-empty-link" href="/admin/manage">管理数据源</a>') + '<button type="button" class="btn-outline" onclick="fetchNodes()">重新加载</button></div>';
     return;
   }
   
@@ -888,8 +888,8 @@ async function loadCustomApis(loadSources = false) {
 
 function sourceEntries() {
   return [
-    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, enabled: value?.enabled === true, label: value.remark || key })),
-    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, enabled: value?.enabled === true, label: value.remark || key })),
+    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
+    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
   ];
 }
 
@@ -976,7 +976,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
   picker.appendChild(head);
   const modeActions = document.createElement('div');
   modeActions.className = 'source-mode-actions';
-  [['all-enabled', '全部数据源'], ['selected', '手动选择']].forEach(([mode, text]) => {
+  [['all', '全部数据源'], ['selected', '手动选择']].forEach(([mode, text]) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'source-mode-action';
@@ -999,8 +999,8 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
   const updateCount = () => {
     const checked = picker.querySelectorAll('input[type="checkbox"]:checked').length;
     const total = picker.querySelectorAll('input[type="checkbox"]').length;
-    count.textContent = picker.dataset.sourceMode === 'all-enabled'
-      ? '动态跟随全部源'
+    count.textContent = picker.dataset.sourceMode === 'all'
+      ? '动态跟随全部数据源'
       : (total ? checked + '/' + total : '0 个');
     modeActions.querySelectorAll('[data-source-mode]').forEach((button) => {
       button.classList.toggle('active', button.dataset.sourceMode === picker.dataset.sourceMode);
@@ -1064,7 +1064,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
     const mode = event.target.dataset.sourceMode;
     if (!mode) return;
     picker.dataset.sourceMode = mode;
-    if (mode === 'all-enabled') {
+    if (mode === 'all') {
       options.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
         checkbox.checked = false;
       });
@@ -1108,21 +1108,21 @@ function readSourcePicker(picker) {
 function renderNewCustomApiSources() {
   const container = $('newCustomApiSources');
   if (!container) return;
-  const picker = sourcePicker([], '选择此 API 使用的数据源', 'all-enabled');
+  const picker = sourcePicker([], '选择此 API 使用的数据源', 'all');
   container.innerHTML = '';
   container.appendChild(picker);
 }
 
 function readSourcePickerSelection(picker) {
   return {
-    sourceMode: picker.dataset.sourceMode === 'selected' ? 'selected' : 'all-enabled',
+    sourceMode: picker.dataset.sourceMode === 'selected' ? 'selected' : 'all',
     sources: readSourcePicker(picker),
   };
 }
 
 function getNewCustomApiSourceSelection() {
   const picker = $('newCustomApiSources')?.querySelector('.source-picker');
-  return picker ? readSourcePickerSelection(picker) : { sourceMode: 'all-enabled', sources: [] };
+  return picker ? readSourcePickerSelection(picker) : { sourceMode: 'all', sources: [] };
 }
 
 function renderCustomApiSelect() {
@@ -1178,7 +1178,7 @@ function renderCustomApis() {
     sourceSummary.className = 'custom-api-source-summary';
     sourceSummary.textContent = entry.sourceMode === 'selected'
       ? '已选择 ' + (Array.isArray(entry.sources) ? entry.sources.length : 0) + ' 个数据源'
-      : '跟随全部启用数据源';
+      : '跟随全部数据源';
     identity.append(title, pathText, sourceSummary);
     const url = document.createElement('code');
     url.className = 'custom-api-url';
@@ -1300,7 +1300,7 @@ function openCustomApiEditDialog(path) {
   }
   const url = $('editCustomApiUrl');
   if (url) url.textContent = window.location.origin + '/' + path;
-  const sourceMode = entry.sourceMode === 'selected' ? 'selected' : 'all-enabled';
+  const sourceMode = entry.sourceMode === 'selected' ? 'selected' : 'all';
   const selectedSources = sourceMode === 'selected' && Array.isArray(entry.sources) ? entry.sources : [];
   editingCustomApiPicker = sourcePicker(selectedSources, '选择此 API 使用的数据源', sourceMode);
   const container = $('editCustomApiSources');
@@ -1334,7 +1334,7 @@ async function saveCustomApiEdit() {
   setInputError(pathInput, '');
   const entry = customApis[editingCustomApiPath];
   const selection = editingCustomApiPicker ? readSourcePickerSelection(editingCustomApiPicker) : {
-    sourceMode: entry.sourceMode === 'selected' ? 'selected' : 'all-enabled',
+    sourceMode: entry.sourceMode === 'selected' ? 'selected' : 'all',
     sources: Array.isArray(entry.sources) ? entry.sources : [],
   };
   entry.remark = remarkInput?.value.trim() || '';
@@ -1532,7 +1532,9 @@ async function loadSubs() {
     let data = await readJsonResponse('/api/subs', '订阅源配置');
     for (let key in data) {
       if (typeof data[key] === 'boolean') {
-        data[key] = { enabled: data[key], remark: '' };
+        data[key] = { remark: '' };
+      } else if (data[key] && typeof data[key] === 'object') {
+        data[key] = { remark: typeof data[key].remark === 'string' ? data[key].remark : '' };
       }
     }
     subs = data;
@@ -1551,7 +1553,6 @@ function renderSubs() {
   const sort = $('subsSort')?.value || 'default';
   let entries = Object.entries(subs).filter(([host, entry]) => !query || (host + ' ' + (entry.remark || '')).toLowerCase().includes(query));
   if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
-  if (sort === 'status') entries.sort((a, b) => Number(b[1].enabled) - Number(a[1].enabled));
   entries.forEach(([host, entry]) => {
     const row = document.createElement('div');
     row.className = 'row';
@@ -1568,19 +1569,6 @@ function renderSubs() {
     hostInput.value = host;
     hostInput.placeholder = '主机地址';
     hostInput.title = host;
-
-    const statusBtn = document.createElement('button');
-    statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
-    statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
-    statusBtn.setAttribute('aria-label', host + '：' + statusBtn.textContent + '，点击切换');
-    statusBtn.onclick = async () => {
-      statusBtn.disabled = true;
-      statusBtn.textContent = '处理中…';
-      subs[host].enabled = !subs[host].enabled;
-      const saved = await queueSubsSave();
-      renderSubs();
-      if (saved) showToast(subs[host]?.enabled ? '订阅源已启用' : '订阅源已禁用', 'success');
-    };
 
     const health = createSourceHealth('subs', host);
 
@@ -1617,7 +1605,6 @@ function renderSubs() {
     row.appendChild(select); row.appendChild(remarkInput);
     row.appendChild(hostInput);
     row.appendChild(createCopyButton(host, '订阅源地址'));
-    row.appendChild(statusBtn);
     row.appendChild(health);
     row.appendChild(delBtn);
     el.appendChild(row);
@@ -1634,20 +1621,19 @@ async function applySourceBatch(type, action, trigger) {
   const previous = Object.fromEntries(selected.filter((key) => data[key]).map((key) => [key, { ...data[key] }]));
   const buttons = [...document.querySelectorAll('[data-batch^="' + type + '-"]')];
   buttons.forEach((button) => { button.disabled = true; });
-  if (trigger) { trigger.dataset.idleText ||= trigger.textContent; trigger.textContent = action === 'delete' ? '删除中…' : '处理中…'; }
+  if (trigger) { trigger.dataset.idleText ||= trigger.textContent; trigger.textContent = '删除中…'; }
   try {
     selected.forEach((key) => {
-      if (action === 'delete') delete data[key];
-      else if (data[key]) data[key].enabled = action === 'enable';
+      delete data[key];
     });
     const saved = type === 'subs' ? await queueSubsSave() : await queueApisSave();
     if (!saved) throw new Error('保存失败');
     type === 'subs' ? renderSubs() : renderApis();
-    showToast(action === 'delete' ? '已删除 ' + selected.length + ' 个数据源' : '已更新 ' + selected.length + ' 个数据源', 'success');
+    showToast('已删除 ' + selected.length + ' 个数据源', 'success');
   } catch (error) {
     selected.forEach((key) => { if (previous[key]) data[key] = previous[key]; });
     type === 'subs' ? renderSubs() : renderApis();
-    showToast((action === 'delete' ? '批量删除' : '批量更新') + '失败：' + error.message, 'error', () => applySourceBatch(type, action));
+    showToast('批量删除失败：' + error.message, 'error', () => applySourceBatch(type, action));
   } finally {
     buttons.forEach((button) => { button.disabled = false; if (button.dataset.idleText) button.textContent = button.dataset.idleText; });
   }
@@ -1670,7 +1656,7 @@ function addSub() {
     if (remark) subs[existingKey].remark = remark;
     showToast('主机名已存在，已更新备注', 'success');
   } else {
-    subs[host] = { enabled: true, remark: remark };
+    subs[host] = { remark: remark };
     showToast('添加成功', 'success');
   }
   hostInput.value = '';
@@ -1722,10 +1708,9 @@ function importSubs(event) {
       if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('Invalid');
       for (let key in data) {
         let val = data[key];
-        if (typeof val === 'boolean') data[key] = { enabled: val, remark: '' };
+        if (typeof val === 'boolean') data[key] = { remark: '' };
         else if (typeof val === 'object' && val !== null) {
-          if (typeof val.enabled !== 'boolean') val.enabled = false;
-          if (typeof val.remark !== 'string') val.remark = '';
+          data[key] = { remark: typeof val.remark === 'string' ? val.remark : '' };
         } else throw new Error('Invalid entry');
       }
       subs = data;
@@ -1757,7 +1742,9 @@ async function loadApis() {
     let data = await readJsonResponse('/api/apis', 'API 源配置');
     for (let key in data) {
       if (typeof data[key] === 'boolean') {
-        data[key] = { enabled: data[key], remark: '' };
+        data[key] = { remark: '' };
+      } else if (data[key] && typeof data[key] === 'object') {
+        data[key] = { remark: typeof data[key].remark === 'string' ? data[key].remark : '' };
       }
     }
     apis = data;
@@ -1776,7 +1763,6 @@ function renderApis() {
   const sort = $('apisSort')?.value || 'default';
   let entries = Object.entries(apis).filter(([url, entry]) => !query || (url + ' ' + (entry.remark || '')).toLowerCase().includes(query));
   if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
-  if (sort === 'status') entries.sort((a, b) => Number(b[1].enabled) - Number(a[1].enabled));
   entries.forEach(([url, entry]) => {
     const row = document.createElement('div');
     row.className = 'row';
@@ -1793,19 +1779,6 @@ function renderApis() {
     urlInput.value = url;
     urlInput.placeholder = 'API 地址';
     urlInput.title = url;
-
-    const statusBtn = document.createElement('button');
-    statusBtn.className = 'tag ' + (entry.enabled ? 'enabled' : 'disabled');
-    statusBtn.textContent = entry.enabled ? '已启用' : '已禁用';
-    statusBtn.setAttribute('aria-label', url + '：' + statusBtn.textContent + '，点击切换');
-    statusBtn.onclick = async () => {
-      statusBtn.disabled = true;
-      statusBtn.textContent = '处理中…';
-      apis[url].enabled = !apis[url].enabled;
-      const saved = await queueApisSave();
-      renderApis();
-      if (saved) showToast(apis[url]?.enabled ? 'API 源已启用' : 'API 源已禁用', 'success');
-    };
 
     const health = createSourceHealth('apis', url);
 
@@ -1842,7 +1815,6 @@ function renderApis() {
     row.appendChild(select); row.appendChild(remarkInput);
     row.appendChild(urlInput);
     row.appendChild(createCopyButton(url, 'API 地址'));
-    row.appendChild(statusBtn);
     row.appendChild(health);
     row.appendChild(delBtn);
     el.appendChild(row);
@@ -1861,7 +1833,7 @@ function addApi() {
     if (remark) apis[url].remark = remark;
     showToast('API URL 已存在，已更新备注', 'success');
   } else {
-    apis[url] = { enabled: true, remark: remark };
+    apis[url] = { remark: remark };
     showToast('添加成功', 'success');
   }
   urlInput.value = '';
@@ -1913,10 +1885,9 @@ function importApis(event) {
       if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('Invalid');
       for (let key in data) {
         let val = data[key];
-        if (typeof val === 'boolean') data[key] = { enabled: val, remark: '' };
+        if (typeof val === 'boolean') data[key] = { remark: '' };
         else if (typeof val === 'object' && val !== null) {
-          if (typeof val.enabled !== 'boolean') val.enabled = false;
-          if (typeof val.remark !== 'string') val.remark = '';
+          data[key] = { remark: typeof val.remark === 'string' ? val.remark : '' };
         } else throw new Error('Invalid entry');
       }
       apis = data;
@@ -2487,8 +2458,8 @@ function importFilterRules(event) {
 
 const pageIntros = {
   overview: '集中查看订阅聚合结果和节点状态。',
-  subs: '管理优选订阅源，控制启用状态并维护备注。',
-  apis: '管理额外 API 源，控制启用状态并维护备注。',
+  subs: '管理优选订阅源，维护地址和备注。',
+  apis: '管理额外 API 源，维护地址和备注。',
   manage: '统一管理优选订阅源和 API 源。',
   customApis: '创建并管理优选 API 的访问路径。',
   settings: '管理节点过滤关键词和备注清理规则，修改后会影响后续数据预览结果。'

@@ -2,8 +2,8 @@ import http from "node:http";
 import worker from "../../src/index.js";
 
 const values = {
-  subs: { "e.ye.gs": { enabled: true, remark: "e.ye.gs" } },
-  apis: { "https://api.example.com": { enabled: true, remark: "测试 API" } },
+  subs: { "e.ye.gs": { remark: "e.ye.gs" } },
+  apis: { "https://api.example.com": { remark: "测试 API" } },
   custom_apis: {},
 };
 

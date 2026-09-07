@@ -1545,41 +1545,6 @@ export const adminStyle = `
     box-shadow: 0 4px 12px var(--danger-light);
   }
 
-  /* 状态标签按钮 */
-  .tag {
-    min-width: 70px;
-    height: 30px;
-    padding: 0 12px;
-    font-size: 13px;
-    font-weight: 500;
-    border: none;
-    border-radius: 8px;
-  }
-
-  .tag.enabled {
-    background: rgba(16, 185, 129, 0.12);
-    color: var(--success);
-  }
-
-  .tag.enabled:hover {
-    background: rgba(16, 185, 129, 0.2);
-    box-shadow: none;
-    transform: none;
-  }
-
-  .tag.disabled {
-    background: var(--bg-tertiary);
-    color: var(--text-tertiary);
-    border: 1px solid var(--border-color);
-  }
-
-  .tag.disabled:hover {
-    background: var(--border-color);
-    color: var(--text-secondary);
-    transform: none;
-    box-shadow: none;
-  }
-
   /* 卡片容器 */
   .card {
     position: relative;

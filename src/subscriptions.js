@@ -116,7 +116,6 @@ export function getSourceStatuses(subsConfig, apisConfig) {
     const normalized = normalizeKvData(config, type);
     for (const [key, entry] of Object.entries(normalized)) {
       result[type][key] = {
-        enabled: entry.enabled === true,
         state: "idle",
         nodeCount: 0,
         rawNodeCount: 0,
@@ -237,13 +236,9 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
   return result;
 }
 
-function enabledEntries(config) {
+function sourceEntries(config) {
   if (!isPlainObject(config)) return [];
-  return Object.entries(config).filter(([, entry]) => {
-    return typeof entry === "object" && entry !== null && "enabled" in entry
-      ? entry.enabled === true
-      : entry === true;
-  });
+  return Object.entries(config).filter(([, entry]) => entry === true || isPlainObject(entry));
 }
 
 function stableSerialize(value) {
@@ -328,10 +323,10 @@ export async function handleRoot(env, sourceSelection) {
       ? new Set(selected.map((source) => `${source?.type}:${normalizeSourceKey(source?.type, source?.key)}`))
       : null;
     const selectedEntries = (config, type) => {
-      const entries = selectedKeys === null ? enabledEntries(config) : Object.entries(config || {});
+      const entries = selectedKeys === null ? sourceEntries(config) : sourceEntries(config);
       return entries.filter(([key, entry]) => {
-        if (selectedKeys === null) return entry === true || (isPlainObject(entry) && entry.enabled === true);
-        // Explicit selections on a custom API are independent from default source toggles.
+        if (selectedKeys === null) return true;
+        // Explicit selections on a custom API limit the configured source set.
         return selectedKeys.has(`${type}:${normalizeSourceKey(type, key)}`)
           && (typeof entry === "boolean" || isPlainObject(entry));
       });
