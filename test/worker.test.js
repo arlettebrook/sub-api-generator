@@ -70,6 +70,7 @@ test("serves separate responsive admin pages", async () => {
 
 test("keeps the generated admin script valid JavaScript", () => {
   assert.doesNotThrow(() => new vm.Script(adminClientScript));
+  assert.match(adminClientScript, /entry\.remark \? entry\.remark \+ ' \(\/' \+ path/);
 });
 
 test("serves admin frontend assets", async () => {

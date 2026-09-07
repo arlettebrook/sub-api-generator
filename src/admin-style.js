@@ -1644,6 +1644,12 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
+  input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
+
   /* 路径输入框由外层容器统一绘制焦点状态，避免出现双重边框和阴影。 */
   .path-input input:focus {
     border-color: transparent;

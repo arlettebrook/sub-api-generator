@@ -1152,7 +1152,7 @@ function renderCustomApiSelect() {
     if (!entry.enabled) return;
     const option = document.createElement('option');
     option.value = path;
-    option.textContent = entry.remark ? entry.remark + ' (' + path + ')' : '/' + path;
+    option.textContent = entry.remark ? entry.remark + ' (/' + path + ')' : '/' + path;
     select.appendChild(option);
   });
   select.hidden = select.options.length === 0;
