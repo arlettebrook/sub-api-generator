@@ -103,6 +103,28 @@ export const adminHTML = `
   </div>
 </dialog>
 
+<dialog class="source-raw-dialog source-raw-history-dialog" id="sourceRawHistoryDialog" aria-labelledby="sourceRawHistoryDialogTitle">
+  <div class="custom-api-dialog-head">
+    <div>
+      <h3 id="sourceRawHistoryDialogTitle">历史检测结果</h3>
+      <p class="source-raw-dialog-subtitle" id="sourceRawHistoryDialogMeta"></p>
+    </div>
+    <button class="dialog-close" type="button" onclick="closeSourceRawHistoryDialog()" title="关闭" aria-label="关闭">×</button>
+  </div>
+  <div class="source-raw-body">
+    <div class="source-raw-summary" id="sourceRawHistoryDialogSummary"></div>
+    <div class="source-raw-tabs" role="tablist" aria-label="历史检测内容">
+      <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-history-tab="nodes">节点结果</button>
+      <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-history-tab="raw">未过滤节点</button>
+    </div>
+    <div class="source-raw-toolbar">
+      <label class="source-raw-search"><span aria-hidden="true">⌕</span><input id="sourceRawHistoryDialogSearch" type="search" placeholder="搜索 IP、端口或备注" autocomplete="off" aria-label="搜索历史节点" /></label>
+      <button class="btn-outline" type="button" id="copySourceRawHistoryDialogButton">📋 复制筛选结果</button>
+    </div>
+    <pre id="sourceRawHistoryDialogContent" class="source-raw-code source-raw-content" aria-label="历史节点结果"></pre>
+  </div>
+</dialog>
+
 <!-- ADMIN_SECTION:overview:START -->
 <!-- ==================== 优选节点预览 ==================== -->
 <div class="card" id="previewSection">

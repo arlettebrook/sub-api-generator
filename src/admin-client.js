@@ -910,40 +910,87 @@ function renderSourceRawHistory(history = []) {
   });
 }
 
+let sourceRawHistoryDialogItem = null;
+let sourceRawHistoryDialogTab = 'nodes';
+let sourceRawHistoryDialogVisible = [];
+
+function renderSourceRawHistoryDialog() {
+  const item = sourceRawHistoryDialogItem;
+  const content = $('sourceRawHistoryDialogContent');
+  const search = ($('sourceRawHistoryDialogSearch')?.value || '').trim().toLowerCase();
+  if (!item || !content) return;
+  const all = sourceRawHistoryDialogTab === 'raw'
+    ? (Array.isArray(item.unfilteredNodes) ? item.unfilteredNodes : [])
+    : (Array.isArray(item.nodes) ? item.nodes : []);
+  sourceRawHistoryDialogVisible = all.filter((node) => !search || String(node).toLowerCase().includes(search));
+  content.textContent = sourceRawHistoryDialogVisible.length ? sourceRawHistoryDialogVisible.join('\\n') : '没有匹配的数据。';
+}
+
+function renderSourceRawHistoryDialogSummary(item) {
+  const summary = $('sourceRawHistoryDialogSummary');
+  if (!summary) return;
+  summary.replaceChildren();
+  [['状态', '历史记录'], ['可用节点', item.kept ?? item.nodes?.length ?? 0], ['原始节点', item.raw ?? item.unfilteredNodes?.length ?? 0], ['过滤节点', item.filtered ?? 0], ['异常来源', item.errors ?? 0]].forEach(([label, value]) => {
+    const metric = document.createElement('div');
+    metric.className = 'source-raw-metric';
+    const number = document.createElement('strong');
+    number.textContent = String(value);
+    const caption = document.createElement('span');
+    caption.textContent = label;
+    metric.append(number, caption);
+    summary.appendChild(metric);
+  });
+}
+
+function closeSourceRawHistoryDialog() {
+  const dialog = $('sourceRawHistoryDialog');
+  if (dialog?.open) dialog.close();
+  sourceRawHistoryDialogItem = null;
+  sourceRawHistoryDialogVisible = [];
+  document.body.classList.remove('source-raw-history-dialog-open');
+}
+
 function showSourceRawHistoryItem(item) {
-  if (!item || sourceRawSelection?.type !== 'customApis') return;
-  sourceRawNodes = Array.isArray(item.nodes) ? item.nodes.slice() : [];
-  sourceRawUnfilteredNodes = Array.isArray(item.unfilteredNodes) ? item.unfilteredNodes.slice() : sourceRawNodes.slice();
-  sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
-  sourceRawUnfilteredSourceNodes = new Map();
-  sourceRawNodeSources = new Map();
-  sourceRawSourceMeta = new Map();
-  sourceRawSourceErrors = new Map();
-  sourceRawSourceStats = new Map();
-  (Array.isArray(item.sourceMeta) ? item.sourceMeta : []).forEach((meta) => {
-    if (meta?.type && meta.key) sourceRawSourceMeta.set(sourceGroupId(meta.type, meta.key), meta);
+  if (!item) return;
+  const dialog = $('sourceRawHistoryDialog');
+  if (!dialog) return;
+  sourceRawHistoryDialogItem = item;
+  sourceRawHistoryDialogTab = 'nodes';
+  const meta = $('sourceRawHistoryDialogMeta');
+  const search = $('sourceRawHistoryDialogSearch');
+  if (meta) meta.textContent = '检测时间：' + formatSourceRawTime(item.at);
+  if (search) search.value = '';
+  renderSourceRawHistoryDialogSummary(item);
+  document.querySelectorAll('[data-source-history-tab]').forEach((button) => {
+    button.onclick = () => {
+      sourceRawHistoryDialogTab = button.dataset.sourceHistoryTab === 'raw' ? 'raw' : 'nodes';
+      document.querySelectorAll('[data-source-history-tab]').forEach((tab) => {
+        const active = tab.dataset.sourceHistoryTab === sourceRawHistoryDialogTab;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      renderSourceRawHistoryDialog();
+    };
   });
-  (Array.isArray(item.nodeSources) ? item.nodeSources : []).forEach((entry) => {
-    if (!entry?.value) return;
-    const id = sourceGroupId(entry.type, entry.key);
-    if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: entry.type, key: entry.key, remark: entry.remark || '' });
-    const ids = sourceRawNodeSources.get(entry.value) || [];
-    if (!ids.includes(id)) ids.push(id);
-    sourceRawNodeSources.set(entry.value, ids);
-  });
-  (Array.isArray(item.rawSources) ? item.rawSources : []).forEach((source) => {
-    if (!source?.type || !source.key) return;
-    const id = sourceGroupId(source.type, source.key);
-    const values = Array.isArray(source.nodes) ? source.nodes.slice() : [];
-    sourceRawUnfilteredSourceNodes.set(id, values);
-    sourceRawSourceStats.set(id, { raw: values.length, kept: Number(source.filterStats?.outputCount ?? values.length) || 0 });
-    if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: source.type, key: source.key, remark: source.remark || '' });
-  });
-  renderSourceRawSummary({ state: 'success', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawUnfilteredNodes.length });
-  renderSourceRawCacheStatus('正在查看历史检测：' + formatSourceRawTime(item.at), '');
-  updateSourceRawGroupControls();
-  renderSourceRawResults();
-  renderSourceRawResults(true);
+  if (search) search.oninput = renderSourceRawHistoryDialog;
+  const copy = $('copySourceRawHistoryDialogButton');
+  if (copy) copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(sourceRawHistoryDialogVisible.join('\\n'));
+      showToast('历史筛选结果已复制', 'success');
+    } catch (error) {
+      showToast('复制失败：' + error.message, 'error');
+    }
+  };
+  dialog.onclose = () => {
+    sourceRawHistoryDialogItem = null;
+    document.body.classList.remove('source-raw-history-dialog-open');
+  };
+  if (!dialog.open) dialog.showModal();
+  document.body.classList.add('source-raw-history-dialog-open');
+  const body = dialog.querySelector('.source-raw-body');
+  if (body) body.scrollTop = 0;
+  renderSourceRawHistoryDialog();
 }
 
 async function loadSourceRawHistoryFromDb(type, key, signal) {

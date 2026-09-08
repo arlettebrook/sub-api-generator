@@ -1630,6 +1630,10 @@ export const adminStyle = `
     -webkit-backdrop-filter: blur(4px);
   }
 
+  .source-raw-history-dialog {
+    width: min(760px, calc(100vw - 32px));
+  }
+
   .source-raw-dialog-subtitle {
     margin: 4px 0 0;
     color: var(--text-tertiary);

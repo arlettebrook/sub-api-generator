@@ -6,6 +6,40 @@ const values = {
   apis: { "https://api.example.com": { remark: "测试 API" } },
   custom_apis: {},
 };
+const detectionHistory = [];
+const DB = {
+  prepare(sql) {
+    return {
+      bind(...params) {
+        return {
+          async run() {
+            if (/INSERT INTO detection_history/i.test(sql)) {
+              const [api_path, detected_at, raw_count, kept_count, filtered_count, error_count, nodes_json, raw_nodes_json, raw_sources_json, node_sources_json, source_meta_json] = params;
+              detectionHistory.push({ id: detectionHistory.length + 1, api_path, detected_at, raw_count, kept_count, filtered_count, error_count, nodes_json, raw_nodes_json, raw_sources_json, node_sources_json, source_meta_json });
+            }
+            if (/DELETE FROM detection_history/i.test(sql)) {
+              const path = params[0];
+              const keep = Number(params[2] || 50);
+              const matches = detectionHistory.filter((row) => row.api_path === path).sort((a, b) => b.detected_at - a.detected_at || b.id - a.id).slice(0, keep).map((row) => row.id);
+              for (let index = detectionHistory.length - 1; index >= 0; index -= 1) {
+                if (detectionHistory[index].api_path === path && !matches.includes(detectionHistory[index].id)) detectionHistory.splice(index, 1);
+              }
+            }
+            return { success: true };
+          },
+          async all() {
+            const path = params[0];
+            const limit = Number(params[1] || 10);
+            const offset = Number(params[2] || 0);
+            const results = detectionHistory.filter((row) => row.api_path === path).sort((a, b) => b.detected_at - a.detected_at || b.id - a.id).slice(offset, offset + limit);
+            return { results };
+          },
+          async first() { return { total: detectionHistory.filter((row) => row.api_path === params[0]).length }; },
+        };
+      },
+    };
+  },
+};
 
 const env = {
   PASSWORD: "secret",
@@ -13,6 +47,7 @@ const env = {
     async get(key) { return values[key] ?? null; },
     async put(key, value) { values[key] = JSON.parse(value); },
   },
+  DB,
 };
 
 const nativeFetch = globalThis.fetch;
