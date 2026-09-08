@@ -1729,7 +1729,7 @@ export const adminStyle = `
     line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
     line-height: 1.25;
   }
   .source-health strong { font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }

@@ -300,6 +300,38 @@ test("coalesces concurrent requests for the same preferred source", async () => 
   }
 });
 
+test("limits concurrent source checks", async () => {
+  const originalFetch = globalThis.fetch;
+  const apis = Object.fromEntries(Array.from({ length: 10 }, (_, index) => [`https://parallel.example/${index}`, {}]));
+  let active = 0;
+  let peak = 0;
+  globalThis.fetch = async () => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    active -= 1;
+    return new Response("1.2.3.4:443#ok", { status: 200 });
+  };
+  const runtime = {
+    KV: {
+      async get(key) {
+        if (key === "subs") return {};
+        if (key === "apis") return apis;
+        return null;
+      },
+    },
+  };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime);
+    assert.equal(response.status, 200);
+    assert.equal(peak, 6);
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reports failed sources without discarding healthy source output", async () => {
   const originalFetch = globalThis.fetch;
   const values = {

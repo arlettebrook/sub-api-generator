@@ -25,6 +25,7 @@ const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA
 const REMARK_SYMBOL_REGEX = /[\p{So}\uFE0F]+/gu;
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const AGGREGATE_CACHE_MAX_ENTRIES = 128;
+const SOURCE_CHECK_CONCURRENCY = 6;
 const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
 const sourceInflight = new Map();
@@ -94,16 +95,17 @@ function decodeSubscriptionBody(content) {
 async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
   const rawHost = String(host || "").trim().replace(/\/+$/, "");
   const baseHost = HTTP_PROTOCOL_REGEX.test(rawHost) ? rawHost : `https://${rawHost}`;
-  const content = await fetchSourceText(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
+  const response = await fetchSourceText(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
     headers: { "User-Agent": UA_SUBS_FETCH },
   }, "订阅源");
 
-  const rawContent = decodeSubscriptionBody(content);
+  const rawContent = decodeSubscriptionBody(response.content);
   const result = [];
   for (const line of rawContent.split(/\r?\n/)) {
     const parsed = parsePreferredIpLine(line, filterRules);
     if (parsed) result.push(parsed);
   }
+  Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
   return result;
 }
 
@@ -124,8 +126,8 @@ export function getSourceStatuses(subsConfig, apisConfig) {
   for (const [type, config] of [["subs", subsConfig], ["apis", apisConfig]]) {
     const normalized = normalizeKvData(config, type);
     for (const [key, entry] of Object.entries(normalized)) {
+      const remark = isPlainObject(entry) && typeof entry.remark === "string" ? entry.remark : "";
       result[type][key] = {
-        remark: isPlainObject(entry) && typeof entry.remark === "string" ? entry.remark : "",
         state: "idle",
         nodeCount: 0,
         rawNodeCount: 0,
@@ -138,17 +140,29 @@ export function getSourceStatuses(subsConfig, apisConfig) {
         lastSuccessNodeCount: 0,
         lastSuccessRawNodeCount: 0,
         ...(sourceStatus.get(`${type}:${key}`) || {}),
+        remark,
       };
     }
   }
   return result;
 }
 
+export function restoreSourceStatuses(snapshot) {
+  if (!isPlainObject(snapshot)) return;
+  for (const type of ["subs", "apis"]) {
+    for (const [key, status] of Object.entries(snapshot[type] || {})) {
+      if (isPlainObject(status)) sourceStatus.set(`${type}:${normalizeSourceKey(type, key)}`, { ...status });
+    }
+  }
+}
+
 async function fetchApiSubs(apiUrl) {
-  const content = await fetchSourceText(apiUrl, {
+  const response = await fetchSourceText(apiUrl, {
     headers: { "User-Agent": UA_APIS_FETCH },
   }, "API 源");
-  return decodeSubscriptionBody(content).split(/\r?\n/).filter((line) => line.trim() !== "");
+  const result = decodeSubscriptionBody(response.content).split(/\r?\n/).filter((line) => line.trim() !== "");
+  Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
+  return result;
 }
 
 async function fetchSourceText(resource, options, label) {
@@ -167,6 +181,7 @@ async function fetchSourceText(resource, options, label) {
 
 async function fetchSourceTextUncached(resource, options, label) {
   let lastError = new Error(`${label}返回空数据`);
+  lastError.code = "EMPTY_RESPONSE";
   for (let attempt = 0; attempt <= UPSTREAM_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
       const response = await fetchWithTimeout(resource, options);
@@ -178,8 +193,9 @@ async function fetchSourceTextUncached(resource, options, label) {
         if (!retryable) break;
       } else {
         const content = await response.text();
-        if (content.trim()) return content;
+        if (content.trim()) return { content, statusCode: response.status };
         lastError = new Error(`${label}返回空数据`);
+        lastError.code = "EMPTY_RESPONSE";
       }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -304,6 +320,23 @@ function pruneAggregateCache(now = Date.now()) {
   }
 }
 
+async function allSettledWithConcurrency(tasks, limit = SOURCE_CHECK_CONCURRENCY) {
+  const results = new Array(tasks.length);
+  let nextIndex = 0;
+  async function runWorker() {
+    while (nextIndex < tasks.length) {
+      const index = nextIndex++;
+      try {
+        results[index] = { status: "fulfilled", value: await tasks[index]() };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => runWorker()));
+  return results;
+}
+
 export async function handleRoot(env, sourceSelection) {
   try {
     const [subsConfig, apisConfig, blacklistConfig, filterRulesConfig] = await Promise.all([
@@ -349,8 +382,8 @@ export async function handleRoot(env, sourceSelection) {
       });
     };
     const blacklistRegex = getBlacklistRegex(blacklist);
-    const [subsResults, apiResults] = await Promise.all([
-      Promise.allSettled(selectedEntries(subsConfig, "subs").map(async ([host]) => {
+    const sourceTasks = [];
+    selectedEntries(subsConfig, "subs").forEach(([host]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchPreferredSubs(host, filterRules);
@@ -363,7 +396,7 @@ export async function handleRoot(env, sourceSelection) {
             durationMs: Date.now() - startedAt,
             error: "",
             errorType: "",
-            statusCode: null,
+            statusCode: rawValues.statusCode || null,
             lastAttemptAt: timestamp,
             ...(values.length > 0 ? {
               lastSuccessAt: timestamp,
@@ -371,9 +404,10 @@ export async function handleRoot(env, sourceSelection) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { key: host, values };
+          return { type: "subs", key: host, values };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
+          failure.sourceType = "subs";
           failure.sourceKey = host;
           recordSourceStatus("subs", host, {
             state: sourceFailureState(failure),
@@ -387,8 +421,8 @@ export async function handleRoot(env, sourceSelection) {
           });
           throw failure;
         }
-      })),
-      Promise.allSettled(selectedEntries(apisConfig, "apis").map(async ([apiUrl]) => {
+      }));
+    selectedEntries(apisConfig, "apis").forEach(([apiUrl]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchApiSubs(apiUrl);
@@ -401,7 +435,7 @@ export async function handleRoot(env, sourceSelection) {
             durationMs: Date.now() - startedAt,
             error: "",
             errorType: "",
-            statusCode: null,
+            statusCode: rawValues.statusCode || null,
             lastAttemptAt: timestamp,
             ...(values.length > 0 ? {
               lastSuccessAt: timestamp,
@@ -409,9 +443,10 @@ export async function handleRoot(env, sourceSelection) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { key: apiUrl, values };
+          return { type: "apis", key: apiUrl, values };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
+          failure.sourceType = "apis";
           failure.sourceKey = apiUrl;
           recordSourceStatus("apis", apiUrl, {
             state: sourceFailureState(failure),
@@ -425,8 +460,10 @@ export async function handleRoot(env, sourceSelection) {
           });
           throw failure;
         }
-      })),
-    ]);
+      }));
+    const sourceResults = await allSettledWithConcurrency(sourceTasks);
+    const subsResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "subs" : result.reason?.sourceType === "subs");
+    const apiResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "apis" : result.reason?.sourceType === "apis");
 
     const preferred = [];
     const nodeSources = [];
@@ -476,12 +513,14 @@ export async function handleRoot(env, sourceSelection) {
 
 function sourceErrorMessage(error) {
   if (!error) return "未知错误";
+  if (error.code === "EMPTY_RESPONSE") return "返回空数据";
   if (error.code === "TIMEOUT" || error.name === "AbortError") return "请求超时（15 秒）";
   if (error.code === "HTTP_ERROR" && error.statusCode) return `HTTP 错误（${error.statusCode}）`;
   return typeof error.message === "string" && error.message ? error.message.slice(0, 160) : "请求失败";
 }
 
 function sourceFailureState(error) {
+  if (error?.code === "EMPTY_RESPONSE") return "empty";
   if (error?.code === "TIMEOUT" || error?.name === "AbortError") return "timeout";
   if (error?.code === "HTTP_ERROR") return "http-error";
   return "network-error";

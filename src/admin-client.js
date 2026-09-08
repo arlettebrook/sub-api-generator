@@ -331,7 +331,7 @@ function renderSourceStatusSummary() {
     const name = document.createElement('strong');
     name.textContent = status.remark || key;
     const kind = document.createElement('small');
-    kind.textContent = type === 'apis' ? 'API 源' : '订阅源';
+    kind.textContent = (type === 'apis' ? 'API 源 · ' : '订阅源 · ') + key;
     identity.append(name, kind);
     const detail = document.createElement('span');
     detail.className = 'source-status-issue-detail';
@@ -932,7 +932,11 @@ function createSourceHealth(type, key) {
   const checked = document.createElement('small');
   checked.textContent = status.lastAttemptAt ? '最后检测：' + formatSourceTime(status.lastAttemptAt) : '尚未检测';
   if (status.lastSuccessAt) checked.textContent += ' · 最近成功 ' + (status.lastSuccessNodeCount || 0) + ' 个节点';
-  health.append(primary, checked);
+  const diagnostics = document.createElement('small');
+  diagnostics.textContent = 'HTTP ' + (status.statusCode || '--')
+    + ' · ' + (status.durationMs === null || status.durationMs === undefined ? '--' : status.durationMs + ' ms')
+    + ' · 原始 ' + (status.rawNodeCount || 0) + ' · 过滤后 ' + (status.nodeCount || 0);
+  health.append(primary, checked, diagnostics);
   if (status.error) {
     const error = document.createElement('small');
     error.className = 'source-health-error-detail';
@@ -1014,6 +1018,17 @@ function createSourceCheckButton(type, key) {
     button.textContent = idleText;
   };
   return button;
+}
+
+function detectProblemSources() {
+  const sources = Object.entries(sourceStatuses || {}).flatMap(([type, values]) => Object.entries(values || {})
+    .filter(([, status]) => ['filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error'].includes(status.state))
+    .map(([key]) => ({ type, key })));
+  if (!sources.length) {
+    showToast('当前没有已知异常数据源', 'info');
+    return;
+  }
+  void loadSourceStatuses('selected', sources);
 }
 
 function normalizeSourceKeyClient(type, key) {
@@ -2668,6 +2683,11 @@ function bindPageControls() {
     sourceStatusRefreshButton.addEventListener('click', () => {
       void loadSourceStatuses($('sourceStatusScope')?.value || 'used');
     });
+  }
+  const sourceStatusIssuesButton = $('sourceStatusIssuesButton');
+  if (sourceStatusIssuesButton && sourceStatusIssuesButton.dataset.bound !== 'true') {
+    sourceStatusIssuesButton.dataset.bound = 'true';
+    sourceStatusIssuesButton.addEventListener('click', detectProblemSources);
   }
 }
 

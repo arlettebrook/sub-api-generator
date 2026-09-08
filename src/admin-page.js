@@ -129,6 +129,7 @@ export const adminHTML = `
         <option value="used">检测已使用数据源</option>
         <option value="all">检测全部数据源</option>
       </select>
+      <button class="btn-outline" type="button" id="sourceStatusIssuesButton">⚠ 检测异常来源</button>
       <button class="btn-primary" type="button" id="sourceStatusRefreshButton">🔄 检测数据源</button>
     </div>
   </div>

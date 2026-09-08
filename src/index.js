@@ -4,6 +4,7 @@ import {
   KV_KEY_BLACKLIST,
   KV_KEY_FILTER_RULES,
   KV_KEY_SUBS,
+  KV_KEY_SOURCE_STATUS,
   getRuntimeConfig as getPagesRuntimeConfig,
   isAllowedApiPath,
   normalizeCustomApiData,
@@ -60,12 +61,18 @@ async function handleGetApis(env) {
   return pagesJsonResponse(normalizeKvData(data, "apis"));
 }
 
-async function readSourceStatuses(env) {
-  const [subs, apis] = await Promise.all([
+async function getSourceStatusSnapshot(env, restore = true) {
+  const [subs, apis, persisted] = await Promise.all([
     env.KV.get(KV_KEY_SUBS, "json"),
     env.KV.get(KV_KEY_APIS, "json"),
+    env.KV.get(KV_KEY_SOURCE_STATUS, "json"),
   ]);
-  return pagesJsonResponse(subscriptions.getSourceStatuses(subs, apis));
+  if (restore) subscriptions.restoreSourceStatuses(persisted);
+  return subscriptions.getSourceStatuses(subs, apis);
+}
+
+async function readSourceStatuses(env) {
+  return pagesJsonResponse(await getSourceStatusSnapshot(env));
 }
 
 async function handleGetSourceStatuses(env) {
@@ -112,9 +119,12 @@ async function checkSourceStatuses(env, request) {
   } else {
     return pagesTextResponse("检测范围无效", 400);
   }
+  await getSourceStatusSnapshot(env);
   const checkResponse = await subscriptions.handleRoot(env, sourceSelection);
   if (!checkResponse.ok) return checkResponse;
-  return readSourceStatuses(env);
+  const snapshot = await getSourceStatusSnapshot(env, false);
+  await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
+  return pagesJsonResponse(snapshot);
 }
 
 async function handlePostApis(request, env) {

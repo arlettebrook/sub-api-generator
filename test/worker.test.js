@@ -228,8 +228,10 @@ test("manually checks and reports source status", async () => {
     const status = await statusResponse.json();
     assert.equal(status.subs["e.ye.gs"].state, "success");
     assert.equal(status.subs["e.ye.gs"].nodeCount, 1);
+    assert.equal(status.subs["e.ye.gs"].statusCode, 200);
     assert.equal(typeof status.subs["e.ye.gs"].durationMs, "number");
     assert.match(status.subs["e.ye.gs"].lastAttemptAt, /^20/);
+    assert.equal(values.source_status.subs["e.ye.gs"].lastSuccessNodeCount, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
