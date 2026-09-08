@@ -1837,7 +1837,7 @@ function renderCustomApis() {
     delBtn.type = 'button';
     delBtn.setAttribute('aria-label', '🗑 删除');
     delBtn.onclick = () => confirmCustomApiDelete(path);
-    actions.append(switchLabel, editBtn, viewBtn, downloadBtn, copyBtn, openBtn, delBtn);
+    actions.append(switchLabel, editBtn, viewBtn, downloadBtn, openBtn, delBtn, copyBtn);
 
     row.append(main, actions);
     el.appendChild(row);

@@ -3311,8 +3311,10 @@ export const adminStyle = `
       flex: 1;
     }
     .custom-api-row .custom-api-actions .custom-api-delete {
-      flex: 1 0 100%;
-      min-height: 40px;
+      flex: 0 1 auto;
+      min-width: 64px;
+      min-height: 34px;
+      padding: 0 10px;
     }
     .custom-api-actions .custom-api-switch {
       order: -1;
