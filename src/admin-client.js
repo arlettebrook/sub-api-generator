@@ -1494,12 +1494,12 @@ function createSourceCheckButton(type, key) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn-outline icon-action source-check-button';
-  button.textContent = '检测';
+  button.textContent = '🔍 检测';
   button.setAttribute('aria-label', '检测数据源 ' + key);
   button.onclick = async () => {
     button.disabled = true;
     const idleText = button.textContent;
-    button.textContent = '检测中…';
+    button.textContent = '⏳ 检测中…';
     await loadSourceStatuses('selected', [{ type, key }]);
     button.disabled = false;
     button.textContent = idleText;
@@ -2172,11 +2172,11 @@ function renderSubs() {
 
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn source-delete-button';
-    delBtn.textContent = '删除';
+    delBtn.textContent = '🗑 删除';
     delBtn.setAttribute('aria-label', '删除订阅源 ' + host);
     delBtn.onclick = async () => {
       delBtn.disabled = true;
-      delBtn.textContent = '删除中…';
+      delBtn.textContent = '⏳ 删除中…';
       const removed = subs[host];
       delete subs[host];
       const saved = await queueSubsSave();
@@ -2208,19 +2208,19 @@ function renderSubs() {
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'btn-outline icon-action source-view-button';
-    viewBtn.textContent = '查看';
+    viewBtn.textContent = '👁 查看';
     viewBtn.setAttribute('aria-label', '查看订阅源原始数据 ' + host);
     viewBtn.onclick = async () => {
       viewBtn.disabled = true;
-      viewBtn.textContent = '检测中…';
+      viewBtn.textContent = '⏳ 检测中…';
       try { await openSourceRawDialog('subs', host); }
-      finally { viewBtn.disabled = false; viewBtn.textContent = '查看'; }
+      finally { viewBtn.disabled = false; viewBtn.textContent = '👁 查看'; }
     };
     row.appendChild(viewBtn);
     const downloadBtn = document.createElement('button');
     downloadBtn.type = 'button';
     downloadBtn.className = 'btn-outline icon-action source-download-button';
-    downloadBtn.textContent = '下载';
+    downloadBtn.textContent = '⬇ 下载';
     downloadBtn.setAttribute('aria-label', '下载订阅源节点数据 ' + host);
     downloadBtn.onclick = () => downloadSourceData('subs', host, entry, downloadBtn);
     row.appendChild(downloadBtn);
@@ -2401,11 +2401,11 @@ function renderApis() {
 
     const delBtn = document.createElement('button');
     delBtn.className = 'del-btn source-delete-button';
-    delBtn.textContent = '删除';
+    delBtn.textContent = '🗑 删除';
     delBtn.setAttribute('aria-label', '删除 API 源 ' + url);
     delBtn.onclick = async () => {
       delBtn.disabled = true;
-      delBtn.textContent = '删除中…';
+      delBtn.textContent = '⏳ 删除中…';
       const removed = apis[url];
       delete apis[url];
       const saved = await queueApisSave();
@@ -2437,19 +2437,19 @@ function renderApis() {
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'btn-outline icon-action source-view-button';
-    viewBtn.textContent = '查看';
+    viewBtn.textContent = '👁 查看';
     viewBtn.setAttribute('aria-label', '查看 API 源原始数据 ' + url);
     viewBtn.onclick = async () => {
       viewBtn.disabled = true;
-      viewBtn.textContent = '检测中…';
+      viewBtn.textContent = '⏳ 检测中…';
       try { await openSourceRawDialog('apis', url); }
-      finally { viewBtn.disabled = false; viewBtn.textContent = '查看'; }
+      finally { viewBtn.disabled = false; viewBtn.textContent = '👁 查看'; }
     };
     row.appendChild(viewBtn);
     const downloadBtn = document.createElement('button');
     downloadBtn.type = 'button';
     downloadBtn.className = 'btn-outline icon-action source-download-button';
-    downloadBtn.textContent = '下载';
+    downloadBtn.textContent = '⬇ 下载';
     downloadBtn.setAttribute('aria-label', '下载 API 源节点数据 ' + url);
     downloadBtn.onclick = () => downloadSourceData('apis', url, entry, downloadBtn);
     row.appendChild(downloadBtn);
