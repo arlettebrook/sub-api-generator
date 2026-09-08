@@ -295,7 +295,9 @@ export const adminHTML = `
 <!-- ADMIN_SECTION:subs:START -->
 <!-- ==================== 订阅源管理 ==================== -->
 <div class="card" id="subsSection">
-  <h3>📡 优选订阅器管理</h3>
+  <details class="management-panel">
+    <summary><h3>📡 优选订阅器管理</h3></summary>
+    <div class="management-panel-body">
   <div class="add-row">
     <label class="add-field"><span class="sr-only">订阅源地址</span><input id="newHost" placeholder="sub.example.com" /><small class="inline-error" hidden></small></label>
     <label class="add-field"><span class="sr-only">订阅源备注</span><input id="newRemark" placeholder="备注（可选）" /></label>
@@ -310,13 +312,17 @@ export const adminHTML = `
     <input type="file" id="importSubsFile" accept=".json,application/json" style="display:none" onchange="importSubs(event)" />
   </div>
   <div id="subsList"></div>
+    </div>
+  </details>
 </div>
 <!-- ADMIN_SECTION:subs:END -->
 
 <!-- ADMIN_SECTION:apis:START -->
 <!-- ==================== API 管理 ==================== -->
 <div class="card" id="apisSection">
-  <h3>🔗 优选 API 管理</h3>
+  <details class="management-panel">
+    <summary><h3>🔗 优选 API 管理</h3></summary>
+    <div class="management-panel-body">
   <div class="add-row">
     <label class="add-field add-field-wide"><span class="sr-only">API 地址</span><input id="newApiUrl" placeholder="https://api.example.com/v1" /><small class="inline-error" hidden></small></label>
     <label class="add-field"><span class="sr-only">API 备注</span><input id="newApiRemark" placeholder="备注（可选）" /></label>
@@ -331,6 +337,8 @@ export const adminHTML = `
     <input type="file" id="importApisFile" accept=".json,application/json" style="display:none" onchange="importApis(event)" />
   </div>
   <div id="apisList"></div>
+    </div>
+  </details>
 </div>
 <!-- ADMIN_SECTION:apis:END -->
 

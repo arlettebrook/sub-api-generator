@@ -1627,6 +1627,56 @@ export const adminStyle = `
     content: '';
   }
 
+  .management-panel {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .management-panel > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    padding: 0 16px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .management-panel > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .management-panel > summary::after {
+    content: '⌄';
+    color: var(--text-tertiary);
+    font-size: 20px;
+    transition: transform .18s ease;
+  }
+
+  .management-panel[open] > summary {
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .management-panel[open] > summary::after {
+    transform: rotate(180deg);
+  }
+
+  .management-panel > summary h3 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .management-panel > summary h3::after {
+    display: none;
+  }
+
+  .management-panel-body {
+    padding: 18px 16px 4px;
+  }
+
   .card > .section-heading {
     margin: -2px 0 22px;
     padding-bottom: 15px;
@@ -3558,6 +3608,13 @@ export const adminStyle = `
     }
     .setting-block {
       padding: 12px;
+    }
+    .management-panel > summary {
+      min-height: 46px;
+      padding: 0 12px;
+    }
+    .management-panel-body {
+      padding: 12px 12px 2px;
     }
     .settings-edit-button {
       width: 100%;
