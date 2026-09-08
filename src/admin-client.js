@@ -843,6 +843,11 @@ const sourceRawCache = new Map();
 let sourceRawRefreshTimer = null;
 let sourceRawLastVisible = [];
 let sourceRawNodeSources = new Map();
+let sourceRawSourceMeta = new Map();
+let sourceRawSourceErrors = new Map();
+let sourceRawExpandedGroups = new Set();
+let sourceRawAllCollapsed = false;
+let sourceRawSourceFilter = 'all';
 
 function sourceRawCacheKey(type, key) { return 'source-preview:' + type + ':' + key; }
 function loadSourceRawCache(type, key) {
@@ -1992,6 +1997,11 @@ function closeSourceRawDialog() {
   sourceRawRawContent = '';
   sourceRawUnfilteredNodes = [];
   sourceRawNodeSources = new Map();
+  sourceRawSourceMeta = new Map();
+  sourceRawSourceErrors = new Map();
+  sourceRawExpandedGroups = new Set();
+  sourceRawAllCollapsed = false;
+  sourceRawSourceFilter = 'all';
   if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
   sourceRawRefreshTimer = null;
   const dialog = $('sourceRawDialog');
@@ -2020,7 +2030,7 @@ function renderSourceRawSummary(status) {
     item.append(number, caption);
     summary.appendChild(item);
   });
-  if (current.error) {
+  if (current.error && sourceRawSelection?.type !== 'customApis') {
     const error = document.createElement('div');
     error.className = 'source-raw-error';
     error.textContent = current.error;
@@ -2040,13 +2050,16 @@ function renderSourceRawResults() {
   const count = $('sourceRawResultCount');
   if (!content) return;
   const query = ($('sourceRawSearch')?.value || '').trim().toLowerCase();
-  const visible = query ? sourceRawNodes.filter((node) => node.toLowerCase().includes(query)) : sourceRawNodes;
+  const showSources = sourceRawSelection?.type === 'customApis';
+  let visible = query ? sourceRawNodes.filter((node) => node.toLowerCase().includes(query)) : sourceRawNodes;
+  if (showSources && sourceRawSourceFilter !== 'all') {
+    visible = visible.filter((node) => (sourceRawNodeSources.get(node) || []).includes(sourceRawSourceFilter));
+  }
   sourceRawLastVisible = visible;
   content.innerHTML = '';
-  if (!visible.length) {
+  if (!visible.length && !showSources) {
     content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
   } else {
-    const showSources = sourceRawSelection?.type === 'customApis';
     const fragment = document.createDocumentFragment();
     const renderNode = (node) => {
       const line = document.createElement('div');
@@ -2060,38 +2073,90 @@ function renderSourceRawResults() {
     };
     if (showSources) {
       const groups = new Map();
+      sourceRawSourceMeta.forEach((_, label) => {
+        if (sourceRawSourceFilter === 'all' || sourceRawSourceFilter === label) groups.set(label, []);
+      });
       visible.forEach((node) => {
         const sources = sourceRawNodeSources.get(node);
         const labels = Array.isArray(sources) && sources.length ? sources : ['未识别来源'];
         labels.forEach((label) => {
+          if (sourceRawSourceFilter !== 'all' && label !== sourceRawSourceFilter) return;
           if (!groups.has(label)) groups.set(label, []);
           groups.get(label).push(node);
         });
       });
       groups.forEach((groupNodes, label) => {
+        if (!groupNodes.length && !sourceRawSourceErrors.has(label)) return;
         const group = document.createElement('section');
         group.className = 'source-raw-source-group';
+        const collapsed = sourceRawAllCollapsed || (sourceRawExpandedGroups.size > 0 && !sourceRawExpandedGroups.has(label));
+        group.classList.toggle('is-collapsed', collapsed);
         const heading = document.createElement('div');
         heading.className = 'source-raw-source-heading';
+        heading.tabIndex = 0;
+        heading.setAttribute('role', 'button');
+        heading.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         const title = document.createElement('strong');
         title.textContent = formatSourceGroupLabel(label);
         const total = document.createElement('span');
         total.textContent = groupNodes.length + ' 个节点';
-        heading.append(title, total);
+        const error = sourceRawSourceErrors.get(label);
+        if (error) {
+          const status = document.createElement('em');
+          status.className = 'source-raw-source-error';
+          status.textContent = '异常：' + error;
+          status.title = error;
+          heading.append(title, status, total);
+        } else heading.append(title, total);
         const detail = document.createElement('small');
         detail.className = 'source-raw-source-detail';
         detail.textContent = formatSourceGroupDetail(label);
         detail.title = detail.textContent;
         group.append(heading, detail);
-        groupNodes.forEach((node) => group.appendChild(renderNode(node)));
+        if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node)));
+        const toggle = () => {
+          if (sourceRawAllCollapsed) {
+            sourceRawAllCollapsed = false;
+            sourceRawExpandedGroups = new Set([label]);
+            renderSourceRawResults();
+            return;
+          } else if (sourceRawExpandedGroups.size === 0) sourceRawExpandedGroups = new Set(groups.keys());
+          if (sourceRawExpandedGroups.has(label)) sourceRawExpandedGroups.delete(label); else sourceRawExpandedGroups.add(label);
+          renderSourceRawResults();
+        };
+        heading.onclick = toggle;
+        heading.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } };
         fragment.appendChild(group);
       });
     } else {
       visible.forEach((node) => fragment.appendChild(renderNode(node)));
     }
-    content.appendChild(fragment);
+    if (fragment.childNodes.length) content.appendChild(fragment);
+    else content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
   }
-  if (count) count.textContent = query ? '显示 ' + visible.length + ' / ' + sourceRawNodes.length + ' 条' : sourceRawNodes.length + ' 条节点';
+  if (count) count.textContent = (query || (showSources && sourceRawSourceFilter !== 'all')) ? '显示 ' + visible.length + ' / ' + sourceRawNodes.length + ' 条' : sourceRawNodes.length + ' 条节点';
+}
+
+function updateSourceRawGroupControls() {
+  const controls = $('sourceRawGroupControls');
+  const filter = $('sourceRawSourceFilter');
+  const show = sourceRawSelection?.type === 'customApis';
+  if (controls) controls.hidden = !show;
+  if (!filter || !show) return;
+  const labels = [...sourceRawSourceMeta.keys()];
+  filter.replaceChildren();
+  const allOption = document.createElement('option');
+  allOption.value = 'all';
+  allOption.textContent = '全部来源';
+  filter.appendChild(allOption);
+  labels.forEach((label) => {
+    const option = document.createElement('option');
+    option.value = label;
+    option.textContent = formatSourceGroupLabel(label);
+    filter.appendChild(option);
+  });
+  sourceRawSourceFilter = labels.includes(sourceRawSourceFilter) ? sourceRawSourceFilter : 'all';
+  filter.value = sourceRawSourceFilter;
 }
 
 function formatSourceGroupLabel(label) {
@@ -2099,7 +2164,9 @@ function formatSourceGroupLabel(label) {
   const parts = String(label).split(' · ');
   const type = parts.shift() || '';
   const key = parts.shift() || '';
-  return type + ' · ' + (key.split('/').pop() || key);
+  let shortName = key.split('/').pop() || key;
+  shortName = shortName.split('?')[0].replace(/\.(txt|json|csv)$/i, '');
+  return type + ' · ' + shortName;
 }
 
 function formatSourceGroupDetail(label) {
@@ -2158,11 +2225,14 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawRawContent = cachedResult.rawContent;
     sourceRawUnfilteredNodes = Array.isArray(cachedResult.unfilteredNodes) ? cachedResult.unfilteredNodes.slice() : [];
     sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
+    sourceRawSourceMeta = new Map(Array.isArray(cachedResult.sourceMeta) ? cachedResult.sourceMeta : []);
+    sourceRawSourceErrors = new Map(Array.isArray(cachedResult.sourceErrors) ? cachedResult.sourceErrors : []);
     renderSourceRawSummary(cachedResult.status);
     renderSourceRawProcess(cachedResult.status?.filterStats || {});
     renderSourceRawResults();
     if (rawContent) rawContent.textContent = sourceRawUnfilteredNodes.length ? sourceRawUnfilteredNodes.join('\\n') : '没有提取到未过滤节点。';
   }
+  updateSourceRawGroupControls();
   if (summary) renderSourceRawSummary({ state: 'checking', nodeCount: 0, rawNodeCount: 0 });
   renderSourceRawProcess({});
   if ($('sourceRawResultCount')) $('sourceRawResultCount').textContent = '';
@@ -2196,6 +2266,23 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
     sourceRawRefreshTimer = setInterval(() => openSourceRawDialog(type, key, true), Number(refreshInterval.value || 30) * 1000);
   };
+  const sourceFilter = $('sourceRawSourceFilter');
+  if (sourceFilter) sourceFilter.onchange = () => {
+    sourceRawSourceFilter = sourceFilter.value || 'all';
+    renderSourceRawResults();
+  };
+  const expandGroups = $('expandSourceRawGroupsButton');
+  if (expandGroups) expandGroups.onclick = () => {
+    sourceRawAllCollapsed = false;
+    sourceRawExpandedGroups = new Set(sourceRawSourceMeta.keys());
+    renderSourceRawResults();
+  };
+  const collapseGroups = $('collapseSourceRawGroupsButton');
+  if (collapseGroups) collapseGroups.onclick = () => {
+    sourceRawAllCollapsed = true;
+    sourceRawExpandedGroups = new Set();
+    renderSourceRawResults();
+  };
   document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
     button.onclick = () => setSourceRawTab(button.dataset.sourceRawTab);
   });
@@ -2227,16 +2314,28 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawUnfilteredNodes = Array.isArray(result.unfilteredNodes) ? result.unfilteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
     sourceRawNodeSources = new Map();
+    sourceRawSourceMeta = new Map();
+    sourceRawSourceErrors = new Map();
     if (type === 'customApis') {
+      (Array.isArray(result.sourceMeta) ? result.sourceMeta : []).forEach((item) => {
+        const label = (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key + (item.remark ? ' · 备注：' + item.remark : '');
+        sourceRawSourceMeta.set(label, item);
+      });
       (Array.isArray(result.nodeSources) ? result.nodeSources : []).forEach((item) => {
         const label = (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key + (item.remark ? ' · 备注：' + item.remark : '');
+        if (!sourceRawSourceMeta.has(label)) sourceRawSourceMeta.set(label, { type: item.type, key: item.key, remark: item.remark || '' });
         const values = sourceRawNodeSources.get(item.value) || [];
         if (!values.includes(label)) values.push(label);
         sourceRawNodeSources.set(item.value, values);
       });
+      (result.status?.errors || []).forEach((item) => {
+        const label = [...sourceRawSourceMeta.entries()].find(([, meta]) => meta.type === item.type && meta.key === item.key)?.[0];
+        if (label) sourceRawSourceErrors.set(label, item.message || '检测失败');
+      });
     }
+    updateSourceRawGroupControls();
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
-    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], status: nextStatus, savedAt: Date.now() });
+    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});

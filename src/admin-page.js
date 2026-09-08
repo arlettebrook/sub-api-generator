@@ -76,6 +76,11 @@ export const adminHTML = `
       <label class="source-raw-search"><span aria-hidden="true">⌕</span><input id="sourceRawSearch" type="search" placeholder="搜索 IP、端口或备注" autocomplete="off" aria-label="搜索原始数据" /></label>
       <button class="btn-outline" type="button" id="copySourceRawButton">📋 复制筛选结果</button>
     </div>
+    <div class="source-raw-group-controls" id="sourceRawGroupControls" hidden>
+      <select id="sourceRawSourceFilter" aria-label="按来源筛选"><option value="all">全部来源</option></select>
+      <button class="btn-subtle" type="button" id="expandSourceRawGroupsButton">展开全部</button>
+      <button class="btn-subtle" type="button" id="collapseSourceRawGroupsButton">收起全部</button>
+    </div>
     <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在检测数据源…</pre>
     <pre id="sourceRawRawContent" class="source-raw-code source-raw-content" hidden>正在检测数据源…</pre>
     <div class="source-raw-actions">

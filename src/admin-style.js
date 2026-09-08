@@ -1717,6 +1717,23 @@ export const adminStyle = `
     gap: 8px;
   }
 
+  .source-raw-group-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .source-raw-group-controls select {
+    min-width: 180px;
+    height: 34px;
+  }
+
+  .source-raw-group-controls .btn-subtle {
+    height: 34px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
   .source-raw-tabs {
     display: flex;
     gap: 4px;
@@ -1852,6 +1869,32 @@ export const adminStyle = `
     gap: 10px;
     color: var(--text-primary);
     font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .source-raw-source-heading::before {
+    content: '▾';
+    flex: 0 0 12px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .source-raw-source-group.is-collapsed .source-raw-source-heading::before {
+    content: '▸';
+  }
+
+  .source-raw-source-heading strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-raw-source-heading:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
   }
 
   .source-raw-source-heading span {
@@ -1867,6 +1910,20 @@ export const adminStyle = `
     font-size: 11px;
     line-height: 1.45;
     overflow-wrap: anywhere;
+  }
+
+  .source-raw-source-error {
+    flex: 1 1 auto;
+    color: var(--danger);
+    font-size: 11px;
+    font-style: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-raw-source-group.is-collapsed .source-raw-source-detail {
+    margin-bottom: 0;
   }
 
   .source-raw-source-group .source-raw-node-line:last-child {
@@ -2870,6 +2927,15 @@ export const adminStyle = `
     .source-raw-toolbar {
       align-items: stretch;
       flex-direction: column;
+    }
+    .source-raw-group-controls {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
+    .source-raw-group-controls select,
+    .source-raw-group-controls button {
+      flex: 1 1 100%;
+      width: 100%;
     }
     .source-raw-tabs {
       width: 100%;

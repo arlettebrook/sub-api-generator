@@ -223,6 +223,7 @@ async function handleCustomApiPreview(request, env) {
   }, {});
   const snapshot = await getSourceStatusSnapshot(env, false);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
+  const sourceMeta = (sourceSelection || []).map((source) => ({ type: source.type, key: source.key, remark: snapshot[source.type]?.[source.key]?.remark || "" }));
   const selectedStatuses = (sourceSelection || []).map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
   const rawNodeCount = selectedStatuses.reduce((count, status) => count + (status.rawNodeCount || 0), 0);
   const errors = response.headers.get("x-source-errors");
@@ -240,6 +241,7 @@ async function handleCustomApiPreview(request, env) {
     rawSources,
     unfilteredNodes,
     nodeSources,
+    sourceMeta,
     status: {
       state: nodes.length ? "success" : (errorList.length ? "error" : "empty"),
       nodeCount: nodes.length,

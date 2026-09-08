@@ -357,7 +357,10 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
   try {
     const first = await request();
     assert.equal(first.status, 200);
-    assert.deepEqual((await first.json()).nodes, ["9.9.9.9:443#custom"]);
+    const result = await first.json();
+    assert.deepEqual(result.nodes, ["9.9.9.9:443#custom"]);
+    assert.deepEqual(result.sourceMeta, [{ type: "apis", key: sourceKey, remark: "API 源" }]);
+    assert.deepEqual(result.nodeSources, [{ value: "9.9.9.9:443#custom", type: "apis", key: sourceKey, remark: "API 源" }]);
     const second = await request();
     assert.equal(second.status, 429);
     assert.equal((await second.json()).code, "RATE_LIMITED");
