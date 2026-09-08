@@ -1718,6 +1718,23 @@ export const adminStyle = `
     text-align: right;
   }
 
+  .source-raw-history-view {
+    flex: 0 0 auto;
+    min-height: 24px;
+    padding: 0 7px;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-sm);
+    background: var(--surface-solid);
+    color: var(--accent-primary);
+    font-size: 11px;
+  }
+
+  .source-raw-history-view:hover,
+  .source-raw-history-view:focus-visible {
+    border-color: var(--accent-primary);
+    background: var(--accent-light);
+  }
+
   .source-raw-process span {
     padding: 5px 8px;
     border: 1px solid var(--border-color);

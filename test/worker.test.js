@@ -13,6 +13,24 @@ function createKv(values = {}) {
   };
 }
 
+function createD1(rows = []) {
+  const calls = [];
+  return {
+    calls,
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async run() { calls.push({ sql, values }); return { success: true }; },
+            async all() { calls.push({ sql, values }); return { results: rows }; },
+            async first() { calls.push({ sql, values }); return { total: rows.length }; },
+          };
+        },
+      };
+    },
+  };
+}
+
 function env(overrides = {}) {
   return {
     KV: createKv(),
@@ -366,6 +384,58 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
     const second = await request();
     assert.equal(second.status, 429);
     assert.equal((await second.json()).code, "RATE_LIMITED");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("persists and reads custom API detection history through D1", async () => {
+  const sourceKey = "https://d1-history.example/data";
+  const path = "d1_history_preview";
+  const values = {
+    apis: { [sourceKey]: { remark: "D1 测试源" } },
+    subs: {},
+    custom_apis: { [path]: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] } },
+  };
+  const db = createD1();
+  const runtime = env({ KV: createKv(values), DB: db });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("7.7.7.7:443#history", { status: 200 });
+  try {
+    const preview = await worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+      method: "POST",
+      headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+      body: JSON.stringify({ path }),
+    }), runtime);
+    assert.equal(preview.status, 200);
+    const insert = db.calls.find((call) => /INSERT INTO detection_history/i.test(call.sql));
+    assert.ok(insert);
+    assert.equal(insert.values[2], 1);
+    assert.equal(insert.values[3], 1);
+
+    const historyDb = createD1([{
+      id: 9,
+      api_path: path,
+      detected_at: 1700000000000,
+      raw_count: 2,
+      kept_count: 1,
+      filtered_count: 1,
+      error_count: 0,
+      nodes_json: '["1.1.1.1:443#ok"]',
+      raw_nodes_json: '["1.1.1.1:443#ok","2.2.2.2:443#blocked"]',
+      raw_sources_json: '[]',
+      node_sources_json: '[]',
+      source_meta_json: '[]',
+    }]);
+    const response = await worker.fetch(new Request(`https://example.test/api/detection-history?path=${path}&limit=1`, {
+      headers: { Cookie: `auth=${hash}` },
+    }), env({ KV: createKv(values), DB: historyDb }));
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.available, true);
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.items[0].nodes, ["1.1.1.1:443#ok"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

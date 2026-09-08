@@ -10,3 +10,16 @@ id = "0ebd2e056a5547a1b13c4ba4c83d50a7"
 [[env.preview.kv_namespaces]]
 binding = "KV"
 id = "f9be09f1bf7341c69550598802068448"
+
+# Shared application D1 database. Additional application tables can use this same binding.
+[[d1_databases]]
+binding = "DB"
+database_name = "sub-api-generator"
+database_id = "4b888b75-c1ad-4b4a-b438-ad7fc5cc96c6"
+migrations_dir = "migrations"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "sub-api-generator-preview"
+database_id = "08e8a220-85ee-4f1c-88f5-14d61f4978f1"
+migrations_dir = "migrations"

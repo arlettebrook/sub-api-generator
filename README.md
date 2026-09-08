@@ -47,7 +47,29 @@ Production 和 Preview 配置：
 Pages 不支持 Worker 的 `keep_vars` 配置；环境变量和 Secret 以 Dashboard 中的 Production/Preview
 设置为准。
 
-### 3. 部署
+### 3. 配置共享 D1 数据库（可选）
+
+`wrangler.toml` 中的 `DB` 是共享应用数据库，不仅用于检测历史，后续业务表也可以复用该绑定。
+当前仓库的首个迁移 `migrations/0001_detection_history.sql` 只会创建
+`detection_history` 表和索引，不会修改或删除其他表。未绑定 D1 时，前端仍会使用浏览器本地摘要缓存。
+
+首次部署或新增数据库后，建议分别对生产和 Preview 执行迁移：
+
+```powershell
+wrangler d1 migrations apply sub-api-generator --remote
+wrangler d1 migrations apply sub-api-generator-preview --remote --env preview
+```
+
+迁移由 Wrangler 按编号记录执行，每个版本只执行一次。以后修改表结构时不要编辑已经执行过的 SQL，
+请新增下一个文件（例如 `migrations/0002_add_xxx.sql`），然后再次执行上面的 `migrations apply` 命令。
+这样可以保留现有数据并使生产、Preview 的结构保持一致。D1 历史接口为
+`/api/detection-history?path=<优选API路径>`，支持 `limit` 和 `offset` 分页参数，每个优选 API 自动保留最近 50 条记录。
+
+此外，应用在第一次读写检测历史时也会执行 `CREATE TABLE IF NOT EXISTS` 和索引初始化。
+因此即使忘记先执行迁移，检测历史仍可自动创建基础表；自动初始化不会删除或覆盖已有数据。
+后续结构变更仍必须通过新的编号迁移文件完成，避免生产和 Preview 的表结构不一致。
+
+### 4. 部署
 
 首次部署可以使用 Wrangler：
 
@@ -59,7 +81,7 @@ wrangler pages deploy . --project-name sub-api-generator
 也可以在 Pages 中连接 Git 仓库，构建命令留空，输出目录填写 `.`。每次部署都必须确保根目录的
 `_worker.js` 被包含在输出目录中。
 
-### 4. 本地运行
+### 5. 本地运行
 
 ```powershell
 wrangler pages dev .
@@ -71,7 +93,7 @@ wrangler pages dev .
 PASSWORD=change-this-password
 ```
 
-### 5. 运行测试
+### 6. 运行测试
 
 项目使用 Node.js 内置测试框架，不需要安装额外依赖：
 
@@ -100,5 +122,6 @@ npm run test:e2e
 - `/api/blacklist`：节点黑名单配置接口，需要登录
 - `/api/filter-rules`：节点备注过滤规则配置接口，需要登录
 - `/api/custom-apis`：优选 API 路径和数据源配置接口，需要登录
+- `/api/detection-history`：D1 检测历史分页接口，需要登录（未绑定 D1 时返回空列表）
 
 认证、订阅抓取和 KV 读写全部运行在 Pages Functions 的 Worker 运行时中，不需要额外的服务器。

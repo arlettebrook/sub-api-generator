@@ -898,8 +898,64 @@ function renderSourceRawHistory(history = []) {
     const summary = document.createElement('span');
     summary.textContent = '原始 ' + (item.raw ?? 0) + ' · 保留 ' + (item.kept ?? 0) + ' · 过滤 ' + (item.filtered ?? 0) + (item.errors ? ' · 异常 ' + item.errors : '');
     row.append(time, summary);
+    if (Array.isArray(item.nodes)) {
+      const view = document.createElement('button');
+      view.type = 'button';
+      view.className = 'source-raw-history-view';
+      view.textContent = '查看节点';
+      view.onclick = () => showSourceRawHistoryItem(item);
+      row.appendChild(view);
+    }
     list.appendChild(row);
   });
+}
+
+function showSourceRawHistoryItem(item) {
+  if (!item || sourceRawSelection?.type !== 'customApis') return;
+  sourceRawNodes = Array.isArray(item.nodes) ? item.nodes.slice() : [];
+  sourceRawUnfilteredNodes = Array.isArray(item.unfilteredNodes) ? item.unfilteredNodes.slice() : sourceRawNodes.slice();
+  sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
+  sourceRawUnfilteredSourceNodes = new Map();
+  sourceRawNodeSources = new Map();
+  sourceRawSourceMeta = new Map();
+  sourceRawSourceErrors = new Map();
+  sourceRawSourceStats = new Map();
+  (Array.isArray(item.sourceMeta) ? item.sourceMeta : []).forEach((meta) => {
+    if (meta?.type && meta.key) sourceRawSourceMeta.set(sourceGroupId(meta.type, meta.key), meta);
+  });
+  (Array.isArray(item.nodeSources) ? item.nodeSources : []).forEach((entry) => {
+    if (!entry?.value) return;
+    const id = sourceGroupId(entry.type, entry.key);
+    if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: entry.type, key: entry.key, remark: entry.remark || '' });
+    const ids = sourceRawNodeSources.get(entry.value) || [];
+    if (!ids.includes(id)) ids.push(id);
+    sourceRawNodeSources.set(entry.value, ids);
+  });
+  (Array.isArray(item.rawSources) ? item.rawSources : []).forEach((source) => {
+    if (!source?.type || !source.key) return;
+    const id = sourceGroupId(source.type, source.key);
+    const values = Array.isArray(source.nodes) ? source.nodes.slice() : [];
+    sourceRawUnfilteredSourceNodes.set(id, values);
+    sourceRawSourceStats.set(id, { raw: values.length, kept: Number(source.filterStats?.outputCount ?? values.length) || 0 });
+    if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: source.type, key: source.key, remark: source.remark || '' });
+  });
+  renderSourceRawSummary({ state: 'success', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawUnfilteredNodes.length });
+  renderSourceRawCacheStatus('正在查看历史检测：' + formatSourceRawTime(item.at), '');
+  updateSourceRawGroupControls();
+  renderSourceRawResults();
+  renderSourceRawResults(true);
+}
+
+async function loadSourceRawHistoryFromDb(type, key, signal) {
+  if (type !== 'customApis') return;
+  try {
+    const response = await fetch('/api/detection-history?path=' + encodeURIComponent(key) + '&limit=10', { credentials: 'same-origin', cache: 'no-store', signal });
+    const result = await response.json();
+    if (!response.ok || !result.available || !Array.isArray(result.items) || sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
+    renderSourceRawHistory(result.items);
+  } catch (error) {
+    if (error?.name !== 'AbortError') return;
+  }
 }
 function loadSourceRawViewState(type, key) {
   try {
@@ -2580,6 +2636,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (content) content.onscroll = null;
   if (!dialog.open) dialog.showModal();
   lockSourceRawPageScroll();
+  void loadSourceRawHistoryFromDb(type, key, controller.signal);
   if (!preserveState) {
     // Reset again after opening and layout so a reused dialog cannot restore its previous scroll offset.
     resetSourceRawScroll();
@@ -2649,6 +2706,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
       const rawTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.raw || 0), 0);
       const keptTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.kept || 0), 0);
       saveSourceRawHistory(type, key, { at: Date.now(), raw: rawTotal, kept: keptTotal, filtered: Math.max(0, rawTotal - keptTotal), errors: sourceRawSourceErrors.size });
+      void loadSourceRawHistoryFromDb(type, key, controller.signal);
     }
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();

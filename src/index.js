@@ -49,6 +49,136 @@ const previewActiveByScope = new Map();
 const PREVIEW_MAX_CONCURRENT = 4;
 const PREVIEW_SCOPE_LIMITS = { source: 3, custom: 2 };
 const PREVIEW_COOLDOWN_MS = 2500;
+const HISTORY_DEFAULT_LIMIT = 10;
+const HISTORY_MAX_LIMIT = 50;
+const historySchemaPromises = new WeakMap();
+
+async function ensureDetectionHistorySchema(env) {
+  const db = getHistoryDb(env);
+  if (!db) return false;
+  if (!historySchemaPromises.has(db)) {
+    const promise = (async () => {
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS detection_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          api_path TEXT NOT NULL,
+          detected_at INTEGER NOT NULL,
+          raw_count INTEGER NOT NULL DEFAULT 0,
+          kept_count INTEGER NOT NULL DEFAULT 0,
+          filtered_count INTEGER NOT NULL DEFAULT 0,
+          error_count INTEGER NOT NULL DEFAULT 0,
+          nodes_json TEXT NOT NULL DEFAULT '[]',
+          raw_nodes_json TEXT NOT NULL DEFAULT '[]',
+          raw_sources_json TEXT NOT NULL DEFAULT '[]',
+          node_sources_json TEXT NOT NULL DEFAULT '[]',
+          source_meta_json TEXT NOT NULL DEFAULT '[]'
+        )
+      `).bind().run();
+      await db.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_detection_history_api_time
+          ON detection_history(api_path, detected_at DESC, id DESC)
+      `).bind().run();
+    })().catch((error) => {
+      historySchemaPromises.delete(db);
+      throw error;
+    });
+    historySchemaPromises.set(db, promise);
+  }
+  await historySchemaPromises.get(db);
+  return true;
+}
+
+function getHistoryDb(env) {
+  return env?.DB && typeof env.DB.prepare === "function" ? env.DB : null;
+}
+
+async function saveDetectionHistory(env, path, result) {
+  const db = getHistoryDb(env);
+  if (!db) return;
+  try {
+    await ensureDetectionHistorySchema(env);
+    const rawNodeCount = Number(result.status?.rawNodeCount ?? result.unfilteredNodes.length) || 0;
+    await db.prepare(`
+      INSERT INTO detection_history
+        (api_path, detected_at, raw_count, kept_count, filtered_count, error_count,
+         nodes_json, raw_nodes_json, raw_sources_json, node_sources_json, source_meta_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      path,
+      Date.now(),
+      rawNodeCount,
+      result.nodes.length,
+      Math.max(0, rawNodeCount - result.nodes.length),
+      result.status.errors.length,
+      JSON.stringify(result.nodes),
+      JSON.stringify(result.unfilteredNodes),
+      JSON.stringify(result.rawSources),
+      JSON.stringify(result.nodeSources),
+      JSON.stringify(result.sourceMeta),
+    ).run();
+    await db.prepare(`
+      DELETE FROM detection_history
+      WHERE api_path = ?
+        AND id NOT IN (
+          SELECT id FROM detection_history
+          WHERE api_path = ? ORDER BY detected_at DESC, id DESC LIMIT ?
+        )
+    `).bind(path, path, HISTORY_MAX_LIMIT).run();
+  } catch {
+    // History persistence must not make an otherwise successful preview fail.
+  }
+}
+
+async function readDetectionHistory(request, env) {
+  const db = getHistoryDb(env);
+  if (!db) return pagesJsonResponse({ items: [], total: 0, available: false });
+  const url = new URL(request.url);
+  const path = (url.searchParams.get("path") || "").trim().replace(/^\/+/, "");
+  if (!path || !isAllowedApiPath(path)) return pagesTextResponse("优选 API 路径无效", 400);
+  const requestedLimit = Number(url.searchParams.get("limit") || HISTORY_DEFAULT_LIMIT);
+  const limit = Math.min(HISTORY_MAX_LIMIT, Math.max(1, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : HISTORY_DEFAULT_LIMIT));
+  const requestedOffset = Number(url.searchParams.get("offset") || 0);
+  const offset = Math.max(0, Number.isFinite(requestedOffset) ? Math.floor(requestedOffset) : 0);
+  try {
+    await ensureDetectionHistorySchema(env);
+    const [rows, count] = await Promise.all([
+      db.prepare(`
+        SELECT id, api_path, detected_at, raw_count, kept_count, filtered_count, error_count,
+               nodes_json, raw_nodes_json, raw_sources_json, node_sources_json, source_meta_json
+        FROM detection_history
+        WHERE api_path = ?
+        ORDER BY detected_at DESC, id DESC
+        LIMIT ? OFFSET ?
+      `).bind(path, limit, offset).all(),
+      db.prepare("SELECT COUNT(*) AS total FROM detection_history WHERE api_path = ?").bind(path).first(),
+    ]);
+    const items = (rows.results || []).map((row) => ({
+      id: row.id,
+      at: row.detected_at,
+      raw: row.raw_count,
+      kept: row.kept_count,
+      filtered: row.filtered_count,
+      errors: row.error_count,
+      nodes: parseJsonArray(row.nodes_json),
+      unfilteredNodes: parseJsonArray(row.raw_nodes_json),
+      rawSources: parseJsonArray(row.raw_sources_json),
+      nodeSources: parseJsonArray(row.node_sources_json),
+      sourceMeta: parseJsonArray(row.source_meta_json),
+    }));
+    return pagesJsonResponse({ items, total: Number(count?.total || 0), available: true, limit, offset });
+  } catch {
+    return pagesJsonResponse({ items: [], total: 0, available: false });
+  }
+}
+
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 function acquirePreviewProtection(scope, key) {
   const guardKey = scope + ':' + key;
@@ -243,7 +373,7 @@ async function handleCustomApiPreview(request, env) {
       .filter((status) => status.state && !["success", "idle"].includes(status.state))
       .map((status) => ({ type: status.type, key: status.key, message: status.error || status.state }));
   }
-  return pagesJsonResponse({
+  const previewResult = {
     nodes,
     rawSources,
     unfilteredNodes,
@@ -259,7 +389,9 @@ async function handleCustomApiPreview(request, env) {
       errors: errorList,
       filterStats,
     },
-  }, response.ok ? 200 : response.status);
+  };
+  await saveDetectionHistory(env, path, previewResult);
+  return pagesJsonResponse(previewResult, response.ok ? 200 : response.status);
   } finally {
     guard.release();
   }
@@ -438,6 +570,9 @@ export default {
         case "/api/custom-api-preview":
           if (method === "POST") return await handleCustomApiPreview(request, env);
           return pagesMethodNotAllowed("POST");
+        case "/api/detection-history":
+          if (method === "GET") return await readDetectionHistory(request, env);
+          return pagesMethodNotAllowed("GET");
         case "/api/blacklist":
           if (method === "GET") return await handleGetBlacklist(env);
           if (method === "POST") return await handlePostBlacklist(request, env);
