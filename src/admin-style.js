@@ -1828,6 +1828,8 @@ export const adminStyle = `
     display: grid;
     align-content: center;
     gap: 2px;
+    min-height: 30px;
+    padding: 6px 0;
     border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
     color: var(--text-secondary);
     white-space: pre;
@@ -1837,9 +1839,8 @@ export const adminStyle = `
 
   .source-raw-node-value,
   .source-raw-node-source {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .source-raw-node-source {

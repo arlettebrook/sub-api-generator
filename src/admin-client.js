@@ -2047,13 +2047,8 @@ function renderSourceRawResults() {
     content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
   } else {
     const showSources = sourceRawSelection?.type === 'customApis';
-    const rowHeight = showSources ? 54 : 30;
-    const start = Math.max(0, Math.floor((content.scrollTop || 0) / rowHeight) - 12);
-    const end = Math.min(visible.length, Math.ceil(((content.clientHeight || 320) + (content.scrollTop || 0)) / rowHeight) + 12);
-    const top = document.createElement('div');
-    top.style.height = start * rowHeight + 'px';
     const fragment = document.createDocumentFragment();
-    visible.slice(start, end).forEach((node, index) => {
+    visible.forEach((node, index) => {
       const line = document.createElement('div');
       line.className = 'source-raw-node-line';
       const source = sourceRawNodeSources.get(node);
@@ -2069,13 +2064,10 @@ function renderSourceRawResults() {
         meta.title = meta.textContent;
         line.appendChild(meta);
       }
-      line.style.height = rowHeight + 'px';
-      line.dataset.index = String(start + index);
+      line.dataset.index = String(index);
       fragment.appendChild(line);
     });
-    const bottom = document.createElement('div');
-    bottom.style.height = Math.max(0, visible.length - end) * rowHeight + 'px';
-    content.append(top, fragment, bottom);
+    content.appendChild(fragment);
   }
   if (count) count.textContent = query ? '显示 ' + visible.length + ' / ' + sourceRawNodes.length + ' 条' : sourceRawNodes.length + ' 条节点';
 }
@@ -2168,13 +2160,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
     button.onclick = () => setSourceRawTab(button.dataset.sourceRawTab);
   });
-  if (content) content.onscroll = () => {
-    if (sourceRawRenderFrame) return;
-    sourceRawRenderFrame = requestAnimationFrame(() => {
-      sourceRawRenderFrame = 0;
-      renderSourceRawResults();
-    });
-  };
+  if (content) content.onscroll = null;
   if (!dialog.open) dialog.showModal();
   const isManagedSource = type === 'subs' || type === 'apis';
   const normalizedKey = isManagedSource ? normalizeSourceKeyClient(type, key) : key;
