@@ -360,6 +360,20 @@ export const adminStyle = `
     padding: 18px 20px 20px;
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .settings-dialog-body > .blacklist-toolbar {
+    position: sticky;
+    bottom: -20px;
+    z-index: 4;
+    margin: 14px -20px -20px;
+    padding: 12px 20px 20px;
+    border-top: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--surface-solid) 94%, transparent);
+    box-shadow: 0 -8px 18px rgba(2, 6, 23, .12);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   .blacklist-add-row {
@@ -3642,6 +3656,11 @@ export const adminStyle = `
     .settings-dialog-body {
       max-height: calc(100vh - 112px);
       padding: 14px;
+    }
+    .settings-dialog-body > .blacklist-toolbar {
+      bottom: -14px;
+      margin: 12px -14px -14px;
+      padding: 10px 14px 14px;
     }
     .setting-block-heading {
       gap: 8px;
