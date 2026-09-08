@@ -1614,6 +1614,13 @@ export const adminStyle = `
     white-space: nowrap;
   }
 
+  .row .source-check-button,
+  .row .source-view-button,
+  .row .source-download-button {
+    min-height: 34px;
+    padding: 0 10px;
+  }
+
   .preview-view-toggle {
     display: inline-flex;
     align-items: center;
@@ -2551,6 +2558,14 @@ export const adminStyle = `
     color: var(--danger);
     transform: none;
     box-shadow: none;
+  }
+
+  .row .source-delete-button {
+    min-height: 34px;
+    padding: 0 10px;
+    border-color: rgba(239, 68, 68, .5);
+    background: rgba(239, 68, 68, .06);
+    opacity: 1;
   }
 
   /* 添加行 */
@@ -3604,6 +3619,26 @@ export const adminStyle = `
     .row .del-btn {
       opacity: 1;
       pointer-events: auto;
+    }
+    #subsList .row .source-health,
+    #apisList .row .source-health {
+      flex: 1 1 100%;
+      width: 100%;
+      max-width: none;
+      order: 3;
+    }
+    #subsList .row .source-check-button,
+    #subsList .row .source-view-button,
+    #subsList .row .source-download-button,
+    #subsList .row .del-btn,
+    #apisList .row .source-check-button,
+    #apisList .row .source-view-button,
+    #apisList .row .source-download-button,
+    #apisList .row .del-btn {
+      order: 4;
+      flex: 0 1 auto;
+      min-height: 34px;
+      padding: 0 10px;
     }
     .nodes-count {
       width: 100%;

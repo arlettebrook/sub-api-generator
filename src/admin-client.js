@@ -1493,7 +1493,7 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
 function createSourceCheckButton(type, key) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'btn-outline source-check-button';
+  button.className = 'btn-outline icon-action source-check-button';
   button.textContent = '检测';
   button.setAttribute('aria-label', '检测数据源 ' + key);
   button.onclick = async () => {
@@ -2171,7 +2171,7 @@ function renderSubs() {
     const health = createSourceHealth('subs', host);
 
     const delBtn = document.createElement('button');
-    delBtn.className = 'del-btn';
+    delBtn.className = 'del-btn source-delete-button';
     delBtn.textContent = '删除';
     delBtn.setAttribute('aria-label', '删除订阅源 ' + host);
     delBtn.onclick = async () => {
@@ -2207,7 +2207,7 @@ function renderSubs() {
     row.appendChild(createSourceCheckButton('subs', host));
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
-    viewBtn.className = 'btn-outline source-view-button';
+    viewBtn.className = 'btn-outline icon-action source-view-button';
     viewBtn.textContent = '查看';
     viewBtn.setAttribute('aria-label', '查看订阅源原始数据 ' + host);
     viewBtn.onclick = async () => {
@@ -2219,7 +2219,7 @@ function renderSubs() {
     row.appendChild(viewBtn);
     const downloadBtn = document.createElement('button');
     downloadBtn.type = 'button';
-    downloadBtn.className = 'btn-outline source-download-button';
+    downloadBtn.className = 'btn-outline icon-action source-download-button';
     downloadBtn.textContent = '下载';
     downloadBtn.setAttribute('aria-label', '下载订阅源节点数据 ' + host);
     downloadBtn.onclick = () => downloadSourceData('subs', host, entry, downloadBtn);
@@ -2400,7 +2400,7 @@ function renderApis() {
     const health = createSourceHealth('apis', url);
 
     const delBtn = document.createElement('button');
-    delBtn.className = 'del-btn';
+    delBtn.className = 'del-btn source-delete-button';
     delBtn.textContent = '删除';
     delBtn.setAttribute('aria-label', '删除 API 源 ' + url);
     delBtn.onclick = async () => {
@@ -2436,7 +2436,7 @@ function renderApis() {
     row.appendChild(createSourceCheckButton('apis', url));
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
-    viewBtn.className = 'btn-outline source-view-button';
+    viewBtn.className = 'btn-outline icon-action source-view-button';
     viewBtn.textContent = '查看';
     viewBtn.setAttribute('aria-label', '查看 API 源原始数据 ' + url);
     viewBtn.onclick = async () => {
@@ -2448,7 +2448,7 @@ function renderApis() {
     row.appendChild(viewBtn);
     const downloadBtn = document.createElement('button');
     downloadBtn.type = 'button';
-    downloadBtn.className = 'btn-outline source-download-button';
+    downloadBtn.className = 'btn-outline icon-action source-download-button';
     downloadBtn.textContent = '下载';
     downloadBtn.setAttribute('aria-label', '下载 API 源节点数据 ' + url);
     downloadBtn.onclick = () => downloadSourceData('apis', url, entry, downloadBtn);
