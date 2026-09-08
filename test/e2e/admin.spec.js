@@ -96,6 +96,17 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
   await createdRow.getByRole("button", { name: "查看" }).click();
+  await page.locator(".source-raw-body").evaluate((element) => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "1200px";
+    spacer.dataset.e2eScrollSpacer = "true";
+    element.appendChild(spacer);
+    element.scrollTop = 240;
+  });
+  await expect.poll(() => page.locator(".source-raw-body").evaluate((element) => element.scrollTop)).toBe(240);
+  await page.locator("#sourceRawDialog .dialog-close").click();
+  await createdRow.getByRole("button", { name: "查看" }).click();
+  await expect.poll(() => page.locator(".source-raw-body").evaluate((element) => element.scrollTop)).toBe(0);
   await expect(page.locator("#sourceRawSearch")).toHaveValue("2.2.2.2");
   await expect(page.locator("#sourceRawSourceSort")).toHaveValue("count");
   await expect(page.locator('[data-source-raw-tab="raw"]')).toHaveAttribute("aria-selected", "true");

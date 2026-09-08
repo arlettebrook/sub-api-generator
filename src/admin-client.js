@@ -2149,6 +2149,19 @@ function closeSourceRawDialog() {
   sourceRawRefreshTimer = null;
   const dialog = $('sourceRawDialog');
   if (dialog?.open) dialog.close();
+  // Clear the reused dialog's scroll state as it closes as an extra safeguard
+  // before the next source is opened.
+  resetSourceRawScroll();
+}
+
+function resetSourceRawScroll() {
+  const dialog = $('sourceRawDialog');
+  const body = dialog?.querySelector('.source-raw-body');
+  const regions = [dialog, body, $('sourceRawContent'), $('sourceRawRawContent')].filter(Boolean);
+  regions.forEach((region) => {
+    region.scrollTop = 0;
+    region.scrollLeft = 0;
+  });
 }
 
 function renderSourceRawSummary(status) {
@@ -2428,7 +2441,6 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const title = $('sourceRawDialogSource');
   const content = $('sourceRawContent');
   const rawContent = $('sourceRawRawContent');
-  const body = dialog.querySelector('.source-raw-body');
   const summary = $('sourceRawSummary');
   const reload = $('reloadSourceRawButton');
   const copy = $('copySourceRawButton');
@@ -2448,9 +2460,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
   if (!preserveState) {
-    if (body) body.scrollTop = 0;
-    if (content) content.scrollTop = 0;
-    if (rawContent) rawContent.scrollTop = 0;
+    resetSourceRawScroll();
   }
   if (content) content.textContent = '正在检测数据源…';
   if (rawContent) rawContent.textContent = '正在检测数据源…';
@@ -2539,6 +2549,11 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   });
   if (content) content.onscroll = null;
   if (!dialog.open) dialog.showModal();
+  if (!preserveState) {
+    // Reset again after opening and layout so a reused dialog cannot restore its previous scroll offset.
+    resetSourceRawScroll();
+    requestAnimationFrame(resetSourceRawScroll);
+  }
   const isManagedSource = type === 'subs' || type === 'apis';
   const normalizedKey = isManagedSource ? normalizeSourceKeyClient(type, key) : key;
   const previousStatus = isManagedSource ? getSourceStatus(type, key) : { state: 'idle', nodeCount: 0, rawNodeCount: 0 };

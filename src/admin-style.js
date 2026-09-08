@@ -1787,6 +1787,18 @@ export const adminStyle = `
     height: 34px;
     padding: 0 9px;
     font-size: 12px;
+    border-color: var(--border-hover);
+    background: var(--surface-solid);
+    color: var(--text-secondary);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-hover) 22%, transparent);
+  }
+
+  .source-raw-group-controls .btn-subtle:hover,
+  .source-raw-group-controls .btn-subtle:focus-visible {
+    border-color: var(--accent-primary);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 22%, transparent);
   }
 
   .source-raw-tabs {
