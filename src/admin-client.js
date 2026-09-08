@@ -2097,6 +2097,7 @@ function renderSourceRawResults() {
         heading.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         const title = document.createElement('strong');
         title.textContent = formatSourceGroupLabel(label);
+        title.title = title.textContent;
         const total = document.createElement('span');
         total.textContent = groupNodes.length + ' 个节点';
         const error = sourceRawSourceErrors.get(label);
@@ -2158,6 +2159,8 @@ function formatSourceGroupLabel(label) {
   const parts = String(label).split(' · ');
   const type = parts.shift() || '';
   const key = parts.shift() || '';
+  const remark = parts.join(' · ').replace(/^备注：/, '').trim();
+  if (remark) return remark;
   let shortName = key.split('/').pop() || key;
   shortName = shortName.split('?')[0].replace(/\.(txt|json|csv)$/i, '');
   return type + ' · ' + shortName;
@@ -2168,8 +2171,7 @@ function formatSourceGroupDetail(label) {
   const parts = String(label).split(' · ');
   parts.shift();
   const key = parts.shift() || '';
-  const remark = parts.join(' · ');
-  return remark ? remark + ' · ' + key : key;
+  return key;
 }
 
 function setSourceRawTab(tab) {
