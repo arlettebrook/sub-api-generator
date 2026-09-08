@@ -13,6 +13,12 @@ test("loads the dashboard and switches theme", async ({ page }) => {
   await login(page);
   await expect(page.locator("#nodesContainer")).toBeVisible();
   await expect(page.locator("#previewApiSelect")).toBeHidden();
+  await expect(page.locator("[data-preview-mode]")).toHaveCount(2);
+  await page.locator('[data-preview-mode="raw"]').click();
+  await expect(page.locator('[data-preview-mode="raw"]')).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(page.locator('[data-preview-mode="raw"]')).toHaveAttribute("aria-pressed", "true");
+  await page.locator('[data-preview-mode="nodes"]').click();
   const wasDark = await page.locator("body").evaluate((body) => body.classList.contains("dark"));
   await page.locator("#themeSwitch").click();
   await expect.poll(() => page.locator("body").evaluate((body) => body.classList.contains("dark"))).toBe(!wasDark);

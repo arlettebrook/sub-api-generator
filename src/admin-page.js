@@ -138,6 +138,10 @@ export const adminHTML = `
     <button class="btn-outline" onclick="copyNodeData(event)" title="复制全部优选API数据" aria-label="复制全部节点数据">
       <span>📝</span> 复制优选API数据
     </button>
+    <div class="preview-view-toggle" role="group" aria-label="数据查看方式">
+      <button class="btn-subtle active" type="button" data-preview-mode="nodes" aria-pressed="true">节点结果</button>
+      <button class="btn-subtle" type="button" data-preview-mode="raw" aria-pressed="false">原始数据</button>
+    </div>
     <span class="nodes-count" id="nodesCount">共 0 个节点</span>
   </div>
   <div class="nodes-filters" aria-label="节点筛选和排序">

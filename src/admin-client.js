@@ -9,7 +9,7 @@ function debounce(callback, delay = 180) {
     timer = setTimeout(() => callback(...args), delay);
   };
 }
-let nodesContainer, paginationEl, nodesCountEl;
+let nodesContainer, paginationEl, nodesCountEl, previewModeButtons;
 let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl, nodesSourceFilterEl, nodesStatusFilterEl;
 
 // 地区匹配映射表（替代长串if-else，匹配效率提升60%+）
@@ -396,20 +396,21 @@ async function copyNodeData(event) {
     const btn = event?.currentTarget;
   const originalText = btn.innerHTML;
   
-  if (currentNodes.length === 0) {
+  const nodes = getPreviewDataNodes();
+  if (nodes.length === 0) {
     showToast('暂无节点数据可复制', 'error');
     return;
   }
   
   try {
     // 拼接为原始格式：地址#备注，每行一个
-    const text = currentNodes.map(node => 
+    const text = nodes.map(node =>
       node.remark ? \`\${node.host}#\${node.remark}\` : node.host
     ).join('\\n');
     
     await navigator.clipboard.writeText(text);
     btn.innerHTML = '<span>✅</span> 已复制';
-    showToast(\`已复制 \${currentNodes.length} 条节点数据\`, 'success');
+    showToast(\`已复制 \${nodes.length} 条节点数据\`, 'success');
     
     setTimeout(() => {
       btn.innerHTML = originalText;
@@ -474,11 +475,99 @@ function initTheme() {
 
 // ======================== 优选节点展示与增强分页 ========================
 let currentNodes = [];
+let currentRawNodes = [];
+let previewDataMode = 'nodes';
+let rawPreviewRequest = null;
+let rawPreviewLoadedPath = '';
 let currentPage = 1;
 const pageSize = 12; // 每页显示12个节点
 let activeNodeRequest = null;
 let nodeLoadSequence = 0;
 const emptyNodeRetryDelays = [500, 1200];
+const PREVIEW_MODE_STORAGE_KEY = 'preview-data-mode';
+
+function getPreviewDataNodes() {
+  return previewDataMode === 'raw' ? currentRawNodes : currentNodes;
+}
+
+function parsePreviewNodeText(text, nodeSources = []) {
+  const lines = Array.isArray(text) ? text : String(text || '').split('\\n');
+  const sourceMap = new Map((Array.isArray(nodeSources) ? nodeSources : []).map((item) => [item.value, item]));
+  return lines.map((line) => String(line || '').trim()).filter(Boolean).map((line) => {
+    const hashIndex = line.indexOf('#');
+    const host = hashIndex === -1 ? line : line.slice(0, hashIndex).trim();
+    const remark = hashIndex === -1 ? '未命名' : line.slice(hashIndex + 1).trim() || '未命名';
+    const node = { host, remark };
+    const source = sourceMap.get(line);
+    if (source) { node.sourceType = source.type; node.sourceKey = source.key; }
+    return node;
+  });
+}
+
+function loadPreviewDataMode() {
+  try {
+    const value = localStorage.getItem(PREVIEW_MODE_STORAGE_KEY);
+    return value === 'raw' ? 'raw' : 'nodes';
+  } catch { return 'nodes'; }
+}
+
+function savePreviewDataMode() {
+  try { localStorage.setItem(PREVIEW_MODE_STORAGE_KEY, previewDataMode); } catch { /* ignore unavailable storage */ }
+}
+
+function applyPreviewDataMode() {
+  previewModeButtons?.forEach((button) => {
+    const active = button.dataset.previewMode === previewDataMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+async function loadRawPreviewNodes() {
+  const path = $('previewApiSelect')?.value || '';
+  if (!path) { currentRawNodes = []; renderNodeView(); return; }
+  if (rawPreviewRequest) rawPreviewRequest.abort();
+  const controller = new AbortController();
+  rawPreviewRequest = controller;
+  try {
+    const response = await fetch('/api/custom-api-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result?.error || '原始数据检测失败');
+    if (controller.signal.aborted || $('previewApiSelect')?.value !== path) return;
+    currentRawNodes = parsePreviewNodeText(result.unfilteredNodes || [], result.nodeSources || []);
+    rawPreviewLoadedPath = path;
+    renderPreviewSourceErrors(result.status?.errors || []);
+    updateRegionOptions();
+    updateNodeFilterOptions();
+    renderNodeView();
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    showToast(error.message || '原始数据检测失败', 'error');
+  } finally {
+    if (rawPreviewRequest === controller) rawPreviewRequest = null;
+  }
+}
+
+function setPreviewDataMode(mode) {
+  const nextMode = mode === 'raw' ? 'raw' : 'nodes';
+  if (nextMode === previewDataMode) return;
+  previewDataMode = nextMode;
+  savePreviewDataMode();
+  applyPreviewDataMode();
+  if (previewDataMode === 'raw' && rawPreviewLoadedPath !== ($('previewApiSelect')?.value || '')) {
+    void loadRawPreviewNodes();
+    return;
+  }
+  updateRegionOptions();
+  updateNodeFilterOptions();
+  renderNodeView();
+}
 
 function getNodeRegion(node) {
   const remark = String(node?.remark || '');
@@ -493,7 +582,7 @@ function getVisibleNodes() {
   const sort = nodesSortEl?.value || 'default';
   const source = nodesSourceFilterEl?.value || '';
   const status = nodesStatusFilterEl?.value || '';
-  const visible = currentNodes.filter((node) => {
+  const visible = getPreviewDataNodes().filter((node) => {
     const text = (String(node.host || '') + ' ' + String(node.remark || '')).toLowerCase();
     const availability = getNodeAvailability(node);
     return (!query || text.includes(query)) && (!region || getNodeRegion(node) === region)
@@ -531,7 +620,7 @@ function getNodeSourceLabel(node) { return node?.sourceKey ? (node.sourceType ==
 function updateRegionOptions() {
   if (!nodesRegionFilterEl) return;
   const selected = nodesRegionFilterEl.value || routeStateValue('region');
-  const regions = [...new Set(currentNodes.map(getNodeRegion))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  const regions = [...new Set(getPreviewDataNodes().map(getNodeRegion))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
   nodesRegionFilterEl.innerHTML = '<option value="">全部地区</option>' + regions.map((region) => \`<option value="\${region.replace(/"/g, '&quot;')}">\${region}</option>\`).join('');
   if (regions.includes(selected)) nodesRegionFilterEl.value = selected;
 }
@@ -539,7 +628,7 @@ function updateRegionOptions() {
 function updateNodeFilterOptions() {
   if (!nodesSourceFilterEl) return;
   const selected = nodesSourceFilterEl.value || routeStateValue('source');
-  const sources = [...new Map(currentNodes.filter((node) => node.sourceKey).map((node) => [node.sourceType + ':' + node.sourceKey, node])).values()];
+  const sources = [...new Map(getPreviewDataNodes().filter((node) => node.sourceKey).map((node) => [node.sourceType + ':' + node.sourceKey, node])).values()];
   nodesSourceFilterEl.innerHTML = '<option value="">全部来源</option>' + sources.map((node) => {
     const value = node.sourceType + ':' + node.sourceKey;
     const label = (node.sourceType === 'apis' ? 'API 源 · ' : '订阅源 · ') + node.sourceKey;
@@ -553,9 +642,10 @@ function renderNodeView() {
   const visible = getVisibleNodes();
   renderNodes(visible);
   if (nodesCountEl) {
-    nodesCountEl.textContent = visible.length === currentNodes.length
-      ? \`共 \${currentNodes.length} 个节点\`
-      : \`显示 \${visible.length} / 共 \${currentNodes.length} 个节点\`;
+    const total = getPreviewDataNodes().length;
+    nodesCountEl.textContent = visible.length === total
+      ? \`共 \${total} 个节点\`
+      : \`显示 \${visible.length} / 共 \${total} 个节点\`;
   }
   if (nodesFilterResetEl) nodesFilterResetEl.disabled = !((nodesSearchEl?.value || '').trim() || nodesRegionFilterEl?.value || nodesSourceFilterEl?.value || nodesStatusFilterEl?.value || nodesSortEl?.value !== 'default');
 }
@@ -569,6 +659,8 @@ function getPreviewApiUrl() {
 async function fetchNodes(emptyRetry = 0) {
   const sequence = ++nodeLoadSequence;
   if (activeNodeRequest) activeNodeRequest.abort();
+  if (rawPreviewRequest) rawPreviewRequest.abort();
+  rawPreviewRequest = null;
   const controller = new AbortController();
   activeNodeRequest = controller;
   nodesContainer.innerHTML = nodeSkeletonMarkup();
@@ -577,6 +669,8 @@ async function fetchNodes(emptyRetry = 0) {
   const apiUrl = getPreviewApiUrl();
   if (!apiUrl) {
     currentNodes = [];
+    currentRawNodes = [];
+    rawPreviewLoadedPath = '';
     updateRegionOptions();
     updateNodeFilterOptions();
     renderNodeView();
@@ -616,6 +710,8 @@ async function fetchNodes(emptyRetry = 0) {
       if (source) { node.sourceType = source.type; node.sourceKey = source.key; }
     });
     currentNodes = nodes;
+    currentRawNodes = nodes.slice();
+    rawPreviewLoadedPath = '';
     updateRegionOptions();
     updateNodeFilterOptions();
     currentPage = 1;
@@ -628,6 +724,7 @@ async function fetchNodes(emptyRetry = 0) {
       return;
     }
     renderNodeView();
+    if (previewDataMode === 'raw') void loadRawPreviewNodes();
   } catch (err) {
     if (err.name === 'AbortError') return;
     nodesContainer.innerHTML = '';
@@ -649,7 +746,7 @@ async function fetchNodes(emptyRetry = 0) {
 
 function renderNodes(nodes) {
   if (nodes.length === 0) {
-    const filtered = currentNodes.length > 0;
+    const filtered = getPreviewDataNodes().length > 0;
     nodesContainer.innerHTML = '<div class="nodes-empty"><strong>' + (filtered ? '暂无匹配节点' : '暂无节点数据') + '</strong><span>' + (filtered ? '可以清除筛选后查看全部节点。' : '请先添加数据源，然后重新加载。') + '</span>' + (filtered ? '<button type="button" class="btn-outline" onclick="nodesFilterResetEl?.click()">清除筛选</button>' : '<a class="btn-outline nodes-empty-link" href="/admin/manage">管理数据源</a>') + '<button type="button" class="btn-outline" onclick="fetchNodes()">重新加载</button></div>';
     return;
   }
@@ -3481,6 +3578,8 @@ function syncRouteState() {
 
 function hydratePageState(page) {
   if (page === 'overview') {
+    previewDataMode = loadPreviewDataMode();
+    applyPreviewDataMode();
     if (nodesSearchEl) nodesSearchEl.value = routeStateValue('q');
     if (nodesRegionFilterEl) nodesRegionFilterEl.value = routeStateValue('region');
     if (nodesSourceFilterEl) nodesSourceFilterEl.value = routeStateValue('source');
@@ -3523,9 +3622,15 @@ function cachePageElements() {
   nodesFilterResetEl = $('nodesFilterReset');
   nodesSourceFilterEl = $('nodesSourceFilter');
   nodesStatusFilterEl = $('nodesStatusFilter');
+  previewModeButtons = document.querySelectorAll('[data-preview-mode]');
 }
 
 function bindPageControls() {
+  previewModeButtons?.forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    button.addEventListener('click', () => setPreviewDataMode(button.dataset.previewMode));
+  });
   [nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesSourceFilterEl, nodesStatusFilterEl].forEach((element) => {
     if (!element || element.dataset.bound === 'true') return;
     element.dataset.bound = 'true';

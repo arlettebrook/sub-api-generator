@@ -1610,6 +1610,35 @@ export const adminStyle = `
     white-space: nowrap;
   }
 
+  .preview-view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin-left: auto;
+  }
+
+  .preview-view-toggle .btn-subtle {
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 0;
+  }
+
+  .preview-view-toggle .btn-subtle:first-child {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  .preview-view-toggle .btn-subtle:last-child {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-left: -1px;
+  }
+
+  .preview-view-toggle .btn-subtle.active {
+    border-color: var(--accent-primary);
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    font-weight: 600;
+  }
+
   .source-raw-dialog {
     width: min(960px, calc(100vw - 32px));
     max-height: calc(100vh - 48px);
@@ -3398,6 +3427,14 @@ export const adminStyle = `
       gap: 6px;
       margin-bottom: 12px;
       padding-bottom: 10px;
+    }
+    .preview-view-toggle {
+      grid-column: 1 / -1;
+      width: 100%;
+      margin-left: 0;
+    }
+    .preview-view-toggle .btn-subtle {
+      flex: 1;
     }
     .nodes-filters {
       grid-template-columns: 1fr 1fr;
