@@ -66,16 +66,15 @@ export const adminHTML = `
     <button class="dialog-close" type="button" onclick="closeSourceRawDialog()" title="关闭" aria-label="关闭">×</button>
   </div>
   <div class="source-raw-body">
-    <section class="source-raw-section">
-      <div class="source-raw-section-heading"><h4>原始配置</h4><button class="btn-outline icon-action" type="button" id="copySourceRawConfigButton">复制 JSON</button></div>
-      <pre id="sourceRawConfig" class="source-raw-code">-</pre>
-    </section>
-    <section class="source-raw-section">
-      <div class="source-raw-section-heading"><h4>源返回数据</h4><span id="sourceRawStatus" class="source-raw-status">加载中…</span></div>
-      <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在请求原始数据…</pre>
-    </section>
+    <div class="source-raw-summary" id="sourceRawSummary" aria-live="polite"></div>
+    <div class="source-raw-toolbar">
+      <label class="source-raw-search"><span aria-hidden="true">⌕</span><input id="sourceRawSearch" type="search" placeholder="搜索 IP、端口或备注" autocomplete="off" aria-label="搜索原始数据" /></label>
+      <button class="btn-outline" type="button" id="copySourceRawButton">📋 复制全部</button>
+    </div>
+    <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在检测数据源…</pre>
     <div class="source-raw-actions">
-      <button class="btn-outline" type="button" id="reloadSourceRawButton">🔄 重新加载</button>
+      <span id="sourceRawResultCount" class="source-raw-result-count"></span>
+      <button class="btn-outline" type="button" id="reloadSourceRawButton">🔄 重新检测</button>
       <button class="btn-primary" type="button" onclick="closeSourceRawDialog()">关闭</button>
     </div>
   </div>

@@ -165,24 +165,6 @@ async function fetchApiSubs(apiUrl) {
   return result;
 }
 
-async function fetchRawSource(type, key) {
-  let resource;
-  let headers;
-  if (type === "subs") {
-    const rawHost = String(key || "").trim().replace(/\/+$/, "");
-    const baseHost = HTTP_PROTOCOL_REGEX.test(rawHost) ? rawHost : `https://${rawHost}`;
-    resource = `${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`;
-    headers = { "User-Agent": UA_SUBS_FETCH };
-  } else if (type === "apis") {
-    resource = String(key || "").trim();
-    headers = { "User-Agent": UA_APIS_FETCH };
-  } else {
-    throw new Error("数据源类型无效");
-  }
-  const response = await fetchSourceText(resource, { headers }, type === "subs" ? "订阅源" : "API 源");
-  return { url: resource, statusCode: response.statusCode, content: response.content };
-}
-
 async function fetchSourceText(resource, options, label) {
   const key = String(resource);
   const pending = sourceInflight.get(key);
@@ -553,4 +535,4 @@ export function clearAggregateCache() {
   aggregateCache.clear();
 }
 
-export { decodeSubscriptionBody, fetchWithTimeout, fetchPreferredSubs, fetchRawSource, filterPreferredIps, normalizeKvData, parsePreferredIpLine };
+export { decodeSubscriptionBody, fetchWithTimeout, fetchPreferredSubs, filterPreferredIps, normalizeKvData, parsePreferredIpLine };

@@ -143,10 +143,19 @@ async function handleSourceRaw(request, env) {
   const configured = await env.KV.get(type === "subs" ? KV_KEY_SUBS : KV_KEY_APIS, "json");
   const normalized = normalizeKvData(configured, type);
   if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
+  subscriptions.clearAggregateCache();
   try {
-    return pagesJsonResponse(await subscriptions.fetchRawSource(type, key));
+    const response = await subscriptions.handleRoot(env, [{ type, key }]);
+    const snapshot = await getSourceStatusSnapshot(env, false);
+    await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
+    const text = await response.text();
+    const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    return pagesJsonResponse({
+      nodes,
+      status: snapshot[type]?.[key] || null,
+    }, response.ok ? 200 : response.status);
   } catch (error) {
-    return pagesJsonResponse({ error: error.message || "原始数据请求失败", code: error.code || "ERROR" }, error.statusCode >= 400 ? error.statusCode : 502);
+    return pagesJsonResponse({ error: error.message || "数据源检测失败", code: error.code || "ERROR" }, error.statusCode >= 400 ? error.statusCode : 502);
   }
 }
 

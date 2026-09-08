@@ -836,6 +836,7 @@ let filterRulesDirty = false;
 let pendingCustomApiDelete = null;
 let sourceRawRequest = null;
 let sourceRawSelection = null;
+let sourceRawNodes = [];
 
 function setCustomApisDirty(dirty = true) {
   customApisDirty = dirty;
@@ -1939,8 +1940,49 @@ function closeSourceRawDialog() {
   if (sourceRawRequest) sourceRawRequest.abort();
   sourceRawRequest = null;
   sourceRawSelection = null;
+  sourceRawNodes = [];
   const dialog = $('sourceRawDialog');
   if (dialog?.open) dialog.close();
+}
+
+function renderSourceRawSummary(status) {
+  const summary = $('sourceRawSummary');
+  if (!summary) return;
+  const current = status || { state: 'checking', nodeCount: 0, rawNodeCount: 0 };
+  summary.innerHTML = '';
+  const metrics = [
+    ['状态', sourceStatusLabel(current.state)],
+    ['可用节点', String(current.nodeCount || 0)],
+    ['原始节点', String(current.rawNodeCount || 0)],
+    ['请求耗时', current.durationMs === null || current.durationMs === undefined ? '--' : current.durationMs + ' ms'],
+    ['HTTP', current.statusCode || '--'],
+  ];
+  metrics.forEach(([label, value]) => {
+    const item = document.createElement('div');
+    item.className = 'source-raw-metric source-raw-metric-' + (current.state || 'idle');
+    const number = document.createElement('strong');
+    number.textContent = value;
+    const caption = document.createElement('span');
+    caption.textContent = label;
+    item.append(number, caption);
+    summary.appendChild(item);
+  });
+  if (current.error) {
+    const error = document.createElement('div');
+    error.className = 'source-raw-error';
+    error.textContent = current.error;
+    summary.appendChild(error);
+  }
+}
+
+function renderSourceRawResults() {
+  const content = $('sourceRawContent');
+  const count = $('sourceRawResultCount');
+  if (!content) return;
+  const query = ($('sourceRawSearch')?.value || '').trim().toLowerCase();
+  const visible = query ? sourceRawNodes.filter((node) => node.toLowerCase().includes(query)) : sourceRawNodes;
+  content.textContent = visible.length ? visible.join('\\n') : (sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。');
+  if (count) count.textContent = query ? '显示 ' + visible.length + ' / ' + sourceRawNodes.length + ' 条' : sourceRawNodes.length + ' 条节点';
 }
 
 async function openSourceRawDialog(type, key) {
@@ -1951,28 +1993,39 @@ async function openSourceRawDialog(type, key) {
   const controller = new AbortController();
   sourceRawRequest = controller;
   sourceRawSelection = { type, key };
+  sourceRawNodes = [];
   const title = $('sourceRawDialogSource');
-  const config = $('sourceRawConfig');
   const content = $('sourceRawContent');
-  const status = $('sourceRawStatus');
+  const summary = $('sourceRawSummary');
   const reload = $('reloadSourceRawButton');
-  const copy = $('copySourceRawConfigButton');
+  const copy = $('copySourceRawButton');
+  const search = $('sourceRawSearch');
   if (title) title.textContent = (type === 'subs' ? '订阅源 · ' : 'API 源 · ') + key;
-  if (config) config.textContent = JSON.stringify({ [key]: entry }, null, 2);
-  if (content) content.textContent = '正在请求原始数据…';
-  if (status) status.textContent = '加载中…';
+  if (search) search.value = '';
+  if (content) content.textContent = '正在检测数据源…';
+  if (summary) renderSourceRawSummary({ state: 'checking', nodeCount: 0, rawNodeCount: 0 });
+  if ($('sourceRawResultCount')) $('sourceRawResultCount').textContent = '';
   if (reload) reload.disabled = true;
+  if (copy) copy.disabled = true;
   if (copy) {
     copy.onclick = async () => {
       try {
-        await navigator.clipboard.writeText(config?.textContent || '');
-        showToast('配置 JSON 已复制', 'success');
+        await navigator.clipboard.writeText(sourceRawNodes.join('\\n'));
+        showToast('节点数据已复制', 'success');
       } catch (error) {
         showToast('复制失败：' + error.message, 'error');
       }
     };
   }
+  if (search) search.oninput = renderSourceRawResults;
   if (!dialog.open) dialog.showModal();
+  const normalizedKey = normalizeSourceKeyClient(type, key);
+  const previousStatus = getSourceStatus(type, key);
+  sourceStatuses[type] ||= {};
+  sourceStatuses[type][normalizedKey] = { ...previousStatus, state: 'checking', error: '' };
+  renderSourceStatusSummary();
+  if ($('subsList')) renderSubs();
+  if ($('apisList')) renderApis();
   try {
     const response = await fetch('/api/source-raw', {
       method: 'POST',
@@ -1985,13 +2038,25 @@ async function openSourceRawDialog(type, key) {
     try { result = await response.json(); } catch { /* handled below */ }
     if (!response.ok) throw new Error(result?.error || '请求失败（HTTP ' + response.status + '）');
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
-    if (content) content.textContent = typeof result.content === 'string' ? result.content : JSON.stringify(result.content ?? '', null, 2);
-    if (status) status.textContent = 'HTTP ' + (result.statusCode || response.status) + ' · ' + (result.content?.length || 0) + ' 字符';
+    sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+    const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
+    sourceStatuses[type][normalizedKey] = nextStatus;
+    renderSourceRawSummary(nextStatus);
+    renderSourceRawResults();
+    renderSourceStatusSummary();
+    if ($('subsList')) renderSubs();
+    if ($('apisList')) renderApis();
+    if (copy) copy.disabled = sourceRawNodes.length === 0;
   } catch (error) {
     if (error?.name === 'AbortError') return;
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
-    if (content) content.textContent = '原始数据加载失败：' + (error.message || '请求失败');
-    if (status) status.textContent = '加载失败';
+    const failedStatus = { ...previousStatus, state: 'network-error', error: error.message || '检测失败' };
+    sourceStatuses[type][normalizedKey] = failedStatus;
+    renderSourceRawSummary(failedStatus);
+    if (content) content.textContent = '数据源检测失败：' + failedStatus.error;
+    renderSourceStatusSummary();
+    if ($('subsList')) renderSubs();
+    if ($('apisList')) renderApis();
   } finally {
     if (sourceRawSelection?.type === type && sourceRawSelection?.key === key) {
       sourceRawRequest = null;

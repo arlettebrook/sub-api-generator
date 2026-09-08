@@ -1644,6 +1644,88 @@ export const adminStyle = `
     overflow: auto;
   }
 
+  .source-raw-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .source-raw-metric {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .source-raw-metric strong {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-raw-metric span,
+  .source-raw-result-count {
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .source-raw-metric-success strong { color: var(--success); }
+  .source-raw-metric-error strong,
+  .source-raw-metric-network-error strong,
+  .source-raw-metric-http-error strong,
+  .source-raw-metric-timeout strong { color: var(--danger); }
+
+  .source-raw-error {
+    grid-column: 1 / -1;
+    padding: 10px 12px;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: var(--radius-md);
+    background: var(--danger-light);
+    color: var(--danger);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .source-raw-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .source-raw-search {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    padding: 0 10px;
+    gap: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+  }
+
+  .source-raw-search input {
+    width: 100%;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .source-raw-search:focus-within {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--accent-light);
+  }
+
   .source-raw-section {
     display: grid;
     gap: 8px;
@@ -1689,9 +1771,14 @@ export const adminStyle = `
 
   .source-raw-actions {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: 8px;
     padding-top: 2px;
+  }
+
+  .source-raw-result-count {
+    margin-right: auto;
   }
 
   #subsList .row:nth-child(even),
@@ -2639,6 +2726,16 @@ export const adminStyle = `
     .source-raw-body {
       max-height: calc(100dvh - 94px);
       padding: 14px;
+    }
+    .source-raw-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .source-raw-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .source-raw-toolbar button {
+      min-height: 40px;
     }
     .source-raw-actions button {
       flex: 1;
