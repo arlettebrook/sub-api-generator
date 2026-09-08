@@ -277,6 +277,37 @@ test("checks only sources used by enabled custom APIs by default", async () => {
   }
 });
 
+test("classifies HTTP failures and preserves the last successful result", async () => {
+  const sourceKey = "status-history.example";
+  const values = { subs: { [sourceKey]: { remark: "历史状态" } }, apis: {}, custom_apis: {} };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  let fail = false;
+  globalThis.fetch = async () => {
+    if (fail) return new Response("error", { status: 503 });
+    return new Response(btoa("vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#ok"), { status: 200 });
+  };
+  const request = () => worker.fetch(new Request("https://example.test/api/source-status/check", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ scope: "all" }),
+  }), runtime);
+  try {
+    const first = await request();
+    assert.equal((await first.json()).subs[sourceKey].state, "success");
+    fail = true;
+    const second = await request();
+    const status = (await second.json()).subs[sourceKey];
+    assert.equal(status.state, "http-error");
+    assert.equal(status.statusCode, 503);
+    assert.equal(status.lastSuccessNodeCount, 1);
+    assert.match(status.lastSuccessAt, /^20/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reads and updates blacklist configuration", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

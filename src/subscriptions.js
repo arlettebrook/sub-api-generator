@@ -36,6 +36,13 @@ async function fetchWithTimeout(resource, options = {}) {
   const timer = setTimeout(() => controller.abort(), OUTBOUND_TIMEOUT_MS);
   try {
     return await fetch(resource, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new Error("请求超时（15 秒）");
+      timeoutError.code = "TIMEOUT";
+      throw timeoutError;
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -103,7 +110,9 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
 function recordSourceStatus(type, key, details) {
   const normalizedKey = normalizeSourceKey(type, key);
   if (!normalizedKey) return;
+  const previous = sourceStatus.get(`${type}:${normalizedKey}`) || {};
   sourceStatus.set(`${type}:${normalizedKey}`, {
+    ...previous,
     type,
     key: normalizedKey,
     ...details,
@@ -116,13 +125,18 @@ export function getSourceStatuses(subsConfig, apisConfig) {
     const normalized = normalizeKvData(config, type);
     for (const [key, entry] of Object.entries(normalized)) {
       result[type][key] = {
+        remark: isPlainObject(entry) && typeof entry.remark === "string" ? entry.remark : "",
         state: "idle",
         nodeCount: 0,
         rawNodeCount: 0,
         durationMs: null,
         error: "",
+        errorType: "",
+        statusCode: null,
         lastAttemptAt: null,
         lastSuccessAt: null,
+        lastSuccessNodeCount: 0,
+        lastSuccessRawNodeCount: 0,
         ...(sourceStatus.get(`${type}:${key}`) || {}),
       };
     }
@@ -158,6 +172,8 @@ async function fetchSourceTextUncached(resource, options, label) {
       const response = await fetchWithTimeout(resource, options);
       if (!response.ok) {
         lastError = new Error(`${label} HTTP ${response.status}`);
+        lastError.code = "HTTP_ERROR";
+        lastError.statusCode = response.status;
         const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
         if (!retryable) break;
       } else {
@@ -167,6 +183,7 @@ async function fetchSourceTextUncached(resource, options, label) {
       }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+      if (!lastError.code) lastError.code = "NETWORK_ERROR";
     }
     if (attempt < UPSTREAM_RETRY_DELAYS_MS.length) {
       await new Promise((resolve) => setTimeout(resolve, UPSTREAM_RETRY_DELAYS_MS[attempt]));
@@ -345,19 +362,27 @@ export async function handleRoot(env, sourceSelection) {
             rawNodeCount: rawValues.length,
             durationMs: Date.now() - startedAt,
             error: "",
+            errorType: "",
+            statusCode: null,
             lastAttemptAt: timestamp,
-            lastSuccessAt: timestamp,
+            ...(values.length > 0 ? {
+              lastSuccessAt: timestamp,
+              lastSuccessNodeCount: values.length,
+              lastSuccessRawNodeCount: rawValues.length,
+            } : {}),
           });
           return { key: host, values };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceKey = host;
           recordSourceStatus("subs", host, {
-            state: "error",
+            state: sourceFailureState(failure),
             nodeCount: 0,
             rawNodeCount: 0,
             durationMs: Date.now() - startedAt,
             error: sourceErrorMessage(failure),
+            errorType: failure.code || "NETWORK_ERROR",
+            statusCode: failure.statusCode || null,
             lastAttemptAt: new Date().toISOString(),
           });
           throw failure;
@@ -375,19 +400,27 @@ export async function handleRoot(env, sourceSelection) {
             rawNodeCount: rawValues.length,
             durationMs: Date.now() - startedAt,
             error: "",
+            errorType: "",
+            statusCode: null,
             lastAttemptAt: timestamp,
-            lastSuccessAt: timestamp,
+            ...(values.length > 0 ? {
+              lastSuccessAt: timestamp,
+              lastSuccessNodeCount: values.length,
+              lastSuccessRawNodeCount: rawValues.length,
+            } : {}),
           });
           return { key: apiUrl, values };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceKey = apiUrl;
           recordSourceStatus("apis", apiUrl, {
-            state: "error",
+            state: sourceFailureState(failure),
             nodeCount: 0,
             rawNodeCount: 0,
             durationMs: Date.now() - startedAt,
             error: sourceErrorMessage(failure),
+            errorType: failure.code || "NETWORK_ERROR",
+            statusCode: failure.statusCode || null,
             lastAttemptAt: new Date().toISOString(),
           });
           throw failure;
@@ -443,8 +476,15 @@ export async function handleRoot(env, sourceSelection) {
 
 function sourceErrorMessage(error) {
   if (!error) return "未知错误";
-  if (error.name === "AbortError") return "请求超时（15 秒）";
+  if (error.code === "TIMEOUT" || error.name === "AbortError") return "请求超时（15 秒）";
+  if (error.code === "HTTP_ERROR" && error.statusCode) return `HTTP 错误（${error.statusCode}）`;
   return typeof error.message === "string" && error.message ? error.message.slice(0, 160) : "请求失败";
+}
+
+function sourceFailureState(error) {
+  if (error?.code === "TIMEOUT" || error?.name === "AbortError") return "timeout";
+  if (error?.code === "HTTP_ERROR") return "http-error";
+  return "network-error";
 }
 
 function setSourceErrorHeaders(headers, errors) {

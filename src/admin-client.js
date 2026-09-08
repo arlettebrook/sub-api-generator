@@ -281,7 +281,11 @@ function sourceStatusLabel(state) {
     success: '正常',
     filtered: '已过滤',
     empty: '空数据',
+    timeout: '请求超时',
+    'http-error': 'HTTP 错误',
+    'network-error': '网络错误',
     error: '失败',
+    checking: '检测中',
     idle: '未检测',
   }[state] || '未检测';
 }
@@ -293,7 +297,7 @@ function renderSourceStatusSummary() {
   summary.innerHTML = '';
   summary.hidden = entries.length === 0;
   if (!entries.length) return;
-  const counts = { success: 0, filtered: 0, empty: 0, error: 0, idle: 0 };
+  const counts = { success: 0, filtered: 0, empty: 0, timeout: 0, 'http-error': 0, 'network-error': 0, error: 0, checking: 0, idle: 0 };
   entries.forEach(({ status }) => { counts[status.state] = (counts[status.state] || 0) + 1; });
   const heading = document.createElement('div');
   heading.className = 'source-status-summary-head';
@@ -307,7 +311,7 @@ function renderSourceStatusSummary() {
 
   const metrics = document.createElement('div');
   metrics.className = 'source-status-metrics';
-  [['success', '正常'], ['filtered', '已过滤'], ['empty', '空数据'], ['error', '失败']].forEach(([state, label]) => {
+  [['success', '正常'], ['filtered', '节点被过滤'], ['empty', '返回空数据'], ['timeout', '请求超时'], ['http-error', 'HTTP 错误'], ['network-error', '网络错误'], ['checking', '检测中']].forEach(([state, label]) => {
     const metric = document.createElement('div');
     metric.className = 'source-status-metric source-status-metric-' + state;
     metric.innerHTML = '<b>' + (counts[state] || 0) + '</b><span>' + label + '</span>';
@@ -315,7 +319,7 @@ function renderSourceStatusSummary() {
   });
   summary.appendChild(metrics);
 
-  const issues = entries.filter(({ status }) => ['filtered', 'empty', 'error'].includes(status.state));
+  const issues = entries.filter(({ status }) => ['filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error', 'checking'].includes(status.state));
   if (!issues.length) return;
   const list = document.createElement('div');
   list.className = 'source-status-issues';
@@ -331,11 +335,15 @@ function renderSourceStatusSummary() {
     identity.append(name, kind);
     const detail = document.createElement('span');
     detail.className = 'source-status-issue-detail';
-    if (status.state === 'error') detail.textContent = status.error || '请求失败';
+    if (status.state === 'checking') detail.textContent = '正在检测…';
+    else if (['timeout', 'http-error', 'network-error', 'error'].includes(status.state)) detail.textContent = status.error || sourceStatusLabel(status.state);
     else if (status.state === 'filtered') detail.textContent = '原始 ' + status.rawNodeCount + ' 个，过滤后无可用节点';
     else detail.textContent = '返回 0 个节点';
     const meta = document.createElement('small');
-    meta.textContent = (status.durationMs === null || status.durationMs === undefined ? '' : status.durationMs + ' ms · ') + formatSourceTime(status.lastAttemptAt);
+    const latestSuccess = status.lastSuccessAt
+      ? '最近成功：' + formatSourceTime(status.lastSuccessAt) + ' · ' + (status.lastSuccessNodeCount || 0) + ' 个节点'
+      : '尚无成功记录';
+    meta.textContent = (status.durationMs === null || status.durationMs === undefined ? '' : status.durationMs + ' ms · ') + formatSourceTime(status.lastAttemptAt) + ' · ' + latestSuccess;
     item.append(identity, detail, meta);
     list.appendChild(item);
   });
@@ -909,19 +917,21 @@ function getSourceStatus(type, key) {
 
 function createSourceHealth(type, key) {
   const status = getSourceStatus(type, key);
-  const state = ['success', 'filtered', 'empty', 'error'].includes(status.state) ? status.state : 'idle';
+  const state = ['success', 'filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error', 'checking'].includes(status.state) ? status.state : 'idle';
   const health = document.createElement('div');
   health.className = 'source-health source-health-' + state;
   let text = '未检测';
   if (state === 'success') text = '正常 · ' + status.nodeCount + ' 个节点';
   if (state === 'filtered') text = '已过滤 · 原始 ' + status.rawNodeCount + ' 个';
   if (state === 'empty') text = '返回空数据';
-  if (state === 'error') text = '失败 · ' + (status.error || '请求失败');
+  if (state === 'timeout' || state === 'http-error' || state === 'network-error' || state === 'error') text = sourceStatusLabel(state) + ' · ' + (status.error || '请求失败');
+  if (state === 'checking') text = '检测中…';
   if (status.durationMs !== null && state !== 'idle') text += ' · ' + status.durationMs + ' ms';
   const primary = document.createElement('strong');
   primary.textContent = text;
   const checked = document.createElement('small');
   checked.textContent = status.lastAttemptAt ? '最后检测：' + formatSourceTime(status.lastAttemptAt) : '尚未检测';
+  if (status.lastSuccessAt) checked.textContent += ' · 最近成功 ' + (status.lastSuccessNodeCount || 0) + ' 个节点';
   health.append(primary, checked);
   if (status.error) {
     const error = document.createElement('small');
@@ -938,9 +948,27 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
   const manual = mode !== 'read';
   const refreshButton = $('sourceStatusRefreshButton');
   const idleText = refreshButton?.textContent;
+  const previousStatuses = {
+    subs: { ...(sourceStatuses.subs || {}) },
+    apis: { ...(sourceStatuses.apis || {}) },
+  };
   if (manual && refreshButton) {
     refreshButton.disabled = true;
     refreshButton.textContent = '检测中…';
+    sourceStatuses = {
+      subs: { ...previousStatuses.subs },
+      apis: { ...previousStatuses.apis },
+    };
+    const targets = mode === 'selected'
+      ? sources
+      : Object.entries(sourceStatuses || {}).flatMap(([type, values]) => Object.keys(values || {}).map((key) => ({ type, key })));
+    targets.forEach(({ type, key }) => {
+      const normalizedKey = normalizeSourceKeyClient(type, key);
+      if (sourceStatuses[type]?.[normalizedKey]) sourceStatuses[type][normalizedKey] = { ...sourceStatuses[type][normalizedKey], state: 'checking', error: '' };
+    });
+    renderSourceStatusSummary();
+    if ($('subsList')) renderSubs();
+    if ($('apisList')) renderApis();
   }
   try {
     const requestOptions = mode === 'read' ? {} : {
@@ -958,7 +986,10 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
     if ($('apisList')) renderApis();
     if (nodesContainer && currentNodes.length) renderNodeView();
   } catch {
+    sourceStatuses = previousStatuses;
     renderSourceStatusSummary();
+    if ($('subsList')) renderSubs();
+    if ($('apisList')) renderApis();
     // 状态接口不可用时保留配置页面，不阻断管理操作。
   } finally {
     if (manual && refreshButton) {

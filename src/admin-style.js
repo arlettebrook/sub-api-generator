@@ -1741,6 +1741,11 @@ export const adminStyle = `
     color: var(--success);
   }
 
+  .source-health-checking {
+    border-color: rgba(99, 102, 241, 0.35);
+    color: var(--accent-primary);
+  }
+
   .source-health-filtered,
   .source-health-empty {
     border-color: rgba(245, 158, 11, 0.35);
@@ -1752,6 +1757,9 @@ export const adminStyle = `
     color: #fbbf24;
   }
 
+  .source-health-timeout,
+  .source-health-http-error,
+  .source-health-network-error,
   .source-health-error {
     max-width: min(100%, 360px);
     border-color: rgba(239, 68, 68, 0.35);
@@ -1817,7 +1825,11 @@ export const adminStyle = `
   .source-status-metric-success b { color: var(--success); }
   .source-status-metric-filtered b,
   .source-status-metric-empty b { color: #d97706; }
+  .source-status-metric-timeout b,
+  .source-status-metric-http-error b,
+  .source-status-metric-network-error b,
   .source-status-metric-error b { color: var(--danger); }
+  .source-status-metric-checking b { color: var(--accent-primary); }
 
   .source-status-issues {
     display: grid;
@@ -1835,6 +1847,9 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
+  .source-status-issue-timeout,
+  .source-status-issue-http-error,
+  .source-status-issue-network-error,
   .source-status-issue-error { border-left-color: var(--danger); }
 
   .source-status-issue-identity {
