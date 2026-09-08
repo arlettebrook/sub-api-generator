@@ -404,9 +404,7 @@ async function copyNodeData(event) {
   
   try {
     // 拼接为原始格式：地址#备注，每行一个
-    const text = nodes.map(node =>
-      node.remark ? \`\${node.host}#\${node.remark}\` : node.host
-    ).join('\\n');
+    const text = nodes.map(formatPreviewNodeLine).join('\\n');
     
     await navigator.clipboard.writeText(text);
     btn.innerHTML = '<span>✅</span> 已复制';
@@ -650,6 +648,10 @@ function renderNodeView() {
   if (nodesFilterResetEl) nodesFilterResetEl.disabled = !((nodesSearchEl?.value || '').trim() || nodesRegionFilterEl?.value || nodesSourceFilterEl?.value || nodesStatusFilterEl?.value || nodesSortEl?.value !== 'default');
 }
 
+function formatPreviewNodeLine(node) {
+  return node?.remark && node.remark !== '未命名' ? node.host + '#' + node.remark : node?.host || '';
+}
+
 function getPreviewApiUrl() {
   const selectedPath = $('previewApiSelect')?.value || '';
   if (selectedPath) return window.location.origin + '/' + selectedPath;
@@ -748,6 +750,16 @@ function renderNodes(nodes) {
   if (nodes.length === 0) {
     const filtered = getPreviewDataNodes().length > 0;
     nodesContainer.innerHTML = '<div class="nodes-empty"><strong>' + (filtered ? '暂无匹配节点' : '暂无节点数据') + '</strong><span>' + (filtered ? '可以清除筛选后查看全部节点。' : '请先添加数据源，然后重新加载。') + '</span>' + (filtered ? '<button type="button" class="btn-outline" onclick="nodesFilterResetEl?.click()">清除筛选</button>' : '<a class="btn-outline nodes-empty-link" href="/admin/manage">管理数据源</a>') + '<button type="button" class="btn-outline" onclick="fetchNodes()">重新加载</button></div>';
+    return;
+  }
+
+  if (previewDataMode === 'raw') {
+    const raw = document.createElement('pre');
+    raw.className = 'preview-raw-data';
+    raw.setAttribute('aria-label', '原始节点数据');
+    raw.textContent = nodes.map(formatPreviewNodeLine).join('\\n');
+    nodesContainer.replaceChildren(raw);
+    paginationEl.innerHTML = '';
     return;
   }
   

@@ -1639,6 +1639,21 @@ export const adminStyle = `
     font-weight: 600;
   }
 
+  .preview-raw-data {
+    min-height: 180px;
+    max-height: min(62vh, 680px);
+    margin: 0;
+    padding: 14px 16px;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font: 13px/1.65 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
   .source-raw-dialog {
     width: min(960px, calc(100vw - 32px));
     max-height: calc(100vh - 48px);
