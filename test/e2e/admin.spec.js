@@ -84,6 +84,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   const createdRow = page.locator("#customApisList .custom-api-row").last();
   await createdRow.getByRole("button", { name: "查看" }).click();
   await expect(page.locator("#sourceRawDialog")).toBeVisible();
+  await expect(page.locator("html")).toHaveClass(/source-raw-scroll-locked/);
   await expect(page.locator("#sourceRawSourceSort")).toHaveValue("config");
   await expect(page.locator(".source-raw-source-stats").first()).toContainText("原始");
   await expect(page.locator("#sourceRawHistoryPanel")).toBeVisible();

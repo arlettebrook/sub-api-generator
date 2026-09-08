@@ -1621,6 +1621,7 @@ export const adminStyle = `
     background: var(--surface-solid);
     color: var(--text-primary);
     box-shadow: var(--shadow-lg);
+    overscroll-behavior: contain;
   }
 
   .source-raw-dialog::backdrop {
@@ -1642,6 +1643,14 @@ export const adminStyle = `
     max-height: calc(100vh - 132px);
     padding: 16px;
     overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html.source-raw-scroll-locked,
+  body.source-raw-scroll-locked {
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   .source-raw-summary {
@@ -1894,6 +1903,7 @@ export const adminStyle = `
     font: 12px/1.65 'SF Mono', Monaco, 'Cascadia Code', monospace;
     white-space: pre-wrap;
     overflow: auto;
+    overscroll-behavior: contain;
     overflow-wrap: anywhere;
   }
 

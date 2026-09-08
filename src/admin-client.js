@@ -852,6 +852,24 @@ let sourceRawCollapsedGroups = new Set();
 let sourceRawSourceFilter = 'all';
 let sourceRawRetryingGroup = '';
 let sourceRawSourceSort = 'config';
+let sourceRawPageScrollY = 0;
+let sourceRawPageScrollLocked = false;
+
+function lockSourceRawPageScroll() {
+  if (sourceRawPageScrollLocked) return;
+  sourceRawPageScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  sourceRawPageScrollLocked = true;
+  document.documentElement.classList.add('source-raw-scroll-locked');
+  document.body.classList.add('source-raw-scroll-locked');
+}
+
+function unlockSourceRawPageScroll() {
+  if (!sourceRawPageScrollLocked) return;
+  sourceRawPageScrollLocked = false;
+  document.documentElement.classList.remove('source-raw-scroll-locked');
+  document.body.classList.remove('source-raw-scroll-locked');
+  window.scrollTo(0, sourceRawPageScrollY);
+}
 
 function sourceRawCacheKey(type, key) { return 'source-preview:' + type + ':' + key; }
 function sourceRawViewStateKey(type, key) { return 'source-preview-view:' + type + ':' + key; }
@@ -2152,6 +2170,7 @@ function closeSourceRawDialog() {
   // Clear the reused dialog's scroll state as it closes as an extra safeguard
   // before the next source is opened.
   resetSourceRawScroll();
+  unlockSourceRawPageScroll();
 }
 
 function resetSourceRawScroll() {
@@ -2439,6 +2458,10 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const entry = sourceRawEntry(type, key);
   const dialog = $('sourceRawDialog');
   if (!entry || !dialog) return;
+  dialog.onclose = () => {
+    resetSourceRawScroll();
+    unlockSourceRawPageScroll();
+  };
   if (sourceRawRequest) sourceRawRequest.abort();
   const controller = new AbortController();
   sourceRawRequest = controller;
@@ -2556,6 +2579,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   });
   if (content) content.onscroll = null;
   if (!dialog.open) dialog.showModal();
+  lockSourceRawPageScroll();
   if (!preserveState) {
     // Reset again after opening and layout so a reused dialog cannot restore its previous scroll offset.
     resetSourceRawScroll();
