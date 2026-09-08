@@ -428,7 +428,18 @@ function downloadNodeData(event) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'api-data.txt';
+  const selectedPath = $('previewApiSelect')?.value || '';
+  const selectedApi = selectedPath && customApis?.[selectedPath];
+  const remarkName = String(selectedApi?.remark || '').trim();
+  const preferredName = (remarkName && remarkName !== '未命名')
+    ? remarkName
+    : selectedPath.split('/').filter(Boolean).pop() || 'api-data';
+  const safeName = preferredName
+    .replace(/[<>:"\\/|?*\u0000-\u001F]/g, '-')
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 80) || 'api-data';
+  anchor.download = safeName.toLowerCase().endsWith('.txt') ? safeName : safeName + '.txt';
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -761,9 +772,15 @@ function renderNodes(nodes) {
     topButton.type = 'button';
     topButton.className = 'btn-subtle preview-api-top-button';
     topButton.textContent = '返回数据顶部';
+    const updateTopButton = () => { topButton.hidden = raw.scrollTop <= 160; };
     topButton.hidden = true;
-    topButton.onclick = () => { raw.scrollTo({ top: 0, behavior: 'smooth' }); };
-    raw.addEventListener('scroll', () => { topButton.hidden = raw.scrollTop < 160; }, { passive: true });
+    topButton.onclick = () => {
+      if (typeof raw.scrollTo === 'function') raw.scrollTo({ top: 0, behavior: 'smooth' });
+      else raw.scrollTop = 0;
+      updateTopButton();
+    };
+    raw.addEventListener('scroll', updateTopButton, { passive: true });
+    requestAnimationFrame(updateTopButton);
     wrapper.append(raw, topButton);
     nodesContainer.replaceChildren(wrapper);
     paginationEl.innerHTML = '';

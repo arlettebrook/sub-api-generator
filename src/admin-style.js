@@ -1645,6 +1645,8 @@ export const adminStyle = `
     margin: 0;
     padding: 14px 16px;
     overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-tertiary);
