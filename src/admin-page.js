@@ -295,7 +295,7 @@ export const adminHTML = `
 <!-- ADMIN_SECTION:subs:START -->
 <!-- ==================== 订阅源管理 ==================== -->
 <div class="card" id="subsSection">
-  <details class="management-panel">
+  <details class="management-panel" open>
     <summary><h3>📡 优选订阅器管理</h3></summary>
     <div class="management-panel-body">
   <div class="add-row">
@@ -320,7 +320,7 @@ export const adminHTML = `
 <!-- ADMIN_SECTION:apis:START -->
 <!-- ==================== API 管理 ==================== -->
 <div class="card" id="apisSection">
-  <details class="management-panel">
+  <details class="management-panel" open>
     <summary><h3>🔗 优选 API 管理</h3></summary>
     <div class="management-panel-body">
   <div class="add-row">
