@@ -1950,6 +1950,7 @@ export const adminStyle = `
     display: flex;
     align-items: center;
     gap: 8px;
+    min-height: 34px;
     min-width: 0;
   }
 
@@ -1978,6 +1979,15 @@ export const adminStyle = `
     background: transparent;
     box-shadow: none;
     transform: none;
+  }
+
+  .source-raw-source-header {
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .source-raw-source-header:hover {
+    background: color-mix(in srgb, var(--accent-light) 55%, transparent);
   }
 
   .source-raw-source-heading::before {

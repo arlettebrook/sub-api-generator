@@ -90,8 +90,9 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#sourceRawSourceSort").selectOption("count");
   await page.locator("#sourceRawSearch").fill("2.2.2.2");
   await page.locator('[data-source-raw-tab="raw"]').click();
-  const rawSourceHeading = page.locator("#sourceRawRawContent .source-raw-source-heading").first();
-  await rawSourceHeading.click();
+  const rawSourceGroup = page.locator("#sourceRawRawContent .source-raw-source-group").first();
+  const rawSourceHeading = rawSourceGroup.locator(".source-raw-source-heading");
+  await rawSourceGroup.locator(".source-raw-source-header").click({ position: { x: 12, y: 28 } });
   await expect(rawSourceHeading).toHaveAttribute("aria-expanded", "false");
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();

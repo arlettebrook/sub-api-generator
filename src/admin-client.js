@@ -2353,16 +2353,23 @@ function renderSourceRawResults(rawMode = false) {
         const stats = document.createElement('small');
         stats.className = 'source-raw-source-stats';
         stats.textContent = sourceGroupStatsText(sourceGroupStats(id, groupNodes));
-        group.append(headingRow, detailRow, stats);
-        if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node)));
         const toggle = () => {
           if (sourceRawCollapsedGroups.has(id)) sourceRawCollapsedGroups.delete(id);
           else sourceRawCollapsedGroups.add(id);
           renderSourceRawResults(rawMode);
           saveSourceRawViewState();
         };
+        const sourceHeader = document.createElement('div');
+        sourceHeader.className = 'source-raw-source-header';
+        sourceHeader.append(headingRow, detailRow, stats);
+        sourceHeader.onclick = (event) => {
+          if (event.target.closest('button')) return;
+          toggle();
+        };
         heading.onclick = toggle;
         heading.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } };
+        group.appendChild(sourceHeader);
+        if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node)));
         fragment.appendChild(group);
       });
     } else {
