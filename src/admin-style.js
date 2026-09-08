@@ -358,6 +358,7 @@ export const adminStyle = `
   .settings-dialog-body {
     max-height: calc(100vh - 150px);
     padding: 18px 20px 20px;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -634,27 +635,28 @@ export const adminStyle = `
   }
 
   .blacklist-toolbar {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
     gap: 10px;
     padding-top: 4px;
   }
 
   .blacklist-toolbar > button,
   .blacklist-toolbar > span {
+    min-width: 0;
+    width: 100%;
     white-space: nowrap;
   }
 
   .blacklist-toolbar .setting-tool-button { order: 1; }
-  .blacklist-toolbar .save-status { order: 2; }
+  .blacklist-toolbar .save-status { order: 2; grid-column: span 2; }
   .blacklist-toolbar .setting-undo-button { order: 3; }
   .blacklist-toolbar .setting-reset-button { order: 4; }
-  .blacklist-toolbar .setting-batch-delete { order: 5; }
-  .blacklist-toolbar .btn-primary { order: 6; }
+  .blacklist-toolbar .setting-batch-delete { order: 5; grid-column: span 2; }
+  .blacklist-toolbar .btn-primary { order: 6; grid-column: span 2; }
 
-  .blacklist-toolbar .save-status {
-    margin-right: auto;
-  }
+  .blacklist-toolbar .save-status { margin-right: 0; }
 
   .setting-add-button {
     flex: 0 0 auto;
