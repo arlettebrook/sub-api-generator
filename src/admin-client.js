@@ -3307,6 +3307,7 @@ async function saveBlacklist() {
     savedBlacklist = [...blacklist];
     blacklistHistory.length = 0;
     showToast('黑名单配置已保存', 'success');
+    closeSettingsDialog('blacklistDialog');
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) {
     setBlacklistDirty(true);
@@ -3441,6 +3442,21 @@ function settingConfirm(message) {
   return typeof window.confirm !== 'function' || window.confirm(message);
 }
 
+function openSettingsDialog(id) {
+  const dialog = $(id);
+  if (!dialog || dialog.open) return;
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+  dialog.querySelector('input, select, button')?.focus();
+}
+
+function closeSettingsDialog(id) {
+  const dialog = $(id);
+  if (!dialog) return;
+  if (typeof dialog.close === 'function') dialog.close();
+  else dialog.removeAttribute('open');
+}
+
 function updateSettingsActionState() {
   const blacklistUndo = $('blacklistSettings')?.querySelector('.setting-undo-button');
   const filterUndo = $('filterRulesSettings')?.querySelector('.setting-undo-button');
@@ -3544,7 +3560,7 @@ async function saveFilterRules() {
   try {
     const response = await fetch('/api/filter-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(filterRules) });
     if (!response.ok) throw responseError('备注过滤规则保存', response);
-    setFilterRulesDirty(false); savedFilterRules = [...filterRules]; filterRulesHistory.length = 0; showToast('备注过滤规则已保存', 'success');
+    setFilterRulesDirty(false); savedFilterRules = [...filterRules]; filterRulesHistory.length = 0; showToast('备注过滤规则已保存', 'success'); closeSettingsDialog('filterRulesDialog');
     if (document.body.dataset.page === 'overview' && typeof fetchNodes === 'function') fetchNodes();
   } catch (error) { setFilterRulesDirty(true); showToast(error.message || '备注过滤规则保存失败', 'error', saveFilterRules); }
   finally { setButtonBusy(button, false); if (button) button.disabled = !filterRulesDirty; }

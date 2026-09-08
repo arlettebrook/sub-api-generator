@@ -366,6 +366,13 @@ export const adminHTML = `
         </div>
         <span class="section-summary" id="blacklistSummary">0 项</span>
       </div>
+      <button class="btn-outline settings-edit-button" type="button" onclick="openSettingsDialog('blacklistDialog')">⚙ 编辑黑名单</button>
+      <dialog class="settings-dialog" id="blacklistDialog" aria-labelledby="blacklistDialogTitle">
+        <div class="settings-dialog-head">
+          <div><h3 id="blacklistDialogTitle">黑名单</h3><p>过滤包含这些关键词的节点备注。</p></div>
+          <button class="dialog-close" type="button" onclick="closeSettingsDialog('blacklistDialog')" aria-label="关闭">×</button>
+        </div>
+        <div class="settings-dialog-body">
       <div class="blacklist-add-row">
         <input id="newBlacklistWord" type="text" maxlength="128" placeholder="输入要过滤的关键词" autocomplete="off" />
         <button class="btn-outline setting-add-button" id="addBlacklistButton" type="button" onclick="addBlacklistWord()">➕ 添加</button>
@@ -389,6 +396,8 @@ export const adminHTML = `
         <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedBlacklist()">🗑 删除选中</button>
         <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
       </div>
+        </div>
+      </dialog>
     </div>
     <div class="setting-block" id="filterRulesSettings">
       <div class="setting-block-heading">
@@ -398,6 +407,13 @@ export const adminHTML = `
         </div>
         <span class="section-summary" id="filterRulesSummary">0 项</span>
       </div>
+      <button class="btn-outline settings-edit-button" type="button" onclick="openSettingsDialog('filterRulesDialog')">⚙ 编辑备注过滤规则</button>
+      <dialog class="settings-dialog" id="filterRulesDialog" aria-labelledby="filterRulesDialogTitle">
+        <div class="settings-dialog-head">
+          <div><h3 id="filterRulesDialogTitle">备注过滤规则</h3><p>设置节点备注的截断和清理规则。</p></div>
+          <button class="dialog-close" type="button" onclick="closeSettingsDialog('filterRulesDialog')" aria-label="关闭">×</button>
+        </div>
+        <div class="settings-dialog-body">
       <div class="blacklist-add-row">
         <input id="newFilterRule" type="text" maxlength="128" placeholder="例如：| 或 【" autocomplete="off" />
         <button class="btn-outline setting-add-button" id="addFilterRuleButton" type="button" onclick="addFilterRule()">➕ 添加</button>
@@ -433,6 +449,8 @@ export const adminHTML = `
         <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedFilterRules()">🗑 删除选中</button>
         <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
       </div>
+        </div>
+      </dialog>
     </div>
   </div>
   <dialog class="confirm-dialog rule-import-dialog" id="ruleImportPreviewDialog" aria-labelledby="ruleImportPreviewTitle" aria-describedby="ruleImportPreviewMessage">

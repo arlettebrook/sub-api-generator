@@ -150,6 +150,8 @@ test("edits and saves the blacklist from settings", async ({ page }, testInfo) =
   await page.locator('a[data-nav-page="settings"]').click();
   await expect(page).toHaveURL(/\/admin\/settings$/);
   await expect(page.locator("#blacklistSettings")).toBeVisible();
+  await page.locator('#blacklistSettings .settings-edit-button').click();
+  await expect(page.locator('#blacklistDialog')).toBeVisible();
   const addedWord = "e2e-blacklist-" + Date.now().toString(36) + "-" + testInfo.project.name;
   await page.locator("#newBlacklistWord").fill(addedWord);
   await page.locator("#addBlacklistButton").click();

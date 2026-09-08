@@ -312,6 +312,56 @@ export const adminStyle = `
     content: '';
   }
 
+  .settings-edit-button {
+    justify-self: start;
+    min-height: 36px;
+  }
+
+  .settings-dialog {
+    width: min(760px, calc(100vw - 32px));
+    max-height: min(760px, calc(100vh - 40px));
+    margin: auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-lg);
+    background: var(--surface-solid);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .settings-dialog::backdrop {
+    background: rgba(2, 6, 23, .72);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .settings-dialog-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .settings-dialog-head h3 {
+    margin: 0 0 4px;
+  }
+
+  .settings-dialog-head p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .settings-dialog-body {
+    max-height: calc(100vh - 150px);
+    padding: 18px 20px 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   .blacklist-add-row {
     display: flex;
     align-items: center;
@@ -3508,6 +3558,21 @@ export const adminStyle = `
     }
     .setting-block {
       padding: 12px;
+    }
+    .settings-edit-button {
+      width: 100%;
+    }
+    .settings-dialog {
+      width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+      border-radius: 14px;
+    }
+    .settings-dialog-head {
+      padding: 14px;
+    }
+    .settings-dialog-body {
+      max-height: calc(100vh - 112px);
+      padding: 14px;
     }
     .setting-block-heading {
       gap: 8px;
