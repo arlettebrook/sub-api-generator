@@ -118,6 +118,8 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#sourceRawHistoryList .source-raw-history-view").first().click();
   await expect(page.locator("#sourceRawHistoryDialog")).toBeVisible();
   await expect(page.locator("#sourceRawHistoryDialogContent")).toContainText("2.2.2.2");
+  await expect(page.locator("#sourceRawHistoryDialogContent")).toHaveCSS("white-space", "pre-wrap");
+  await expect(page.locator("#sourceRawHistoryDialogContent")).toHaveText(/2\.2\.2\.2:443#api\s+3\.3\.3\.3:443#api/);
   await page.locator('[data-source-history-tab="raw"]').click();
   await expect(page.locator("#sourceRawHistoryDialogContent")).toContainText("2.2.2.2");
   await page.locator("#sourceRawHistoryDialog .dialog-close").click();

@@ -1739,6 +1739,11 @@ export const adminStyle = `
     background: var(--accent-light);
   }
 
+  #sourceRawHistoryDialogContent {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
   .source-raw-process span {
     padding: 5px 8px;
     border: 1px solid var(--border-color);
