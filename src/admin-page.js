@@ -204,21 +204,25 @@ export const adminHTML = `
 <!-- ADMIN_SECTION:sourceStatus:START -->
 <!-- ==================== 数据源状态 ==================== -->
 <div class="card" id="sourceStatusSection">
-  <div class="section-heading">
-    <div>
+  <details class="source-status-panel">
+    <summary>
+      <div>
       <h3>📊 数据源状态</h3>
       <p class="section-caption">手动检测订阅源和 API 源的最新响应。</p>
-    </div>
-    <div class="section-heading-actions">
+      </div>
+    </summary>
+    <div class="source-status-panel-body">
+      <div class="section-heading-actions source-status-actions">
       <select id="sourceStatusScope" aria-label="检测范围">
         <option value="used">检测已使用数据源</option>
         <option value="all">检测全部数据源</option>
       </select>
       <button class="btn-outline" type="button" id="sourceStatusIssuesButton">⚠ 检测异常来源</button>
       <button class="btn-primary" type="button" id="sourceStatusRefreshButton">🔄 检测数据源</button>
+      </div>
+      <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
     </div>
-  </div>
-  <div id="sourceStatusSummary" class="source-status-summary" role="status" hidden></div>
+  </details>
 </div>
 <!-- ADMIN_SECTION:sourceStatus:END -->
 
