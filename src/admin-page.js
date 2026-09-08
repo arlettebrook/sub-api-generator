@@ -135,14 +135,23 @@ export const adminHTML = `
     <button class="btn-outline" onclick="copySubUrl(event)" title="复制优选API" aria-label="复制优选 API 地址">
       <span>📋</span> 复制优选API
     </button>
-    <button class="btn-outline" onclick="copyNodeData(event)" title="复制全部优选API数据" aria-label="复制全部节点数据">
+    <button class="btn-outline" onclick="copyNodeData(event)" title="复制当前筛选后的优选API数据" aria-label="复制当前筛选结果">
       <span>📝</span> 复制优选API数据
+    </button>
+    <button class="btn-outline" onclick="downloadNodeData(event)" title="下载当前筛选后的 API 数据" aria-label="下载 API 数据">
+      <span>⬇️</span> 下载 API 数据
     </button>
     <div class="preview-view-toggle" role="group" aria-label="数据查看方式">
       <button class="btn-subtle active" type="button" data-preview-mode="nodes" aria-pressed="true">节点结果</button>
       <button class="btn-subtle" type="button" data-preview-mode="api" aria-pressed="false">API 数据</button>
     </div>
     <span class="nodes-count" id="nodesCount">共 0 个节点</span>
+  </div>
+  <div class="preview-data-status" id="previewDataStatus" role="status" aria-live="polite">
+    <span id="previewDataModeHint">节点结果：卡片展示</span>
+    <span id="previewDataStats"></span>
+    <span id="previewDataCache"></span>
+    <span id="previewDataUpdated"></span>
   </div>
   <div class="nodes-filters" aria-label="节点筛选和排序">
     <label class="nodes-search">

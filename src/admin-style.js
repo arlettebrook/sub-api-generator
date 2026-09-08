@@ -1650,8 +1650,8 @@ export const adminStyle = `
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     font: 13px/1.65 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    white-space: pre;
+    overflow-wrap: normal;
   }
 
   .preview-api-data-wrap {
@@ -1664,6 +1664,22 @@ export const adminStyle = `
     min-height: 34px;
     border-color: var(--border-hover);
     color: var(--text-secondary);
+  }
+
+  .preview-data-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    margin: -4px 0 12px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .preview-data-status span + span::before {
+    content: '·';
+    margin-right: 14px;
+    color: var(--border-hover);
   }
 
   .source-raw-dialog {
@@ -3495,6 +3511,16 @@ export const adminStyle = `
       text-align: right;
       font-size: 12px;
     }
+    .preview-data-status {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 8px;
+      margin-top: -6px;
+      line-height: 1.4;
+    }
+    .preview-data-status span + span::before { display: none; }
+    .preview-data-status span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-api-data { max-height: 58vh; font-size: 12px; overflow-x: auto; }
     .nodes-grid {
       gap: 6px;
     }

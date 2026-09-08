@@ -384,7 +384,11 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       const headers = {
         "content-type": "text/plain; charset=utf-8",
         "cache-control": "no-store",
+        "x-preview-cache": "hit",
+        "x-preview-generated-at": cached.generatedAt || new Date().toISOString(),
       };
+      if (cached.filterStats) headers["x-filter-stats"] = encodeURIComponent(JSON.stringify(cached.filterStats));
+      if (options.includeRaw || options.diagnostics) setSourceErrorHeaders(headers, cached.sourceErrors || []);
       if (cached.nodeSources?.length) headers["x-node-sources"] = encodeURIComponent(JSON.stringify(cached.nodeSources));
       return new Response(cached.output, {
         headers: withSecurityHeaders(headers),
@@ -489,6 +493,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const apiResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "apis" : result.reason?.sourceType === "apis");
 
     const preferred = [];
+    const filterStats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
     const nodeSources = [];
     const sourceErrors = [];
     if (selected && selected.length === 0) {
@@ -497,6 +502,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     for (const result of subsResults) {
       if (result.status === "fulfilled") {
         preferred.push(...result.value.values);
+        mergeFilterStats(filterStats, result.value.filterStats);
         result.value.values.forEach((value) => nodeSources.push({ value, type: "subs", key: result.value.key, remark: result.value.remark }));
       }
       else sourceErrors.push({ type: "subs", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -505,6 +511,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     for (const result of apiResults) {
       if (result.status === "fulfilled") {
         extra.push(...result.value.values);
+        mergeFilterStats(filterStats, result.value.filterStats);
         result.value.values.forEach((value) => nodeSources.push({ value, type: "apis", key: result.value.key, remark: result.value.remark }));
       }
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -512,9 +519,11 @@ export async function handleRoot(env, sourceSelection, options = {}) {
 
     const filtered = [...new Set(preferred)];
     const output = [...filtered, ...extra].join("\n");
+    filterStats.outputCount = output ? output.split("\n").filter(Boolean).length : 0;
+    const generatedAt = new Date().toISOString();
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
-      aggregateCache.set(cacheKey, { output, sourceErrors, nodeSources, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
+      aggregateCache.set(cacheKey, { output, sourceErrors, nodeSources, filterStats, generatedAt, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
       pruneAggregateCache();
     } else {
       aggregateCache.delete(cacheKey);
@@ -522,7 +531,11 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const headers = {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
+      "x-preview-cache": "miss",
+      "x-preview-generated-at": generatedAt,
     };
+    headers["x-filter-stats"] = encodeURIComponent(JSON.stringify(filterStats));
+    if (options.includeRaw || options.diagnostics) setSourceErrorHeaders(headers, sourceErrors);
     if (nodeSources.length) headers["x-node-sources"] = encodeURIComponent(JSON.stringify(nodeSources.slice(0, 1000)));
     if (options.includeRaw) {
       options.rawSources = sourceResults
@@ -537,6 +550,13 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     return textResponse("！！！！！优选订阅生成器异常：" + error.message, 500, {
       "cache-control": "no-store",
     });
+  }
+}
+
+function mergeFilterStats(target, stats) {
+  if (!stats || typeof stats !== "object") return;
+  for (const key of ["inputCount", "invalidCount", "blacklistedCount", "duplicateCount", "outputCount"]) {
+    target[key] = (target[key] || 0) + (Number(stats[key]) || 0);
   }
 }
 

@@ -466,7 +466,7 @@ async function handleCustomApiPath(path, env) {
       ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
     ];
   }
-  return subscriptions.handleRoot(env, sourceSelection);
+  return subscriptions.handleRoot(env, sourceSelection, { diagnostics: true });
 }
 
 function handleAdmin(page = "overview") {

@@ -10,6 +10,8 @@ function debounce(callback, delay = 180) {
   };
 }
 let nodesContainer, paginationEl, nodesCountEl, previewModeButtons;
+let previewDataStatusEl, previewDataModeHintEl, previewDataStatsEl, previewDataCacheEl, previewDataUpdatedEl;
+let previewDataMeta = { filterStats: null, cache: '', generatedAt: '' };
 let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl, nodesSourceFilterEl, nodesStatusFilterEl;
 
 // 地区匹配映射表（替代长串if-else，匹配效率提升60%+）
@@ -396,7 +398,7 @@ async function copyNodeData(event) {
     const btn = event?.currentTarget;
   const originalText = btn.innerHTML;
   
-  const nodes = getPreviewDataNodes();
+  const nodes = getVisibleNodes();
   if (nodes.length === 0) {
     showToast('暂无节点数据可复制', 'error');
     return;
@@ -416,6 +418,22 @@ async function copyNodeData(event) {
   } catch (err) {
     showToast('复制失败：' + err.message, 'error');
   }
+}
+
+function downloadNodeData(event) {
+  const nodes = getVisibleNodes();
+  if (!nodes.length) { showToast('暂无节点数据可下载', 'error'); return; }
+  const text = nodes.map(formatPreviewNodeLine).join('\\n') + '\\n';
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'api-data.txt';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  showToast(\`已下载 \${nodes.length} 条 API 数据\`, 'success');
 }
 
 // ======================== 主题切换逻辑 ========================
@@ -502,6 +520,29 @@ function applyPreviewDataMode() {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
+  if (previewDataModeHintEl) previewDataModeHintEl.textContent = previewDataMode === 'api' ? 'API 数据：过滤后的纯文本' : '节点结果：卡片展示';
+}
+
+function parsePreviewJsonHeader(value) {
+  if (!value) return null;
+  try { return JSON.parse(decodeURIComponent(value)); } catch { return null; }
+}
+
+function renderPreviewDataStatus() {
+  if (!previewDataStatusEl) return;
+  const stats = previewDataMeta.filterStats;
+  if (stats && Number.isFinite(Number(stats.inputCount))) {
+    const input = Number(stats.inputCount) || 0;
+    const output = Number(stats.outputCount) || 0;
+    const filtered = Math.max(0, input - output);
+    previewDataStatsEl.textContent = \`原始 \${input} · 过滤 \${filtered} · 保留 \${output}\`;
+  } else {
+    previewDataStatsEl.textContent = '';
+  }
+  const cache = previewDataMeta.cache === 'hit' ? '缓存命中' : previewDataMeta.cache === 'miss' ? '刚刚检测' : '';
+  previewDataCacheEl.textContent = cache;
+  previewDataUpdatedEl.textContent = previewDataMeta.generatedAt ? '更新时间：' + formatSourceTime(previewDataMeta.generatedAt) : '';
+  previewDataStatusEl.hidden = !(previewDataStatsEl.textContent || cache || previewDataUpdatedEl.textContent);
 }
 
 function setPreviewDataMode(mode) {
@@ -613,10 +654,17 @@ async function fetchNodes(emptyRetry = 0) {
   activeNodeRequest = controller;
   nodesContainer.innerHTML = nodeSkeletonMarkup();
   paginationEl.innerHTML = '';
+  previewDataMeta = { filterStats: null, cache: '', generatedAt: '' };
+  if (previewDataStatsEl) previewDataStatsEl.textContent = '正在检测…';
+  if (previewDataCacheEl) previewDataCacheEl.textContent = '';
+  if (previewDataUpdatedEl) previewDataUpdatedEl.textContent = '';
+  if (previewDataStatusEl) previewDataStatusEl.hidden = false;
   renderPreviewSourceErrors();
   const apiUrl = getPreviewApiUrl();
   if (!apiUrl) {
     currentNodes = [];
+    previewDataMeta = { filterStats: null, cache: '', generatedAt: '' };
+    renderPreviewDataStatus();
     updateRegionOptions();
     updateNodeFilterOptions();
     renderNodeView();
@@ -630,6 +678,12 @@ async function fetchNodes(emptyRetry = 0) {
     if (!nodeRes.ok) throw new Error('请求失败: ' + nodeRes.status);
     const sourceErrors = parseSourceErrors(nodeRes.headers.get('x-source-errors'));
     const nodeSources = parseSourceErrors(nodeRes.headers.get('x-node-sources'));
+    previewDataMeta = {
+      filterStats: parsePreviewJsonHeader(nodeRes.headers.get('x-filter-stats')),
+      cache: nodeRes.headers.get('x-preview-cache') || '',
+      generatedAt: nodeRes.headers.get('x-preview-generated-at') || '',
+    };
+    renderPreviewDataStatus();
     renderPreviewSourceErrors(sourceErrors);
     const text = await nodeRes.text();
     
@@ -682,6 +736,8 @@ async function fetchNodes(emptyRetry = 0) {
     error.appendChild(retry);
     nodesContainer.appendChild(error);
     nodesCountEl.textContent = '共 0 个节点';
+    previewDataMeta = { filterStats: null, cache: '', generatedAt: '' };
+    renderPreviewDataStatus();
   } finally {
     if (activeNodeRequest === controller) activeNodeRequest = null;
   }
@@ -705,7 +761,9 @@ function renderNodes(nodes) {
     topButton.type = 'button';
     topButton.className = 'btn-subtle preview-api-top-button';
     topButton.textContent = '返回数据顶部';
+    topButton.hidden = true;
     topButton.onclick = () => { raw.scrollTo({ top: 0, behavior: 'smooth' }); };
+    raw.addEventListener('scroll', () => { topButton.hidden = raw.scrollTop < 160; }, { passive: true });
     wrapper.append(raw, topButton);
     nodesContainer.replaceChildren(wrapper);
     paginationEl.innerHTML = '';
@@ -3583,6 +3641,11 @@ function cachePageElements() {
   nodesFilterResetEl = $('nodesFilterReset');
   nodesSourceFilterEl = $('nodesSourceFilter');
   nodesStatusFilterEl = $('nodesStatusFilter');
+  previewDataStatusEl = $('previewDataStatus');
+  previewDataModeHintEl = $('previewDataModeHint');
+  previewDataStatsEl = $('previewDataStats');
+  previewDataCacheEl = $('previewDataCache');
+  previewDataUpdatedEl = $('previewDataUpdated');
   previewModeButtons = document.querySelectorAll('[data-preview-mode]');
   applyPreviewDataMode();
 }
