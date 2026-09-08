@@ -153,7 +153,9 @@ export const adminHTML = `
     <span id="previewDataCache"></span>
     <span id="previewDataUpdated"></span>
   </div>
-  <div class="nodes-filters" aria-label="节点筛选和排序">
+  <details class="nodes-filters-panel">
+    <summary>筛选条件</summary>
+    <div class="nodes-filters" aria-label="节点筛选和排序">
     <label class="nodes-search">
       <span class="sr-only">搜索节点</span>
       <span aria-hidden="true">⌕</span>
@@ -189,7 +191,8 @@ export const adminHTML = `
       </select>
     </label>
     <button class="btn-outline nodes-filter-reset" id="nodesFilterReset" type="button">清除筛选</button>
-  </div>
+    </div>
+  </details>
   <div id="sourceErrorNotice" class="source-error-notice" role="status" hidden></div>
   <div id="nodesContainer">
     <div class="nodes-loading nodes-skeleton" aria-label="正在加载节点"></div>
