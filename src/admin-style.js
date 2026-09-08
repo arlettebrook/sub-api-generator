@@ -1866,11 +1866,23 @@ export const adminStyle = `
     display: flex;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
     gap: 10px;
     color: var(--text-primary);
     font-size: 13px;
     cursor: pointer;
+    text-align: left;
     user-select: none;
+  }
+
+  .source-raw-source-heading:hover {
+    background: transparent;
+    box-shadow: none;
+    transform: none;
   }
 
   .source-raw-source-heading::before {
@@ -2932,10 +2944,13 @@ export const adminStyle = `
       align-items: stretch;
       flex-wrap: wrap;
     }
-    .source-raw-group-controls select,
-    .source-raw-group-controls button {
+    .source-raw-group-controls select {
       flex: 1 1 100%;
       width: 100%;
+    }
+    .source-raw-group-controls button {
+      flex: 1 1 calc(50% - 4px);
+      min-height: 40px;
     }
     .source-raw-tabs {
       width: 100%;
@@ -2945,6 +2960,49 @@ export const adminStyle = `
     }
     .source-raw-toolbar button {
       min-height: 40px;
+    }
+    .source-raw-content {
+      padding: 8px;
+    }
+    .source-raw-source-group {
+      margin-bottom: 8px;
+      padding: 9px 10px 4px;
+    }
+    .source-raw-source-heading {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) auto;
+      column-gap: 6px;
+      row-gap: 3px;
+    }
+    .source-raw-source-heading::before {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .source-raw-source-heading strong {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .source-raw-source-heading span {
+      grid-column: 3;
+      grid-row: 1;
+    }
+    .source-raw-source-error {
+      grid-column: 2 / 4;
+      grid-row: 2;
+    }
+    .source-raw-source-detail {
+      margin-left: 18px;
+    }
+    .source-raw-actions {
+      flex-wrap: wrap;
+    }
+    .source-raw-result-count,
+    .source-raw-auto-refresh {
+      flex: 1 1 100%;
+      margin-right: 0;
+    }
+    .source-raw-auto-refresh {
+      justify-content: flex-start;
     }
     .source-raw-actions button {
       flex: 1;

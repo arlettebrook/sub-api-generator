@@ -845,8 +845,7 @@ let sourceRawLastVisible = [];
 let sourceRawNodeSources = new Map();
 let sourceRawSourceMeta = new Map();
 let sourceRawSourceErrors = new Map();
-let sourceRawExpandedGroups = new Set();
-let sourceRawAllCollapsed = false;
+let sourceRawCollapsedGroups = new Set();
 let sourceRawSourceFilter = 'all';
 
 function sourceRawCacheKey(type, key) { return 'source-preview:' + type + ':' + key; }
@@ -1999,8 +1998,7 @@ function closeSourceRawDialog() {
   sourceRawNodeSources = new Map();
   sourceRawSourceMeta = new Map();
   sourceRawSourceErrors = new Map();
-  sourceRawExpandedGroups = new Set();
-  sourceRawAllCollapsed = false;
+  sourceRawCollapsedGroups = new Set();
   sourceRawSourceFilter = 'all';
   if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
   sourceRawRefreshTimer = null;
@@ -2089,9 +2087,10 @@ function renderSourceRawResults() {
         if (!groupNodes.length && !sourceRawSourceErrors.has(label)) return;
         const group = document.createElement('section');
         group.className = 'source-raw-source-group';
-        const collapsed = sourceRawAllCollapsed || (sourceRawExpandedGroups.size > 0 && !sourceRawExpandedGroups.has(label));
+        const collapsed = sourceRawCollapsedGroups.has(label);
         group.classList.toggle('is-collapsed', collapsed);
-        const heading = document.createElement('div');
+        const heading = document.createElement('button');
+        heading.type = 'button';
         heading.className = 'source-raw-source-heading';
         heading.tabIndex = 0;
         heading.setAttribute('role', 'button');
@@ -2115,13 +2114,8 @@ function renderSourceRawResults() {
         group.append(heading, detail);
         if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node)));
         const toggle = () => {
-          if (sourceRawAllCollapsed) {
-            sourceRawAllCollapsed = false;
-            sourceRawExpandedGroups = new Set([label]);
-            renderSourceRawResults();
-            return;
-          } else if (sourceRawExpandedGroups.size === 0) sourceRawExpandedGroups = new Set(groups.keys());
-          if (sourceRawExpandedGroups.has(label)) sourceRawExpandedGroups.delete(label); else sourceRawExpandedGroups.add(label);
+          if (sourceRawCollapsedGroups.has(label)) sourceRawCollapsedGroups.delete(label);
+          else sourceRawCollapsedGroups.add(label);
           renderSourceRawResults();
         };
         heading.onclick = toggle;
@@ -2175,7 +2169,7 @@ function formatSourceGroupDetail(label) {
   parts.shift();
   const key = parts.shift() || '';
   const remark = parts.join(' · ');
-  return key + (remark ? ' · ' + remark : '');
+  return remark ? remark + ' · ' + key : key;
 }
 
 function setSourceRawTab(tab) {
@@ -2273,14 +2267,12 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   };
   const expandGroups = $('expandSourceRawGroupsButton');
   if (expandGroups) expandGroups.onclick = () => {
-    sourceRawAllCollapsed = false;
-    sourceRawExpandedGroups = new Set(sourceRawSourceMeta.keys());
+    sourceRawCollapsedGroups = new Set();
     renderSourceRawResults();
   };
   const collapseGroups = $('collapseSourceRawGroupsButton');
   if (collapseGroups) collapseGroups.onclick = () => {
-    sourceRawAllCollapsed = true;
-    sourceRawExpandedGroups = new Set();
+    sourceRawCollapsedGroups = new Set(sourceRawSourceMeta.keys());
     renderSourceRawResults();
   };
   document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
