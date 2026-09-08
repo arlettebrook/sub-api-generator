@@ -101,12 +101,15 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
 
   const rawContent = decodeSubscriptionBody(response.content);
   const result = [];
+  const unfilteredNodes = [];
   for (const line of rawContent.split(/\r?\n/)) {
+    const unfiltered = parsePreferredIpLine(line, []);
+    if (unfiltered) unfilteredNodes.push(unfiltered);
     const parsed = parsePreferredIpLine(line, filterRules);
     if (parsed) result.push(parsed);
   }
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
-  Object.defineProperty(result, "rawContent", { value: response.content, enumerable: false });
+  Object.defineProperty(result, "unfilteredNodes", { value: unfilteredNodes, enumerable: false });
   return result;
 }
 
@@ -162,8 +165,17 @@ async function fetchApiSubs(apiUrl) {
     headers: { "User-Agent": UA_APIS_FETCH },
   }, "API 源");
   const result = decodeSubscriptionBody(response.content).split(/\r?\n/).filter((line) => line.trim() !== "");
+  const unfilteredNodes = [];
+  for (const value of result) {
+    const line = value.trim();
+    const match = NODE_MATCH_REGEX.exec(line);
+    if (!match) continue;
+    const hashIndex = line.indexOf("#");
+    const remark = hashIndex > -1 ? cleanPreferredRemark(line.slice(hashIndex + 1), []) : "";
+    unfilteredNodes.push(remark ? `${match[0]}#${remark}` : match[0]);
+  }
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
-  Object.defineProperty(result, "rawContent", { value: response.content, enumerable: false });
+  Object.defineProperty(result, "unfilteredNodes", { value: unfilteredNodes, enumerable: false });
   return result;
 }
 
@@ -394,7 +406,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     };
     const blacklistRegex = getBlacklistRegex(blacklist);
     const sourceTasks = [];
-    selectedEntries(subsConfig, "subs").forEach(([host]) => sourceTasks.push(async () => {
+    selectedEntries(subsConfig, "subs").forEach(([host, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchPreferredSubs(host, filterRules);
@@ -415,7 +427,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "subs", key: host, values, rawContent: rawValues.rawContent || "", filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "subs";
@@ -433,7 +445,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           throw failure;
         }
       }));
-    selectedEntries(apisConfig, "apis").forEach(([apiUrl]) => sourceTasks.push(async () => {
+    selectedEntries(apisConfig, "apis").forEach(([apiUrl, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchApiSubs(apiUrl);
@@ -454,7 +466,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "apis", key: apiUrl, values, rawContent: rawValues.rawContent || "", filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "apis", key: apiUrl, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "apis";
@@ -485,7 +497,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     for (const result of subsResults) {
       if (result.status === "fulfilled") {
         preferred.push(...result.value.values);
-        result.value.values.forEach((value) => nodeSources.push({ value, type: "subs", key: result.value.key }));
+        result.value.values.forEach((value) => nodeSources.push({ value, type: "subs", key: result.value.key, remark: result.value.remark }));
       }
       else sourceErrors.push({ type: "subs", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
@@ -493,7 +505,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     for (const result of apiResults) {
       if (result.status === "fulfilled") {
         extra.push(...result.value.values);
-        result.value.values.forEach((value) => nodeSources.push({ value, type: "apis", key: result.value.key }));
+        result.value.values.forEach((value) => nodeSources.push({ value, type: "apis", key: result.value.key, remark: result.value.remark }));
       }
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
@@ -515,7 +527,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     if (options.includeRaw) {
       options.rawSources = sourceResults
         .filter((result) => result.status === "fulfilled")
-        .map((result) => ({ type: result.value.type, key: result.value.key, content: String(result.value.rawContent || "").slice(0, 100000), filterStats: result.value.filterStats || null }));
+        .map((result) => ({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.unfilteredNodes || [], filterStats: result.value.filterStats || null }));
+      options.nodeSources = nodeSources;
     }
     return new Response(output, {
       headers: withSecurityHeaders(headers),

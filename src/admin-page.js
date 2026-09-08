@@ -70,7 +70,7 @@ export const adminHTML = `
     <div class="source-raw-process" id="sourceRawProcess" aria-live="polite"></div>
     <div class="source-raw-tabs" role="tablist" aria-label="查看内容">
       <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-raw-tab="nodes">节点结果</button>
-      <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-raw-tab="raw">原始返回内容</button>
+      <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-raw-tab="raw">未过滤节点</button>
     </div>
     <div class="source-raw-toolbar">
       <label class="source-raw-search"><span aria-hidden="true">⌕</span><input id="sourceRawSearch" type="search" placeholder="搜索 IP、端口或备注" autocomplete="off" aria-label="搜索原始数据" /></label>

@@ -171,7 +171,7 @@ async function handleSourceRaw(request, env) {
     const text = await response.text();
     const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const rawSources = resultOptions.rawSources || [];
-    const nodeSources = nodes.map((value) => ({ value, type, key }));
+    const unfilteredNodes = rawSources.flatMap((source) => source.nodes || []);
     const filterStats = rawSources.reduce((total, source) => {
       for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
       return total;
@@ -179,7 +179,7 @@ async function handleSourceRaw(request, env) {
     return pagesJsonResponse({
       nodes,
       rawSources,
-      nodeSources,
+      unfilteredNodes,
       status: { ...(snapshot[type]?.[key] || {}), filterStats },
     }, response.ok ? 200 : response.status);
   } catch (error) {
@@ -215,11 +215,8 @@ async function handleCustomApiPreview(request, env) {
   const text = await response.text();
   const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const rawSources = resultOptions.rawSources || [];
-  let nodeSources = [];
-  const nodeSourceHeader = response.headers.get("x-node-sources");
-  if (nodeSourceHeader) {
-    try { nodeSources = JSON.parse(decodeURIComponent(nodeSourceHeader)); } catch { /* ignore malformed source mapping */ }
-  }
+  const unfilteredNodes = rawSources.flatMap((source) => source.nodes || []);
+  const nodeSources = resultOptions.nodeSources || [];
   const filterStats = rawSources.reduce((total, source) => {
     for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
     return total;
@@ -241,6 +238,7 @@ async function handleCustomApiPreview(request, env) {
   return pagesJsonResponse({
     nodes,
     rawSources,
+    unfilteredNodes,
     nodeSources,
     status: {
       state: nodes.length ? "success" : (errorList.length ? "error" : "empty"),

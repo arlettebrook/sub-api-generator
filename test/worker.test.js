@@ -329,7 +329,7 @@ test("previews a source with nodes, raw content, and filtering statistics", asyn
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.deepEqual(result.nodes, ["1.2.3.4:443#ok"]);
-    assert.equal(result.rawSources[0].content, "1.2.3.4:443#ok\n5.6.7.8:443#blocked");
+    assert.deepEqual(result.unfilteredNodes, ["1.2.3.4:443#ok", "5.6.7.8:443#blocked"]);
     assert.equal(result.status.filterStats.inputCount, 2);
     assert.equal(result.status.filterStats.blacklistedCount, 1);
     assert.equal(result.status.filterStats.outputCount, 1);

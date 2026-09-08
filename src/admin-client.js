@@ -838,6 +838,7 @@ let sourceRawRequest = null;
 let sourceRawSelection = null;
 let sourceRawNodes = [];
 let sourceRawRawContent = '';
+let sourceRawUnfilteredNodes = [];
 const sourceRawCache = new Map();
 let sourceRawRefreshTimer = null;
 let sourceRawLastVisible = [];
@@ -1989,6 +1990,7 @@ function closeSourceRawDialog() {
   sourceRawSelection = null;
   sourceRawNodes = [];
   sourceRawRawContent = '';
+  sourceRawUnfilteredNodes = [];
   sourceRawNodeSources = new Map();
   if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
   sourceRawRefreshTimer = null;
@@ -2044,7 +2046,8 @@ function renderSourceRawResults() {
   if (!visible.length) {
     content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
   } else {
-    const rowHeight = 28;
+    const showSources = sourceRawSelection?.type === 'customApis';
+    const rowHeight = showSources ? 54 : 30;
     const start = Math.max(0, Math.floor((content.scrollTop || 0) / rowHeight) - 12);
     const end = Math.min(visible.length, Math.ceil(((content.clientHeight || 320) + (content.scrollTop || 0)) / rowHeight) + 12);
     const top = document.createElement('div');
@@ -2054,7 +2057,18 @@ function renderSourceRawResults() {
       const line = document.createElement('div');
       line.className = 'source-raw-node-line';
       const source = sourceRawNodeSources.get(node);
-      line.textContent = source ? node + '    · ' + source : node;
+      const value = document.createElement('span');
+      value.className = 'source-raw-node-value';
+      value.textContent = node;
+      value.title = node;
+      line.appendChild(value);
+      if (showSources && source) {
+        const meta = document.createElement('small');
+        meta.className = 'source-raw-node-source';
+        meta.textContent = Array.isArray(source) ? source.join('；') : source;
+        meta.title = meta.textContent;
+        line.appendChild(meta);
+      }
       line.style.height = rowHeight + 'px';
       line.dataset.index = String(start + index);
       fragment.appendChild(line);
@@ -2104,17 +2118,19 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
   if (search && !preserveState) search.value = '';
+  if (content && !preserveState) content.scrollTop = 0;
   if (content) content.textContent = '正在检测数据源…';
   if (rawContent) rawContent.textContent = '正在检测数据源…';
   const cachedResult = loadSourceRawCache(type, key);
   if (cachedResult) {
     sourceRawNodes = cachedResult.nodes.slice();
     sourceRawRawContent = cachedResult.rawContent;
+    sourceRawUnfilteredNodes = Array.isArray(cachedResult.unfilteredNodes) ? cachedResult.unfilteredNodes.slice() : [];
     sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
     renderSourceRawSummary(cachedResult.status);
     renderSourceRawProcess(cachedResult.status?.filterStats || {});
     renderSourceRawResults();
-    if (rawContent) rawContent.textContent = sourceRawRawContent || '上游没有返回原始内容。';
+    if (rawContent) rawContent.textContent = sourceRawUnfilteredNodes.length ? sourceRawUnfilteredNodes.join('\\n') : '没有提取到未过滤节点。';
   }
   if (summary) renderSourceRawSummary({ state: 'checking', nodeCount: 0, rawNodeCount: 0 });
   renderSourceRawProcess({});
@@ -2131,7 +2147,10 @@ async function openSourceRawDialog(type, key, preserveState = false) {
       }
     };
   }
-  if (search) search.oninput = renderSourceRawResults;
+  if (search) search.oninput = () => {
+    if (content) content.scrollTop = 0;
+    renderSourceRawResults();
+  };
   if (autoRefresh && !preserveState) {
     autoRefresh.checked = false;
     autoRefresh.onchange = () => {
@@ -2180,17 +2199,24 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     if (!response.ok) throw new Error(result?.error || '请求失败（HTTP ' + response.status + '）');
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
     sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
-    sourceRawRawContent = Array.isArray(result.rawSources)
-      ? result.rawSources.map((item) => (item.key ? '### ' + item.type + ' · ' + item.key + '\\n' : '') + String(item.content || '')).join('\\n\\n')
-      : '';
-    sourceRawNodeSources = new Map((Array.isArray(result.nodeSources) ? result.nodeSources : []).map((item) => [item.value, (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key]));
+    sourceRawUnfilteredNodes = Array.isArray(result.unfilteredNodes) ? result.unfilteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+    sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
+    sourceRawNodeSources = new Map();
+    if (type === 'customApis') {
+      (Array.isArray(result.nodeSources) ? result.nodeSources : []).forEach((item) => {
+        const label = (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key + (item.remark ? ' · 备注：' + item.remark : '');
+        const values = sourceRawNodeSources.get(item.value) || [];
+        if (!values.includes(label)) values.push(label);
+        sourceRawNodeSources.set(item.value, values);
+      });
+    }
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
-    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], status: nextStatus, savedAt: Date.now() });
+    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
-    if (rawContent) rawContent.textContent = sourceRawRawContent || '上游没有返回原始内容。';
+    if (rawContent) rawContent.textContent = sourceRawUnfilteredNodes.length ? sourceRawUnfilteredNodes.join('\\n') : '没有提取到未过滤节点。';
     if (isManagedSource) {
       renderSourceStatusSummary();
       if ($('subsList')) renderSubs();

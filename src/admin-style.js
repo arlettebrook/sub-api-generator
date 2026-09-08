@@ -1820,12 +1820,32 @@ export const adminStyle = `
     white-space: normal;
   }
 
+  #sourceRawRawContent {
+    white-space: pre-wrap;
+  }
+
   .source-raw-node-line {
-    display: flex;
-    align-items: center;
+    display: grid;
+    align-content: center;
+    gap: 2px;
     border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
     color: var(--text-secondary);
     white-space: pre;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .source-raw-node-value,
+  .source-raw-node-source {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-raw-node-source {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    line-height: 1.2;
   }
 
   .source-raw-actions {
