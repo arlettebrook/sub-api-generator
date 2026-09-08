@@ -1643,7 +1643,7 @@ export const adminStyle = `
     min-height: 180px;
     max-height: min(62vh, 680px);
     margin: 0;
-    padding: 14px 16px;
+    padding: 48px 16px 14px;
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -1657,15 +1657,23 @@ export const adminStyle = `
   }
 
   .preview-api-data-wrap {
-    display: grid;
-    gap: 8px;
+    position: relative;
   }
 
   .preview-api-top-button {
-    justify-self: end;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
     min-height: 34px;
+    padding: 0 10px;
     border-color: var(--border-hover);
+    background: var(--surface-solid);
+    background: color-mix(in srgb, var(--surface-solid) 88%, transparent);
     color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
 
   .preview-data-status {
@@ -3522,7 +3530,8 @@ export const adminStyle = `
     }
     .preview-data-status span + span::before { display: none; }
     .preview-data-status span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .preview-api-data { max-height: 58vh; font-size: 12px; overflow-x: auto; }
+    .preview-api-data { max-height: 58vh; padding-top: 48px; font-size: 12px; overflow-x: auto; }
+    .preview-api-top-button { top: 8px; right: 8px; min-height: 32px; font-size: 12px; }
     .nodes-grid {
       gap: 6px;
     }
