@@ -140,7 +140,7 @@ export const adminHTML = `
     </button>
     <div class="preview-view-toggle" role="group" aria-label="数据查看方式">
       <button class="btn-subtle active" type="button" data-preview-mode="nodes" aria-pressed="true">节点结果</button>
-      <button class="btn-subtle" type="button" data-preview-mode="raw" aria-pressed="false">原始数据</button>
+      <button class="btn-subtle" type="button" data-preview-mode="api" aria-pressed="false">API 数据</button>
     </div>
     <span class="nodes-count" id="nodesCount">共 0 个节点</span>
   </div>

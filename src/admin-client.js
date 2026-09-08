@@ -473,10 +473,7 @@ function initTheme() {
 
 // ======================== 优选节点展示与增强分页 ========================
 let currentNodes = [];
-let currentRawNodes = [];
 let previewDataMode = 'nodes';
-let rawPreviewRequest = null;
-let rawPreviewLoadedPath = '';
 let currentPage = 1;
 const pageSize = 12; // 每页显示12个节点
 let activeNodeRequest = null;
@@ -485,27 +482,13 @@ const emptyNodeRetryDelays = [500, 1200];
 const PREVIEW_MODE_STORAGE_KEY = 'preview-data-mode';
 
 function getPreviewDataNodes() {
-  return previewDataMode === 'raw' ? currentRawNodes : currentNodes;
-}
-
-function parsePreviewNodeText(text, nodeSources = []) {
-  const lines = Array.isArray(text) ? text : String(text || '').split('\\n');
-  const sourceMap = new Map((Array.isArray(nodeSources) ? nodeSources : []).map((item) => [item.value, item]));
-  return lines.map((line) => String(line || '').trim()).filter(Boolean).map((line) => {
-    const hashIndex = line.indexOf('#');
-    const host = hashIndex === -1 ? line : line.slice(0, hashIndex).trim();
-    const remark = hashIndex === -1 ? '未命名' : line.slice(hashIndex + 1).trim() || '未命名';
-    const node = { host, remark };
-    const source = sourceMap.get(line);
-    if (source) { node.sourceType = source.type; node.sourceKey = source.key; }
-    return node;
-  });
+  return currentNodes;
 }
 
 function loadPreviewDataMode() {
   try {
     const value = localStorage.getItem(PREVIEW_MODE_STORAGE_KEY);
-    return value === 'raw' ? 'raw' : 'nodes';
+    return value === 'api' || value === 'raw' ? 'api' : 'nodes';
   } catch { return 'nodes'; }
 }
 
@@ -521,47 +504,12 @@ function applyPreviewDataMode() {
   });
 }
 
-async function loadRawPreviewNodes() {
-  const path = $('previewApiSelect')?.value || '';
-  if (!path) { currentRawNodes = []; renderNodeView(); return; }
-  if (rawPreviewRequest) rawPreviewRequest.abort();
-  const controller = new AbortController();
-  rawPreviewRequest = controller;
-  try {
-    const response = await fetch('/api/custom-api-preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result?.error || '原始数据检测失败');
-    if (controller.signal.aborted || $('previewApiSelect')?.value !== path) return;
-    currentRawNodes = parsePreviewNodeText(result.unfilteredNodes || [], result.nodeSources || []);
-    rawPreviewLoadedPath = path;
-    renderPreviewSourceErrors(result.status?.errors || []);
-    updateRegionOptions();
-    updateNodeFilterOptions();
-    renderNodeView();
-  } catch (error) {
-    if (error?.name === 'AbortError') return;
-    showToast(error.message || '原始数据检测失败', 'error');
-  } finally {
-    if (rawPreviewRequest === controller) rawPreviewRequest = null;
-  }
-}
-
 function setPreviewDataMode(mode) {
-  const nextMode = mode === 'raw' ? 'raw' : 'nodes';
+  const nextMode = mode === 'api' ? 'api' : 'nodes';
   if (nextMode === previewDataMode) return;
   previewDataMode = nextMode;
   savePreviewDataMode();
   applyPreviewDataMode();
-  if (previewDataMode === 'raw' && rawPreviewLoadedPath !== ($('previewApiSelect')?.value || '')) {
-    void loadRawPreviewNodes();
-    return;
-  }
   updateRegionOptions();
   updateNodeFilterOptions();
   renderNodeView();
@@ -661,8 +609,6 @@ function getPreviewApiUrl() {
 async function fetchNodes(emptyRetry = 0) {
   const sequence = ++nodeLoadSequence;
   if (activeNodeRequest) activeNodeRequest.abort();
-  if (rawPreviewRequest) rawPreviewRequest.abort();
-  rawPreviewRequest = null;
   const controller = new AbortController();
   activeNodeRequest = controller;
   nodesContainer.innerHTML = nodeSkeletonMarkup();
@@ -671,8 +617,6 @@ async function fetchNodes(emptyRetry = 0) {
   const apiUrl = getPreviewApiUrl();
   if (!apiUrl) {
     currentNodes = [];
-    currentRawNodes = [];
-    rawPreviewLoadedPath = '';
     updateRegionOptions();
     updateNodeFilterOptions();
     renderNodeView();
@@ -712,8 +656,6 @@ async function fetchNodes(emptyRetry = 0) {
       if (source) { node.sourceType = source.type; node.sourceKey = source.key; }
     });
     currentNodes = nodes;
-    currentRawNodes = nodes.slice();
-    rawPreviewLoadedPath = '';
     updateRegionOptions();
     updateNodeFilterOptions();
     currentPage = 1;
@@ -726,7 +668,6 @@ async function fetchNodes(emptyRetry = 0) {
       return;
     }
     renderNodeView();
-    if (previewDataMode === 'raw') void loadRawPreviewNodes();
   } catch (err) {
     if (err.name === 'AbortError') return;
     nodesContainer.innerHTML = '';
@@ -753,12 +694,20 @@ function renderNodes(nodes) {
     return;
   }
 
-  if (previewDataMode === 'raw') {
+  if (previewDataMode === 'api') {
     const raw = document.createElement('pre');
-    raw.className = 'preview-raw-data';
-    raw.setAttribute('aria-label', '原始节点数据');
+    raw.className = 'preview-api-data';
+    raw.setAttribute('aria-label', 'API 数据');
     raw.textContent = nodes.map(formatPreviewNodeLine).join('\\n');
-    nodesContainer.replaceChildren(raw);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'preview-api-data-wrap';
+    const topButton = document.createElement('button');
+    topButton.type = 'button';
+    topButton.className = 'btn-subtle preview-api-top-button';
+    topButton.textContent = '返回数据顶部';
+    topButton.onclick = () => { raw.scrollTo({ top: 0, behavior: 'smooth' }); };
+    wrapper.append(raw, topButton);
+    nodesContainer.replaceChildren(wrapper);
     paginationEl.innerHTML = '';
     return;
   }
@@ -3635,6 +3584,7 @@ function cachePageElements() {
   nodesSourceFilterEl = $('nodesSourceFilter');
   nodesStatusFilterEl = $('nodesStatusFilter');
   previewModeButtons = document.querySelectorAll('[data-preview-mode]');
+  applyPreviewDataMode();
 }
 
 function bindPageControls() {

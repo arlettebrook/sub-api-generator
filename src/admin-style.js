@@ -1639,7 +1639,7 @@ export const adminStyle = `
     font-weight: 600;
   }
 
-  .preview-raw-data {
+  .preview-api-data {
     min-height: 180px;
     max-height: min(62vh, 680px);
     margin: 0;
@@ -1652,6 +1652,18 @@ export const adminStyle = `
     font: 13px/1.65 'SF Mono', Monaco, 'Cascadia Code', monospace;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  .preview-api-data-wrap {
+    display: grid;
+    gap: 8px;
+  }
+
+  .preview-api-top-button {
+    justify-self: end;
+    min-height: 34px;
+    border-color: var(--border-hover);
+    color: var(--text-secondary);
   }
 
   .source-raw-dialog {
