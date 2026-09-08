@@ -1837,6 +1837,42 @@ export const adminStyle = `
     box-sizing: border-box;
   }
 
+  .source-raw-source-group {
+    margin-bottom: 14px;
+    padding: 10px 12px 4px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-tertiary) 78%, transparent);
+  }
+
+  .source-raw-source-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .source-raw-source-heading span {
+    flex: 0 0 auto;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .source-raw-source-detail {
+    display: block;
+    margin: 4px 0 6px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .source-raw-source-group .source-raw-node-line:last-child {
+    border-bottom: 0;
+  }
+
   .source-raw-node-value,
   .source-raw-node-source {
     overflow-wrap: anywhere;

@@ -2048,28 +2048,67 @@ function renderSourceRawResults() {
   } else {
     const showSources = sourceRawSelection?.type === 'customApis';
     const fragment = document.createDocumentFragment();
-    visible.forEach((node, index) => {
+    const renderNode = (node) => {
       const line = document.createElement('div');
       line.className = 'source-raw-node-line';
-      const source = sourceRawNodeSources.get(node);
       const value = document.createElement('span');
       value.className = 'source-raw-node-value';
       value.textContent = node;
       value.title = node;
       line.appendChild(value);
-      if (showSources && source) {
-        const meta = document.createElement('small');
-        meta.className = 'source-raw-node-source';
-        meta.textContent = Array.isArray(source) ? source.join('；') : source;
-        meta.title = meta.textContent;
-        line.appendChild(meta);
-      }
-      line.dataset.index = String(index);
-      fragment.appendChild(line);
-    });
+      return line;
+    };
+    if (showSources) {
+      const groups = new Map();
+      visible.forEach((node) => {
+        const sources = sourceRawNodeSources.get(node);
+        const labels = Array.isArray(sources) && sources.length ? sources : ['未识别来源'];
+        labels.forEach((label) => {
+          if (!groups.has(label)) groups.set(label, []);
+          groups.get(label).push(node);
+        });
+      });
+      groups.forEach((groupNodes, label) => {
+        const group = document.createElement('section');
+        group.className = 'source-raw-source-group';
+        const heading = document.createElement('div');
+        heading.className = 'source-raw-source-heading';
+        const title = document.createElement('strong');
+        title.textContent = formatSourceGroupLabel(label);
+        const total = document.createElement('span');
+        total.textContent = groupNodes.length + ' 个节点';
+        heading.append(title, total);
+        const detail = document.createElement('small');
+        detail.className = 'source-raw-source-detail';
+        detail.textContent = formatSourceGroupDetail(label);
+        detail.title = detail.textContent;
+        group.append(heading, detail);
+        groupNodes.forEach((node) => group.appendChild(renderNode(node)));
+        fragment.appendChild(group);
+      });
+    } else {
+      visible.forEach((node) => fragment.appendChild(renderNode(node)));
+    }
     content.appendChild(fragment);
   }
   if (count) count.textContent = query ? '显示 ' + visible.length + ' / ' + sourceRawNodes.length + ' 条' : sourceRawNodes.length + ' 条节点';
+}
+
+function formatSourceGroupLabel(label) {
+  if (!label || label === '未识别来源') return label || '未识别来源';
+  const parts = String(label).split(' · ');
+  const type = parts.shift() || '';
+  const key = parts.shift() || '';
+  return type + ' · ' + (key.split('/').pop() || key);
+}
+
+function formatSourceGroupDetail(label) {
+  if (!label || label === '未识别来源') return '';
+  const parts = String(label).split(' · ');
+  parts.shift();
+  const key = parts.shift() || '';
+  const remark = parts.join(' · ');
+  return key + (remark ? ' · ' + remark : '');
 }
 
 function setSourceRawTab(tab) {
