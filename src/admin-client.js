@@ -420,6 +420,77 @@ async function copyNodeData(event) {
   }
 }
 
+function sanitizeDownloadName(value, fallback = 'api-data') {
+  const safeName = String(value || '')
+    .replace(/[<>:"\\/|?*\u0000-\u001F]/g, '-')
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 80) || fallback;
+  return safeName.toLowerCase().endsWith('.txt') ? safeName : safeName + '.txt';
+}
+
+function saveTextDownload(text, filename, successMessage) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = sanitizeDownloadName(filename);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  if (successMessage) showToast(successMessage, 'success');
+}
+
+function getCustomApiDownloadName(path, entry) {
+  const remarkName = String(entry?.remark || '').trim();
+  return (remarkName && remarkName !== '未命名') ? remarkName : (String(path || '').split('/').filter(Boolean).pop() || 'api-data');
+}
+
+async function downloadCustomApiData(path, entry, button) {
+  const idleText = button?.textContent || '下载';
+  if (button) { button.disabled = true; button.textContent = '下载中…'; }
+  try {
+    const response = await fetch('/' + encodeURIComponent(String(path || '')).replace(/%2F/g, '/'), { cache: 'no-store', credentials: 'same-origin' });
+    if (!response.ok) throw new Error('请求失败：' + response.status);
+    const text = await response.text();
+    const lines = text.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
+    if (!lines.length) throw new Error('暂无可下载节点');
+    saveTextDownload(lines.join('\\n') + '\\n', getCustomApiDownloadName(path, entry), '已下载 ' + lines.length + ' 条 API 数据');
+  } catch (error) {
+    showToast('下载失败：' + (error.message || error), 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = idleText; }
+  }
+}
+
+async function downloadSourceData(type, key, entry, button) {
+  const idleText = button?.textContent || '下载';
+  if (button) { button.disabled = true; button.textContent = '下载中…'; }
+  try {
+    const response = await fetch('/api/source-raw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+      body: JSON.stringify({ type, key }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || '请求失败：' + response.status);
+    const lines = Array.isArray(payload.nodes) ? payload.nodes.filter(Boolean) : [];
+    if (!lines.length) throw new Error('暂无可下载节点');
+    const fallback = type === 'apis'
+      ? String(key).split('/').filter(Boolean).pop()
+      : String(key).replace(/^https?:\\/\\//i, '').replace(/[^a-zA-Z0-9._-]+/g, '-') || 'subscription';
+    const name = String(entry?.remark || '').trim() || fallback;
+    saveTextDownload(lines.join('\\n') + '\\n', name, '已下载 ' + lines.length + ' 条节点数据');
+  } catch (error) {
+    showToast('下载失败：' + (error.message || error), 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = idleText; }
+  }
+}
+
 function downloadNodeData(event) {
   const nodes = getVisibleNodes();
   if (!nodes.length) { showToast('暂无节点数据可下载', 'error'); return; }
@@ -430,16 +501,7 @@ function downloadNodeData(event) {
   anchor.href = url;
   const selectedPath = $('previewApiSelect')?.value || '';
   const selectedApi = selectedPath && customApis?.[selectedPath];
-  const remarkName = String(selectedApi?.remark || '').trim();
-  const preferredName = (remarkName && remarkName !== '未命名')
-    ? remarkName
-    : selectedPath.split('/').filter(Boolean).pop() || 'api-data';
-  const safeName = preferredName
-    .replace(/[<>:"\\/|?*\u0000-\u001F]/g, '-')
-    .replace(/[. ]+$/g, '')
-    .trim()
-    .slice(0, 80) || 'api-data';
-  anchor.download = safeName.toLowerCase().endsWith('.txt') ? safeName : safeName + '.txt';
+  anchor.download = sanitizeDownloadName(getCustomApiDownloadName(selectedPath, selectedApi));
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -1756,6 +1818,13 @@ function renderCustomApis() {
       finally { viewBtn.disabled = false; viewBtn.textContent = '👁 查看'; }
     };
 
+    const downloadBtn = document.createElement('button');
+    downloadBtn.type = 'button';
+    downloadBtn.className = 'btn-outline icon-action';
+    downloadBtn.textContent = '⬇ 下载';
+    downloadBtn.setAttribute('aria-label', '下载优选 API 数据 ' + (entry.remark || '/' + path));
+    downloadBtn.onclick = () => downloadCustomApiData(path, entry, downloadBtn);
+
     const openBtn = document.createElement('button');
     openBtn.type = 'button';
     openBtn.className = 'btn-outline icon-action';
@@ -1768,7 +1837,7 @@ function renderCustomApis() {
     delBtn.type = 'button';
     delBtn.setAttribute('aria-label', '🗑 删除');
     delBtn.onclick = () => confirmCustomApiDelete(path);
-    actions.append(switchLabel, editBtn, viewBtn, copyBtn, openBtn, delBtn);
+    actions.append(switchLabel, editBtn, viewBtn, downloadBtn, copyBtn, openBtn, delBtn);
 
     row.append(main, actions);
     el.appendChild(row);
@@ -2148,6 +2217,13 @@ function renderSubs() {
       finally { viewBtn.disabled = false; viewBtn.textContent = '查看'; }
     };
     row.appendChild(viewBtn);
+    const downloadBtn = document.createElement('button');
+    downloadBtn.type = 'button';
+    downloadBtn.className = 'btn-outline source-download-button';
+    downloadBtn.textContent = '下载';
+    downloadBtn.setAttribute('aria-label', '下载订阅源节点数据 ' + host);
+    downloadBtn.onclick = () => downloadSourceData('subs', host, entry, downloadBtn);
+    row.appendChild(downloadBtn);
     row.appendChild(delBtn);
     el.appendChild(row);
   });
@@ -2370,6 +2446,13 @@ function renderApis() {
       finally { viewBtn.disabled = false; viewBtn.textContent = '查看'; }
     };
     row.appendChild(viewBtn);
+    const downloadBtn = document.createElement('button');
+    downloadBtn.type = 'button';
+    downloadBtn.className = 'btn-outline source-download-button';
+    downloadBtn.textContent = '下载';
+    downloadBtn.setAttribute('aria-label', '下载 API 源节点数据 ' + url);
+    downloadBtn.onclick = () => downloadSourceData('apis', url, entry, downloadBtn);
+    row.appendChild(downloadBtn);
     row.appendChild(delBtn);
     el.appendChild(row);
   });

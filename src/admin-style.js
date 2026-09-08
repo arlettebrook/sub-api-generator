@@ -1610,6 +1610,10 @@ export const adminStyle = `
     white-space: nowrap;
   }
 
+  .source-download-button {
+    white-space: nowrap;
+  }
+
   .preview-view-toggle {
     display: inline-flex;
     align-items: center;
