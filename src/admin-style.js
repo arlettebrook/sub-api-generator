@@ -1697,6 +1697,35 @@ export const adminStyle = `
     gap: 8px;
   }
 
+  .source-raw-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .source-raw-tab {
+    height: 34px;
+    padding: 0 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .source-raw-tab.active {
+    border-bottom-color: var(--accent-primary);
+    color: var(--accent-primary);
+    font-weight: 700;
+  }
+
+  .source-raw-tab:hover {
+    background: var(--accent-light);
+    box-shadow: none;
+    transform: none;
+  }
+
   .source-raw-search {
     display: flex;
     align-items: center;
@@ -1767,6 +1796,16 @@ export const adminStyle = `
   .source-raw-content {
     min-height: 180px;
     max-height: min(52vh, 520px);
+    overflow-y: auto;
+    white-space: normal;
+  }
+
+  .source-raw-node-line {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    color: var(--text-secondary);
+    white-space: pre;
   }
 
   .source-raw-actions {
@@ -2733,6 +2772,12 @@ export const adminStyle = `
     .source-raw-toolbar {
       align-items: stretch;
       flex-direction: column;
+    }
+    .source-raw-tabs {
+      width: 100%;
+    }
+    .source-raw-tab {
+      flex: 1;
     }
     .source-raw-toolbar button {
       min-height: 40px;

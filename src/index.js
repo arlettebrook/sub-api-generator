@@ -145,13 +145,16 @@ async function handleSourceRaw(request, env) {
   if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
   subscriptions.clearAggregateCache();
   try {
-    const response = await subscriptions.handleRoot(env, [{ type, key }]);
+    const resultOptions = { includeRaw: true };
+    const response = await subscriptions.handleRoot(env, [{ type, key }], resultOptions);
     const snapshot = await getSourceStatusSnapshot(env, false);
     await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
     const text = await response.text();
     const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const rawSources = resultOptions.rawSources || [];
     return pagesJsonResponse({
       nodes,
+      rawSources,
       status: snapshot[type]?.[key] || null,
     }, response.ok ? 200 : response.status);
   } catch (error) {
@@ -177,9 +180,11 @@ async function handleCustomApiPreview(request, env) {
   }
   subscriptions.clearAggregateCache();
   const startedAt = Date.now();
-  const response = await subscriptions.handleRoot(env, sourceSelection);
+  const resultOptions = { includeRaw: true };
+  const response = await subscriptions.handleRoot(env, sourceSelection, resultOptions);
   const text = await response.text();
   const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const rawSources = resultOptions.rawSources || [];
   const snapshot = await getSourceStatusSnapshot(env, false);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
   const selectedStatuses = (sourceSelection || []).map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
@@ -196,6 +201,7 @@ async function handleCustomApiPreview(request, env) {
   }
   return pagesJsonResponse({
     nodes,
+    rawSources,
     status: {
       state: nodes.length ? "success" : (errorList.length ? "error" : "empty"),
       nodeCount: nodes.length,

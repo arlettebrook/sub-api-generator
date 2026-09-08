@@ -106,6 +106,7 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
     if (parsed) result.push(parsed);
   }
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
+  Object.defineProperty(result, "rawContent", { value: rawContent, enumerable: false });
   return result;
 }
 
@@ -162,6 +163,7 @@ async function fetchApiSubs(apiUrl) {
   }, "API 源");
   const result = decodeSubscriptionBody(response.content).split(/\r?\n/).filter((line) => line.trim() !== "");
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
+  Object.defineProperty(result, "rawContent", { value: decodeSubscriptionBody(response.content), enumerable: false });
   return result;
 }
 
@@ -337,7 +339,7 @@ async function allSettledWithConcurrency(tasks, limit = SOURCE_CHECK_CONCURRENCY
   return results;
 }
 
-export async function handleRoot(env, sourceSelection) {
+export async function handleRoot(env, sourceSelection, options = {}) {
   try {
     const [subsConfig, apisConfig, blacklistConfig, filterRulesConfig] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
@@ -404,7 +406,7 @@ export async function handleRoot(env, sourceSelection) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "subs", key: host, values };
+          return { type: "subs", key: host, values, rawContent: rawValues.rawContent || "" };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "subs";
@@ -443,7 +445,7 @@ export async function handleRoot(env, sourceSelection) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "apis", key: apiUrl, values };
+          return { type: "apis", key: apiUrl, values, rawContent: rawValues.rawContent || "" };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "apis";
@@ -501,6 +503,11 @@ export async function handleRoot(env, sourceSelection) {
       "cache-control": "no-store",
     };
     if (nodeSources.length) headers["x-node-sources"] = encodeURIComponent(JSON.stringify(nodeSources.slice(0, 1000)));
+    if (options.includeRaw) {
+      options.rawSources = sourceResults
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => ({ type: result.value.type, key: result.value.key, content: String(result.value.rawContent || "").slice(0, 100000) }));
+    }
     return new Response(output, {
       headers: withSecurityHeaders(headers),
     });

@@ -67,11 +67,16 @@ export const adminHTML = `
   </div>
   <div class="source-raw-body">
     <div class="source-raw-summary" id="sourceRawSummary" aria-live="polite"></div>
+    <div class="source-raw-tabs" role="tablist" aria-label="查看内容">
+      <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-raw-tab="nodes">节点结果</button>
+      <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-raw-tab="raw">原始返回内容</button>
+    </div>
     <div class="source-raw-toolbar">
       <label class="source-raw-search"><span aria-hidden="true">⌕</span><input id="sourceRawSearch" type="search" placeholder="搜索 IP、端口或备注" autocomplete="off" aria-label="搜索原始数据" /></label>
       <button class="btn-outline" type="button" id="copySourceRawButton">📋 复制全部</button>
     </div>
     <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在检测数据源…</pre>
+    <pre id="sourceRawRawContent" class="source-raw-code source-raw-content" hidden>正在检测数据源…</pre>
     <div class="source-raw-actions">
       <span id="sourceRawResultCount" class="source-raw-result-count"></span>
       <button class="btn-outline" type="button" id="reloadSourceRawButton">🔄 重新检测</button>

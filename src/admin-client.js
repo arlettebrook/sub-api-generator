@@ -837,6 +837,8 @@ let pendingCustomApiDelete = null;
 let sourceRawRequest = null;
 let sourceRawSelection = null;
 let sourceRawNodes = [];
+let sourceRawRawContent = '';
+let sourceRawTab = 'nodes';
 
 function setCustomApisDirty(dirty = true) {
   customApisDirty = dirty;
@@ -1948,6 +1950,7 @@ function closeSourceRawDialog() {
   sourceRawRequest = null;
   sourceRawSelection = null;
   sourceRawNodes = [];
+  sourceRawRawContent = '';
   const dialog = $('sourceRawDialog');
   if (dialog?.open) dialog.close();
 }
@@ -1988,8 +1991,44 @@ function renderSourceRawResults() {
   if (!content) return;
   const query = ($('sourceRawSearch')?.value || '').trim().toLowerCase();
   const visible = query ? sourceRawNodes.filter((node) => node.toLowerCase().includes(query)) : sourceRawNodes;
-  content.textContent = visible.length ? visible.join('\\n') : (sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。');
+  content.innerHTML = '';
+  if (!visible.length) {
+    content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
+  } else {
+    const rowHeight = 28;
+    const start = Math.max(0, Math.floor((content.scrollTop || 0) / rowHeight) - 12);
+    const end = Math.min(visible.length, Math.ceil(((content.clientHeight || 320) + (content.scrollTop || 0)) / rowHeight) + 12);
+    const top = document.createElement('div');
+    top.style.height = start * rowHeight + 'px';
+    const fragment = document.createDocumentFragment();
+    visible.slice(start, end).forEach((node, index) => {
+      const line = document.createElement('div');
+      line.className = 'source-raw-node-line';
+      line.textContent = node;
+      line.style.height = rowHeight + 'px';
+      line.dataset.index = String(start + index);
+      fragment.appendChild(line);
+    });
+    const bottom = document.createElement('div');
+    bottom.style.height = Math.max(0, visible.length - end) * rowHeight + 'px';
+    content.append(top, fragment, bottom);
+  }
   if (count) count.textContent = query ? '显示 ' + visible.length + ' / ' + sourceRawNodes.length + ' 条' : sourceRawNodes.length + ' 条节点';
+}
+
+function setSourceRawTab(tab) {
+  sourceRawTab = tab === 'raw' ? 'raw' : 'nodes';
+  document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
+    const active = button.dataset.sourceRawTab === sourceRawTab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  const nodes = $('sourceRawContent');
+  const raw = $('sourceRawRawContent');
+  const toolbar = document.querySelector('.source-raw-toolbar');
+  if (nodes) nodes.hidden = sourceRawTab !== 'nodes';
+  if (raw) raw.hidden = sourceRawTab !== 'raw';
+  if (toolbar) toolbar.hidden = sourceRawTab !== 'nodes';
 }
 
 async function openSourceRawDialog(type, key) {
@@ -2001,16 +2040,20 @@ async function openSourceRawDialog(type, key) {
   sourceRawRequest = controller;
   sourceRawSelection = { type, key };
   sourceRawNodes = [];
+  sourceRawRawContent = '';
   const title = $('sourceRawDialogSource');
   const content = $('sourceRawContent');
+  const rawContent = $('sourceRawRawContent');
   const summary = $('sourceRawSummary');
   const reload = $('reloadSourceRawButton');
   const copy = $('copySourceRawButton');
   const search = $('sourceRawSearch');
+  setSourceRawTab('nodes');
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
   if (search) search.value = '';
   if (content) content.textContent = '正在检测数据源…';
+  if (rawContent) rawContent.textContent = '正在检测数据源…';
   if (summary) renderSourceRawSummary({ state: 'checking', nodeCount: 0, rawNodeCount: 0 });
   if ($('sourceRawResultCount')) $('sourceRawResultCount').textContent = '';
   if (reload) reload.disabled = true;
@@ -2026,6 +2069,16 @@ async function openSourceRawDialog(type, key) {
     };
   }
   if (search) search.oninput = renderSourceRawResults;
+  document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
+    button.onclick = () => setSourceRawTab(button.dataset.sourceRawTab);
+  });
+  if (content) content.onscroll = () => {
+    if (sourceRawRenderFrame) return;
+    sourceRawRenderFrame = requestAnimationFrame(() => {
+      sourceRawRenderFrame = 0;
+      renderSourceRawResults();
+    });
+  };
   if (!dialog.open) dialog.showModal();
   const isManagedSource = type === 'subs' || type === 'apis';
   const normalizedKey = isManagedSource ? normalizeSourceKeyClient(type, key) : key;
@@ -2050,10 +2103,14 @@ async function openSourceRawDialog(type, key) {
     if (!response.ok) throw new Error(result?.error || '请求失败（HTTP ' + response.status + '）');
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
     sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+    sourceRawRawContent = Array.isArray(result.rawSources)
+      ? result.rawSources.map((item) => (item.key ? '### ' + item.type + ' · ' + item.key + '\\n' : '') + String(item.content || '')).join('\\n\\n')
+      : '';
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawResults();
+    if (rawContent) rawContent.textContent = sourceRawRawContent || '上游没有返回原始内容。';
     if (isManagedSource) {
       renderSourceStatusSummary();
       if ($('subsList')) renderSubs();
