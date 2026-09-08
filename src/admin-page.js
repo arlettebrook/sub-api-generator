@@ -67,18 +67,20 @@ export const adminHTML = `
   </div>
   <div class="source-raw-body">
     <div class="source-raw-summary" id="sourceRawSummary" aria-live="polite"></div>
+    <div class="source-raw-process" id="sourceRawProcess" aria-live="polite"></div>
     <div class="source-raw-tabs" role="tablist" aria-label="查看内容">
       <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-raw-tab="nodes">节点结果</button>
       <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-raw-tab="raw">原始返回内容</button>
     </div>
     <div class="source-raw-toolbar">
       <label class="source-raw-search"><span aria-hidden="true">⌕</span><input id="sourceRawSearch" type="search" placeholder="搜索 IP、端口或备注" autocomplete="off" aria-label="搜索原始数据" /></label>
-      <button class="btn-outline" type="button" id="copySourceRawButton">📋 复制全部</button>
+      <button class="btn-outline" type="button" id="copySourceRawButton">📋 复制筛选结果</button>
     </div>
     <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在检测数据源…</pre>
     <pre id="sourceRawRawContent" class="source-raw-code source-raw-content" hidden>正在检测数据源…</pre>
     <div class="source-raw-actions">
       <span id="sourceRawResultCount" class="source-raw-result-count"></span>
+      <label class="source-raw-auto-refresh"><input id="sourceRawAutoRefresh" type="checkbox" /> 自动刷新 <select id="sourceRawRefreshInterval" aria-label="自动刷新间隔"><option value="30">30 秒</option><option value="60">60 秒</option><option value="120">2 分钟</option></select></label>
       <button class="btn-outline" type="button" id="reloadSourceRawButton">🔄 重新检测</button>
       <button class="btn-primary" type="button" onclick="closeSourceRawDialog()">关闭</button>
     </div>

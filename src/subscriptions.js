@@ -106,7 +106,7 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
     if (parsed) result.push(parsed);
   }
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
-  Object.defineProperty(result, "rawContent", { value: rawContent, enumerable: false });
+  Object.defineProperty(result, "rawContent", { value: response.content, enumerable: false });
   return result;
 }
 
@@ -163,7 +163,7 @@ async function fetchApiSubs(apiUrl) {
   }, "API 源");
   const result = decodeSubscriptionBody(response.content).split(/\r?\n/).filter((line) => line.trim() !== "");
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
-  Object.defineProperty(result, "rawContent", { value: decodeSubscriptionBody(response.content), enumerable: false });
+  Object.defineProperty(result, "rawContent", { value: response.content, enumerable: false });
   return result;
 }
 
@@ -235,8 +235,11 @@ function isBlacklisted(value, blacklistRegex) {
 function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = []) {
   const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
   const result = [];
+  const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
   for (const value of lines) {
-    if (!value || isBlacklisted(value, blacklistRegex)) continue;
+    stats.inputCount += 1;
+    if (!value) { stats.invalidCount += 1; continue; }
+    if (isBlacklisted(value, blacklistRegex)) { stats.blacklistedCount += 1; continue; }
     const hashIndex = value.indexOf("#");
     if (hashIndex < 0) {
       result.push(value);
@@ -245,29 +248,35 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
     const remark = cleanPreferredRemark(value.slice(hashIndex + 1), filterRules);
     result.push(`${value.slice(0, hashIndex)}${remark ? `#${remark}` : ""}`);
   }
+  stats.outputCount = result.length;
+  Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
   return result;
 }
 
 function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = DEFAULT_FILTER_RULES) {
   const result = [];
   const seen = new Set();
+  const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
   const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
   for (const value of lines) {
+    stats.inputCount += 1;
     if (!value) continue;
     const line = value.trim();
     const match = NODE_MATCH_REGEX.exec(line);
-    if (!match) continue;
+    if (!match) { stats.invalidCount += 1; continue; }
     const node = match[0];
     const hashIndex = line.indexOf("#");
     const rawRemark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
     const rawFull = rawRemark ? `${node}#${rawRemark}` : node;
-    if (isBlacklisted(rawFull, blacklistRegex)) continue;
+    if (isBlacklisted(rawFull, blacklistRegex)) { stats.blacklistedCount += 1; continue; }
     const remark = rawRemark ? cleanPreferredRemark(rawRemark, filterRules) : "";
     const cleaned = remark ? `${node}#${remark}` : node;
-    if (seen.has(cleaned)) continue;
+    if (seen.has(cleaned)) { stats.duplicateCount += 1; continue; }
     seen.add(cleaned);
     result.push(cleaned);
   }
+  stats.outputCount = result.length;
+  Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
   return result;
 }
 
@@ -406,7 +415,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "subs", key: host, values, rawContent: rawValues.rawContent || "" };
+          return { type: "subs", key: host, values, rawContent: rawValues.rawContent || "", filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "subs";
@@ -445,7 +454,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "apis", key: apiUrl, values, rawContent: rawValues.rawContent || "" };
+          return { type: "apis", key: apiUrl, values, rawContent: rawValues.rawContent || "", filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "apis";
@@ -506,7 +515,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     if (options.includeRaw) {
       options.rawSources = sourceResults
         .filter((result) => result.status === "fulfilled")
-        .map((result) => ({ type: result.value.type, key: result.value.key, content: String(result.value.rawContent || "").slice(0, 100000) }));
+        .map((result) => ({ type: result.value.type, key: result.value.key, content: String(result.value.rawContent || "").slice(0, 100000), filterStats: result.value.filterStats || null }));
     }
     return new Response(output, {
       headers: withSecurityHeaders(headers),

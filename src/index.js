@@ -43,6 +43,23 @@ function makeAssetVersion(...contents) {
 }
 
 const ADMIN_ASSET_VERSION = makeAssetVersion(adminStyle, adminClientScript);
+const previewActive = new Map();
+const previewRecent = new Map();
+const PREVIEW_MAX_CONCURRENT = 4;
+const PREVIEW_COOLDOWN_MS = 2500;
+
+function acquirePreviewProtection(key) {
+  const now = Date.now();
+  const last = previewRecent.get(key) || 0;
+  if (now - last < PREVIEW_COOLDOWN_MS) return { error: pagesJsonResponse({ error: "检测过于频繁，请稍后重试", code: "RATE_LIMITED", retryAfterMs: PREVIEW_COOLDOWN_MS - (now - last) }, 429) };
+  if (previewActive.size >= PREVIEW_MAX_CONCURRENT && !previewActive.has(key)) return { error: pagesJsonResponse({ error: "检测任务繁忙，请稍后重试", code: "BUSY" }, 429) };
+  previewRecent.set(key, now);
+  previewActive.set(key, (previewActive.get(key) || 0) + 1);
+  return { release() {
+    const count = (previewActive.get(key) || 1) - 1;
+    if (count > 0) previewActive.set(key, count); else previewActive.delete(key);
+  } };
+}
 
 async function handleGetSubs(env) {
   const data = await env.KV.get(KV_KEY_SUBS, "json");
@@ -143,6 +160,8 @@ async function handleSourceRaw(request, env) {
   const configured = await env.KV.get(type === "subs" ? KV_KEY_SUBS : KV_KEY_APIS, "json");
   const normalized = normalizeKvData(configured, type);
   if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
+  const guard = acquirePreviewProtection('source:' + type + ':' + key);
+  if (guard.error) return guard.error;
   subscriptions.clearAggregateCache();
   try {
     const resultOptions = { includeRaw: true };
@@ -152,13 +171,21 @@ async function handleSourceRaw(request, env) {
     const text = await response.text();
     const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const rawSources = resultOptions.rawSources || [];
+    const nodeSources = nodes.map((value) => ({ value, type, key }));
+    const filterStats = rawSources.reduce((total, source) => {
+      for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
+      return total;
+    }, {});
     return pagesJsonResponse({
       nodes,
       rawSources,
-      status: snapshot[type]?.[key] || null,
+      nodeSources,
+      status: { ...(snapshot[type]?.[key] || {}), filterStats },
     }, response.ok ? 200 : response.status);
   } catch (error) {
     return pagesJsonResponse({ error: error.message || "数据源检测失败", code: error.code || "ERROR" }, error.statusCode >= 400 ? error.statusCode : 502);
+  } finally {
+    guard.release();
   }
 }
 
@@ -170,6 +197,9 @@ async function handleCustomApiPreview(request, env) {
   const configured = normalizeCustomApiData(await env.KV.get(KV_KEY_CUSTOM_APIS, "json"));
   const entry = configured[path];
   if (!entry) return pagesTextResponse("优选 API 不存在", 404);
+  const guard = acquirePreviewProtection('custom:' + path);
+  if (guard.error) return guard.error;
+  try {
   let sourceSelection = entry.sources;
   if (entry.sourceMode !== SOURCE_MODE_SELECTED) {
     const [subs, apis] = await Promise.all([env.KV.get(KV_KEY_SUBS, "json"), env.KV.get(KV_KEY_APIS, "json")]);
@@ -185,6 +215,15 @@ async function handleCustomApiPreview(request, env) {
   const text = await response.text();
   const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const rawSources = resultOptions.rawSources || [];
+  let nodeSources = [];
+  const nodeSourceHeader = response.headers.get("x-node-sources");
+  if (nodeSourceHeader) {
+    try { nodeSources = JSON.parse(decodeURIComponent(nodeSourceHeader)); } catch { /* ignore malformed source mapping */ }
+  }
+  const filterStats = rawSources.reduce((total, source) => {
+    for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
+    return total;
+  }, {});
   const snapshot = await getSourceStatusSnapshot(env, false);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
   const selectedStatuses = (sourceSelection || []).map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
@@ -202,6 +241,7 @@ async function handleCustomApiPreview(request, env) {
   return pagesJsonResponse({
     nodes,
     rawSources,
+    nodeSources,
     status: {
       state: nodes.length ? "success" : (errorList.length ? "error" : "empty"),
       nodeCount: nodes.length,
@@ -210,8 +250,12 @@ async function handleCustomApiPreview(request, env) {
       statusCode: response.status,
       error: errorList.map((item) => item.message).filter(Boolean).join("；"),
       errors: errorList,
+      filterStats,
     },
   }, response.ok ? 200 : response.status);
+  } finally {
+    guard.release();
+  }
 }
 
 async function handleGetBlacklist(env) {

@@ -1650,6 +1650,26 @@ export const adminStyle = `
     gap: 8px;
   }
 
+  .source-raw-process {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .source-raw-process span {
+    padding: 5px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+  }
+
+  .source-raw-process b {
+    margin-right: 4px;
+    color: var(--text-primary);
+  }
+
   .source-raw-metric {
     display: grid;
     gap: 3px;
@@ -1818,6 +1838,27 @@ export const adminStyle = `
 
   .source-raw-result-count {
     margin-right: auto;
+  }
+
+  .source-raw-auto-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .source-raw-auto-refresh input {
+    width: 15px;
+    height: 15px;
+  }
+
+  .source-raw-auto-refresh select {
+    width: auto;
+    height: 30px;
+    padding: 0 6px;
+    font-size: 11px;
   }
 
   #subsList .row:nth-child(even),

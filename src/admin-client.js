@@ -838,6 +838,29 @@ let sourceRawRequest = null;
 let sourceRawSelection = null;
 let sourceRawNodes = [];
 let sourceRawRawContent = '';
+const sourceRawCache = new Map();
+let sourceRawRefreshTimer = null;
+let sourceRawLastVisible = [];
+let sourceRawNodeSources = new Map();
+
+function sourceRawCacheKey(type, key) { return 'source-preview:' + type + ':' + key; }
+function loadSourceRawCache(type, key) {
+  const cacheKey = sourceRawCacheKey(type, key);
+  if (sourceRawCache.has(cacheKey)) return sourceRawCache.get(cacheKey);
+  try {
+    const saved = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+    if (saved && Array.isArray(saved.nodes) && Date.now() - Number(saved.savedAt || 0) < 24 * 60 * 60 * 1000) {
+      sourceRawCache.set(cacheKey, saved);
+      return saved;
+    }
+  } catch { /* ignore unavailable or malformed browser storage */ }
+  return null;
+}
+function saveSourceRawCache(type, key, value) {
+  const cacheKey = sourceRawCacheKey(type, key);
+  sourceRawCache.set(cacheKey, value);
+  try { localStorage.setItem(cacheKey, JSON.stringify(value)); } catch { /* memory cache remains available */ }
+}
 let sourceRawTab = 'nodes';
 
 function setCustomApisDirty(dirty = true) {
@@ -1329,7 +1352,12 @@ function renderCustomApis() {
     viewBtn.className = 'btn-outline icon-action';
     viewBtn.textContent = '👁 查看';
     viewBtn.setAttribute('aria-label', '查看优选 API 数据 ' + (entry.remark || '/' + path));
-    viewBtn.onclick = () => openSourceRawDialog('customApis', path);
+    viewBtn.onclick = async () => {
+      viewBtn.disabled = true;
+      viewBtn.textContent = '检测中…';
+      try { await openSourceRawDialog('customApis', path); }
+      finally { viewBtn.disabled = false; viewBtn.textContent = '👁 查看'; }
+    };
 
     const openBtn = document.createElement('button');
     openBtn.type = 'button';
@@ -1716,7 +1744,12 @@ function renderSubs() {
     viewBtn.className = 'btn-outline source-view-button';
     viewBtn.textContent = '查看';
     viewBtn.setAttribute('aria-label', '查看订阅源原始数据 ' + host);
-    viewBtn.onclick = () => openSourceRawDialog('subs', host);
+    viewBtn.onclick = async () => {
+      viewBtn.disabled = true;
+      viewBtn.textContent = '检测中…';
+      try { await openSourceRawDialog('subs', host); }
+      finally { viewBtn.disabled = false; viewBtn.textContent = '查看'; }
+    };
     row.appendChild(viewBtn);
     row.appendChild(delBtn);
     el.appendChild(row);
@@ -1933,7 +1966,12 @@ function renderApis() {
     viewBtn.className = 'btn-outline source-view-button';
     viewBtn.textContent = '查看';
     viewBtn.setAttribute('aria-label', '查看 API 源原始数据 ' + url);
-    viewBtn.onclick = () => openSourceRawDialog('apis', url);
+    viewBtn.onclick = async () => {
+      viewBtn.disabled = true;
+      viewBtn.textContent = '检测中…';
+      try { await openSourceRawDialog('apis', url); }
+      finally { viewBtn.disabled = false; viewBtn.textContent = '查看'; }
+    };
     row.appendChild(viewBtn);
     row.appendChild(delBtn);
     el.appendChild(row);
@@ -1951,6 +1989,9 @@ function closeSourceRawDialog() {
   sourceRawSelection = null;
   sourceRawNodes = [];
   sourceRawRawContent = '';
+  sourceRawNodeSources = new Map();
+  if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
+  sourceRawRefreshTimer = null;
   const dialog = $('sourceRawDialog');
   if (dialog?.open) dialog.close();
 }
@@ -1985,12 +2026,20 @@ function renderSourceRawSummary(status) {
   }
 }
 
+function renderSourceRawProcess(stats = {}) {
+  const el = $('sourceRawProcess');
+  if (!el) return;
+  const items = [['上游返回', stats.inputCount || 0], ['格式无效', stats.invalidCount || 0], ['黑名单过滤', stats.blacklistedCount || 0], ['重复节点', stats.duplicateCount || 0], ['最终保留', stats.outputCount || 0]];
+  el.innerHTML = items.map(([label, value]) => '<span><b>' + value + '</b>' + label + '</span>').join('');
+}
+
 function renderSourceRawResults() {
   const content = $('sourceRawContent');
   const count = $('sourceRawResultCount');
   if (!content) return;
   const query = ($('sourceRawSearch')?.value || '').trim().toLowerCase();
   const visible = query ? sourceRawNodes.filter((node) => node.toLowerCase().includes(query)) : sourceRawNodes;
+  sourceRawLastVisible = visible;
   content.innerHTML = '';
   if (!visible.length) {
     content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
@@ -2004,7 +2053,8 @@ function renderSourceRawResults() {
     visible.slice(start, end).forEach((node, index) => {
       const line = document.createElement('div');
       line.className = 'source-raw-node-line';
-      line.textContent = node;
+      const source = sourceRawNodeSources.get(node);
+      line.textContent = source ? node + '    · ' + source : node;
       line.style.height = rowHeight + 'px';
       line.dataset.index = String(start + index);
       fragment.appendChild(line);
@@ -2031,7 +2081,7 @@ function setSourceRawTab(tab) {
   if (toolbar) toolbar.hidden = sourceRawTab !== 'nodes';
 }
 
-async function openSourceRawDialog(type, key) {
+async function openSourceRawDialog(type, key, preserveState = false) {
   const entry = sourceRawEntry(type, key);
   const dialog = $('sourceRawDialog');
   if (!entry || !dialog) return;
@@ -2048,27 +2098,54 @@ async function openSourceRawDialog(type, key) {
   const reload = $('reloadSourceRawButton');
   const copy = $('copySourceRawButton');
   const search = $('sourceRawSearch');
-  setSourceRawTab('nodes');
+  const autoRefresh = $('sourceRawAutoRefresh');
+  const refreshInterval = $('sourceRawRefreshInterval');
+  if (!preserveState) setSourceRawTab('nodes');
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
-  if (search) search.value = '';
+  if (search && !preserveState) search.value = '';
   if (content) content.textContent = '正在检测数据源…';
   if (rawContent) rawContent.textContent = '正在检测数据源…';
+  const cachedResult = loadSourceRawCache(type, key);
+  if (cachedResult) {
+    sourceRawNodes = cachedResult.nodes.slice();
+    sourceRawRawContent = cachedResult.rawContent;
+    sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
+    renderSourceRawSummary(cachedResult.status);
+    renderSourceRawProcess(cachedResult.status?.filterStats || {});
+    renderSourceRawResults();
+    if (rawContent) rawContent.textContent = sourceRawRawContent || '上游没有返回原始内容。';
+  }
   if (summary) renderSourceRawSummary({ state: 'checking', nodeCount: 0, rawNodeCount: 0 });
+  renderSourceRawProcess({});
   if ($('sourceRawResultCount')) $('sourceRawResultCount').textContent = '';
   if (reload) reload.disabled = true;
   if (copy) copy.disabled = true;
   if (copy) {
     copy.onclick = async () => {
       try {
-        await navigator.clipboard.writeText(sourceRawNodes.join('\\n'));
-        showToast('节点数据已复制', 'success');
+        await navigator.clipboard.writeText(sourceRawLastVisible.join('\\n'));
+        showToast('筛选结果已复制', 'success');
       } catch (error) {
         showToast('复制失败：' + error.message, 'error');
       }
     };
   }
   if (search) search.oninput = renderSourceRawResults;
+  if (autoRefresh && !preserveState) {
+    autoRefresh.checked = false;
+    autoRefresh.onchange = () => {
+      if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
+      sourceRawRefreshTimer = autoRefresh.checked
+        ? setInterval(() => openSourceRawDialog(type, key, true), Number(refreshInterval?.value || 30) * 1000)
+        : null;
+    };
+  }
+  if (refreshInterval) refreshInterval.onchange = () => {
+    if (!autoRefresh?.checked) return;
+    if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
+    sourceRawRefreshTimer = setInterval(() => openSourceRawDialog(type, key, true), Number(refreshInterval.value || 30) * 1000);
+  };
   document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
     button.onclick = () => setSourceRawTab(button.dataset.sourceRawTab);
   });
@@ -2106,9 +2183,12 @@ async function openSourceRawDialog(type, key) {
     sourceRawRawContent = Array.isArray(result.rawSources)
       ? result.rawSources.map((item) => (item.key ? '### ' + item.type + ' · ' + item.key + '\\n' : '') + String(item.content || '')).join('\\n\\n')
       : '';
+    sourceRawNodeSources = new Map((Array.isArray(result.nodeSources) ? result.nodeSources : []).map((item) => [item.value, (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key]));
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
+    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
+    renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
     if (rawContent) rawContent.textContent = sourceRawRawContent || '上游没有返回原始内容。';
     if (isManagedSource) {

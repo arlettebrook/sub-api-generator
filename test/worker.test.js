@@ -310,6 +310,62 @@ test("classifies HTTP failures and preserves the last successful result", async 
   }
 });
 
+test("previews a source with nodes, raw content, and filtering statistics", async () => {
+  const sourceKey = "https://preview-source.example/data";
+  const values = { apis: { [sourceKey]: { remark: "预览源" } }, subs: {}, blacklist: ["blocked"], custom_apis: {} };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    "1.2.3.4:443#ok\n5.6.7.8:443#blocked",
+    { status: 200 },
+  );
+  try {
+    const response = await worker.fetch(new Request("https://example.test/api/source-raw", {
+      method: "POST",
+      headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+      body: JSON.stringify({ type: "apis", key: sourceKey }),
+    }), runtime);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(result.nodes, ["1.2.3.4:443#ok"]);
+    assert.equal(result.rawSources[0].content, "1.2.3.4:443#ok\n5.6.7.8:443#blocked");
+    assert.equal(result.status.filterStats.inputCount, 2);
+    assert.equal(result.status.filterStats.blacklistedCount, 1);
+    assert.equal(result.status.filterStats.outputCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("previews disabled custom APIs and rate-limits repeated checks", async () => {
+  const sourceKey = "https://custom-preview.example/data";
+  const values = {
+    apis: { [sourceKey]: { remark: "API 源" } },
+    subs: {},
+    custom_apis: { disabled_preview: { enabled: false, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("9.9.9.9:443#custom", { status: 200 });
+  const request = () => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ path: "disabled_preview" }),
+  }), runtime);
+  try {
+    const first = await request();
+    assert.equal(first.status, 200);
+    assert.deepEqual((await first.json()).nodes, ["9.9.9.9:443#custom"]);
+    const second = await request();
+    assert.equal(second.status, 429);
+    assert.equal((await second.json()).code, "RATE_LIMITED");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reads and updates blacklist configuration", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });
