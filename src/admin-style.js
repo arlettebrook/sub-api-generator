@@ -1654,7 +1654,7 @@ export const adminStyle = `
     min-height: 180px;
     max-height: min(62vh, 680px);
     margin: 0;
-    padding: 48px 16px 14px;
+    padding: 14px 16px;
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -3551,7 +3551,7 @@ export const adminStyle = `
     }
     .preview-data-status span + span::before { display: none; }
     .preview-data-status span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .preview-api-data { max-height: 58vh; padding-top: 48px; font-size: 12px; overflow-x: auto; }
+    .preview-api-data { max-height: 58vh; padding: 14px 12px; font-size: 12px; overflow-x: auto; }
     .preview-api-top-button { top: 8px; right: 8px; min-height: 32px; font-size: 12px; }
     .nodes-grid {
       gap: 6px;
