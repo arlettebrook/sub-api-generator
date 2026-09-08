@@ -159,6 +159,55 @@ async function handleSourceRaw(request, env) {
   }
 }
 
+async function handleCustomApiPreview(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  const path = typeof body?.path === "string" ? body.path.trim().replace(/^\/+/, "") : "";
+  if (!path) return pagesTextResponse("优选 API 路径无效", 400);
+  const configured = normalizeCustomApiData(await env.KV.get(KV_KEY_CUSTOM_APIS, "json"));
+  const entry = configured[path];
+  if (!entry) return pagesTextResponse("优选 API 不存在", 404);
+  let sourceSelection = entry.sources;
+  if (entry.sourceMode !== SOURCE_MODE_SELECTED) {
+    const [subs, apis] = await Promise.all([env.KV.get(KV_KEY_SUBS, "json"), env.KV.get(KV_KEY_APIS, "json")]);
+    sourceSelection = [
+      ...Object.keys(normalizeKvData(subs, "subs")).map((key) => ({ type: "subs", key })),
+      ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
+    ];
+  }
+  subscriptions.clearAggregateCache();
+  const startedAt = Date.now();
+  const response = await subscriptions.handleRoot(env, sourceSelection);
+  const text = await response.text();
+  const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const snapshot = await getSourceStatusSnapshot(env, false);
+  await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
+  const selectedStatuses = (sourceSelection || []).map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
+  const rawNodeCount = selectedStatuses.reduce((count, status) => count + (status.rawNodeCount || 0), 0);
+  const errors = response.headers.get("x-source-errors");
+  let errorList = [];
+  if (errors) {
+    try { errorList = JSON.parse(decodeURIComponent(errors)); } catch { /* ignore malformed diagnostics */ }
+  }
+  if (!errorList.length) {
+    errorList = selectedStatuses
+      .filter((status) => status.state && !["success", "idle"].includes(status.state))
+      .map((status) => ({ type: status.type, key: status.key, message: status.error || status.state }));
+  }
+  return pagesJsonResponse({
+    nodes,
+    status: {
+      state: nodes.length ? "success" : (errorList.length ? "error" : "empty"),
+      nodeCount: nodes.length,
+      rawNodeCount,
+      durationMs: Date.now() - startedAt,
+      statusCode: response.status,
+      error: errorList.map((item) => item.message).filter(Boolean).join("；"),
+      errors: errorList,
+    },
+  }, response.ok ? 200 : response.status);
+}
+
 async function handleGetBlacklist(env) {
   const data = await env.KV.get(KV_KEY_BLACKLIST, "json");
   return pagesJsonResponse(normalizeBlacklist(data));
@@ -328,6 +377,9 @@ export default {
           return pagesMethodNotAllowed("POST");
         case "/api/source-raw":
           if (method === "POST") return await handleSourceRaw(request, env);
+          return pagesMethodNotAllowed("POST");
+        case "/api/custom-api-preview":
+          if (method === "POST") return await handleCustomApiPreview(request, env);
           return pagesMethodNotAllowed("POST");
         case "/api/blacklist":
           if (method === "GET") return await handleGetBlacklist(env);

@@ -1322,6 +1322,13 @@ function renderCustomApis() {
     copyBtn.textContent = '📋 复制地址';
     copyBtn.onclick = () => copyCustomApiUrl(path);
 
+    const viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'btn-outline icon-action';
+    viewBtn.textContent = '👁 查看';
+    viewBtn.setAttribute('aria-label', '查看优选 API 数据 ' + (entry.remark || '/' + path));
+    viewBtn.onclick = () => openSourceRawDialog('customApis', path);
+
     const openBtn = document.createElement('button');
     openBtn.type = 'button';
     openBtn.className = 'btn-outline icon-action';
@@ -1334,7 +1341,7 @@ function renderCustomApis() {
     delBtn.type = 'button';
     delBtn.setAttribute('aria-label', '🗑 删除');
     delBtn.onclick = () => confirmCustomApiDelete(path);
-    actions.append(switchLabel, editBtn, copyBtn, openBtn, delBtn);
+    actions.append(switchLabel, editBtn, viewBtn, copyBtn, openBtn, delBtn);
 
     row.append(main, actions);
     el.appendChild(row);
@@ -1932,7 +1939,7 @@ function renderApis() {
 }
 
 function sourceRawEntry(type, key) {
-  const data = type === 'subs' ? subs : apis;
+  const data = type === 'subs' ? subs : type === 'apis' ? apis : customApis;
   return data && Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
 }
 
@@ -2000,7 +2007,8 @@ async function openSourceRawDialog(type, key) {
   const reload = $('reloadSourceRawButton');
   const copy = $('copySourceRawButton');
   const search = $('sourceRawSearch');
-  if (title) title.textContent = (type === 'subs' ? '订阅源 · ' : 'API 源 · ') + key;
+  const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
+  if (title) title.textContent = sourceLabel + key;
   if (search) search.value = '';
   if (content) content.textContent = '正在检测数据源…';
   if (summary) renderSourceRawSummary({ state: 'checking', nodeCount: 0, rawNodeCount: 0 });
@@ -2019,18 +2027,21 @@ async function openSourceRawDialog(type, key) {
   }
   if (search) search.oninput = renderSourceRawResults;
   if (!dialog.open) dialog.showModal();
-  const normalizedKey = normalizeSourceKeyClient(type, key);
-  const previousStatus = getSourceStatus(type, key);
-  sourceStatuses[type] ||= {};
-  sourceStatuses[type][normalizedKey] = { ...previousStatus, state: 'checking', error: '' };
-  renderSourceStatusSummary();
-  if ($('subsList')) renderSubs();
-  if ($('apisList')) renderApis();
+  const isManagedSource = type === 'subs' || type === 'apis';
+  const normalizedKey = isManagedSource ? normalizeSourceKeyClient(type, key) : key;
+  const previousStatus = isManagedSource ? getSourceStatus(type, key) : { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
+  if (isManagedSource) {
+    sourceStatuses[type] ||= {};
+    sourceStatuses[type][normalizedKey] = { ...previousStatus, state: 'checking', error: '' };
+    renderSourceStatusSummary();
+    if ($('subsList')) renderSubs();
+    if ($('apisList')) renderApis();
+  }
   try {
-    const response = await fetch('/api/source-raw', {
+    const response = await fetch(type === 'customApis' ? '/api/custom-api-preview' : '/api/source-raw', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, key }),
+      body: JSON.stringify(type === 'customApis' ? { path: key } : { type, key }),
       signal: controller.signal,
       cache: 'no-store',
     });
@@ -2040,23 +2051,27 @@ async function openSourceRawDialog(type, key) {
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
     sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
-    sourceStatuses[type][normalizedKey] = nextStatus;
+    if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawResults();
-    renderSourceStatusSummary();
-    if ($('subsList')) renderSubs();
-    if ($('apisList')) renderApis();
+    if (isManagedSource) {
+      renderSourceStatusSummary();
+      if ($('subsList')) renderSubs();
+      if ($('apisList')) renderApis();
+    }
     if (copy) copy.disabled = sourceRawNodes.length === 0;
   } catch (error) {
     if (error?.name === 'AbortError') return;
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
     const failedStatus = { ...previousStatus, state: 'network-error', error: error.message || '检测失败' };
-    sourceStatuses[type][normalizedKey] = failedStatus;
+    if (isManagedSource) sourceStatuses[type][normalizedKey] = failedStatus;
     renderSourceRawSummary(failedStatus);
     if (content) content.textContent = '数据源检测失败：' + failedStatus.error;
-    renderSourceStatusSummary();
-    if ($('subsList')) renderSubs();
-    if ($('apisList')) renderApis();
+    if (isManagedSource) {
+      renderSourceStatusSummary();
+      if ($('subsList')) renderSubs();
+      if ($('apisList')) renderApis();
+    }
   } finally {
     if (sourceRawSelection?.type === type && sourceRawSelection?.key === key) {
       sourceRawRequest = null;
