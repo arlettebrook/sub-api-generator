@@ -839,9 +839,11 @@ let sourceRawSelection = null;
 let sourceRawNodes = [];
 let sourceRawRawContent = '';
 let sourceRawUnfilteredNodes = [];
+let sourceRawUnfilteredSourceNodes = new Map();
 const sourceRawCache = new Map();
 let sourceRawRefreshTimer = null;
 let sourceRawLastVisible = [];
+let sourceRawLastRawVisible = [];
 let sourceRawNodeSources = new Map();
 let sourceRawSourceMeta = new Map();
 let sourceRawSourceErrors = new Map();
@@ -1995,11 +1997,13 @@ function closeSourceRawDialog() {
   sourceRawNodes = [];
   sourceRawRawContent = '';
   sourceRawUnfilteredNodes = [];
+  sourceRawUnfilteredSourceNodes = new Map();
   sourceRawNodeSources = new Map();
   sourceRawSourceMeta = new Map();
   sourceRawSourceErrors = new Map();
   sourceRawCollapsedGroups = new Set();
   sourceRawSourceFilter = 'all';
+  sourceRawLastRawVisible = [];
   if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
   sourceRawRefreshTimer = null;
   const dialog = $('sourceRawDialog');
@@ -2043,20 +2047,26 @@ function renderSourceRawProcess(stats = {}) {
   el.innerHTML = items.map(([label, value]) => '<span><b>' + value + '</b>' + label + '</span>').join('');
 }
 
-function renderSourceRawResults() {
-  const content = $('sourceRawContent');
+function renderSourceRawResults(rawMode = false) {
+  const content = $(rawMode ? 'sourceRawRawContent' : 'sourceRawContent');
   const count = $('sourceRawResultCount');
   if (!content) return;
   const query = ($('sourceRawSearch')?.value || '').trim().toLowerCase();
   const showSources = sourceRawSelection?.type === 'customApis';
-  let visible = query ? sourceRawNodes.filter((node) => node.toLowerCase().includes(query)) : sourceRawNodes;
-  if (showSources && sourceRawSourceFilter !== 'all') {
-    visible = visible.filter((node) => (sourceRawNodeSources.get(node) || []).includes(sourceRawSourceFilter));
+  const allNodes = rawMode ? sourceRawUnfilteredNodes : sourceRawNodes;
+  const nodeSources = rawMode ? sourceRawUnfilteredSourceNodes : sourceRawNodeSources;
+  let visible = query ? allNodes.filter((node) => node.toLowerCase().includes(query)) : allNodes;
+  if (showSources && rawMode && sourceRawSourceFilter !== 'all') {
+    const sourceNodes = sourceRawUnfilteredSourceNodes.get(sourceRawSourceFilter) || [];
+    visible = sourceNodes.filter((node) => !query || node.toLowerCase().includes(query));
+  } else if (showSources && sourceRawSourceFilter !== 'all') {
+    visible = visible.filter((node) => (nodeSources.get(node) || []).includes(sourceRawSourceFilter));
   }
-  sourceRawLastVisible = visible;
+  if (rawMode) sourceRawLastRawVisible = visible;
+  else sourceRawLastVisible = visible;
   content.innerHTML = '';
   if (!visible.length && !showSources) {
-    content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
+    content.textContent = allNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
   } else {
     const fragment = document.createDocumentFragment();
     const renderNode = (node) => {
@@ -2074,15 +2084,25 @@ function renderSourceRawResults() {
       sourceRawSourceMeta.forEach((_, label) => {
         if (sourceRawSourceFilter === 'all' || sourceRawSourceFilter === label) groups.set(label, []);
       });
-      visible.forEach((node) => {
-        const sources = sourceRawNodeSources.get(node);
-        const labels = Array.isArray(sources) && sources.length ? sources : ['未识别来源'];
-        labels.forEach((label) => {
+      if (rawMode && !sourceRawUnfilteredSourceNodes.size && allNodes.length && sourceRawSourceFilter === 'all') {
+        groups.set('未识别来源', allNodes.slice());
+      }
+      if (rawMode) {
+        sourceRawUnfilteredSourceNodes.forEach((nodes, label) => {
           if (sourceRawSourceFilter !== 'all' && label !== sourceRawSourceFilter) return;
-          if (!groups.has(label)) groups.set(label, []);
-          groups.get(label).push(node);
+          groups.set(label, nodes.filter((node) => !query || node.toLowerCase().includes(query)));
         });
-      });
+      } else {
+        visible.forEach((node) => {
+          const sources = nodeSources.get(node);
+          const labels = Array.isArray(sources) && sources.length ? sources : ['未识别来源'];
+          labels.forEach((label) => {
+            if (sourceRawSourceFilter !== 'all' && label !== sourceRawSourceFilter) return;
+            if (!groups.has(label)) groups.set(label, []);
+            groups.get(label).push(node);
+          });
+        });
+      }
       groups.forEach((groupNodes, label) => {
         if (!groupNodes.length && !sourceRawSourceErrors.has(label)) return;
         const group = document.createElement('section');
@@ -2096,7 +2116,7 @@ function renderSourceRawResults() {
         heading.setAttribute('role', 'button');
         heading.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         const title = document.createElement('strong');
-        title.textContent = formatSourceGroupLabel(label);
+        title.textContent = formatSourceGroupLabel(label, true);
         title.title = title.textContent;
         const total = document.createElement('span');
         total.textContent = groupNodes.length + ' 个节点';
@@ -2117,7 +2137,7 @@ function renderSourceRawResults() {
         const toggle = () => {
           if (sourceRawCollapsedGroups.has(label)) sourceRawCollapsedGroups.delete(label);
           else sourceRawCollapsedGroups.add(label);
-          renderSourceRawResults();
+          renderSourceRawResults(rawMode);
         };
         heading.onclick = toggle;
         heading.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } };
@@ -2127,9 +2147,9 @@ function renderSourceRawResults() {
       visible.forEach((node) => fragment.appendChild(renderNode(node)));
     }
     if (fragment.childNodes.length) content.appendChild(fragment);
-    else content.textContent = sourceRawNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
+    else content.textContent = allNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
   }
-  if (count) count.textContent = (query || (showSources && sourceRawSourceFilter !== 'all')) ? '显示 ' + visible.length + ' / ' + sourceRawNodes.length + ' 条' : sourceRawNodes.length + ' 条节点';
+  if (count) count.textContent = (query || (showSources && sourceRawSourceFilter !== 'all')) ? '显示 ' + visible.length + ' / ' + allNodes.length + ' 条' : allNodes.length + ' 条节点';
 }
 
 function updateSourceRawGroupControls() {
@@ -2147,20 +2167,20 @@ function updateSourceRawGroupControls() {
   labels.forEach((label) => {
     const option = document.createElement('option');
     option.value = label;
-    option.textContent = formatSourceGroupLabel(label);
+    option.textContent = formatSourceGroupLabel(label, true);
     filter.appendChild(option);
   });
   sourceRawSourceFilter = labels.includes(sourceRawSourceFilter) ? sourceRawSourceFilter : 'all';
   filter.value = sourceRawSourceFilter;
 }
 
-function formatSourceGroupLabel(label) {
+function formatSourceGroupLabel(label, keepType = false) {
   if (!label || label === '未识别来源') return label || '未识别来源';
   const parts = String(label).split(' · ');
   const type = parts.shift() || '';
   const key = parts.shift() || '';
   const remark = parts.join(' · ').replace(/^备注：/, '').trim();
-  if (remark) return remark;
+  if (remark) return keepType ? type + ' · ' + remark : remark;
   let shortName = key.split('/').pop() || key;
   shortName = shortName.split('?')[0].replace(/\.(txt|json|csv)$/i, '');
   return type + ' · ' + shortName;
@@ -2186,7 +2206,8 @@ function setSourceRawTab(tab) {
   const toolbar = document.querySelector('.source-raw-toolbar');
   if (nodes) nodes.hidden = sourceRawTab !== 'nodes';
   if (raw) raw.hidden = sourceRawTab !== 'raw';
-  if (toolbar) toolbar.hidden = sourceRawTab !== 'nodes';
+  if (toolbar) toolbar.hidden = false;
+  renderSourceRawResults(sourceRawTab === 'raw');
 }
 
 async function openSourceRawDialog(type, key, preserveState = false) {
@@ -2220,13 +2241,14 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawNodes = cachedResult.nodes.slice();
     sourceRawRawContent = cachedResult.rawContent;
     sourceRawUnfilteredNodes = Array.isArray(cachedResult.unfilteredNodes) ? cachedResult.unfilteredNodes.slice() : [];
+    sourceRawUnfilteredSourceNodes = new Map(Array.isArray(cachedResult.unfilteredSourceNodes) ? cachedResult.unfilteredSourceNodes : []);
     sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
     sourceRawSourceMeta = new Map(Array.isArray(cachedResult.sourceMeta) ? cachedResult.sourceMeta : []);
     sourceRawSourceErrors = new Map(Array.isArray(cachedResult.sourceErrors) ? cachedResult.sourceErrors : []);
     renderSourceRawSummary(cachedResult.status);
     renderSourceRawProcess(cachedResult.status?.filterStats || {});
     renderSourceRawResults();
-    if (rawContent) rawContent.textContent = sourceRawUnfilteredNodes.length ? sourceRawUnfilteredNodes.join('\\n') : '没有提取到未过滤节点。';
+    renderSourceRawResults(true);
   }
   updateSourceRawGroupControls();
   if (summary) renderSourceRawSummary({ state: 'checking', nodeCount: 0, rawNodeCount: 0 });
@@ -2237,7 +2259,8 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (copy) {
     copy.onclick = async () => {
       try {
-        await navigator.clipboard.writeText(sourceRawLastVisible.join('\\n'));
+        const values = sourceRawTab === 'raw' ? sourceRawLastRawVisible : sourceRawLastVisible;
+        await navigator.clipboard.writeText(values.join('\\n'));
         showToast('筛选结果已复制', 'success');
       } catch (error) {
         showToast('复制失败：' + error.message, 'error');
@@ -2246,7 +2269,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   }
   if (search) search.oninput = () => {
     if (content) content.scrollTop = 0;
-    renderSourceRawResults();
+    renderSourceRawResults(sourceRawTab === 'raw');
   };
   if (autoRefresh && !preserveState) {
     autoRefresh.checked = false;
@@ -2266,16 +2289,19 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (sourceFilter) sourceFilter.onchange = () => {
     sourceRawSourceFilter = sourceFilter.value || 'all';
     renderSourceRawResults();
+    renderSourceRawResults(true);
   };
   const expandGroups = $('expandSourceRawGroupsButton');
   if (expandGroups) expandGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set();
     renderSourceRawResults();
+    renderSourceRawResults(true);
   };
   const collapseGroups = $('collapseSourceRawGroupsButton');
   if (collapseGroups) collapseGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set(sourceRawSourceMeta.keys());
     renderSourceRawResults();
+    renderSourceRawResults(true);
   };
   document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
     button.onclick = () => setSourceRawTab(button.dataset.sourceRawTab);
@@ -2307,6 +2333,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawUnfilteredNodes = Array.isArray(result.unfilteredNodes) ? result.unfilteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
+    sourceRawUnfilteredSourceNodes = new Map();
     sourceRawNodeSources = new Map();
     sourceRawSourceMeta = new Map();
     sourceRawSourceErrors = new Map();
@@ -2322,6 +2349,12 @@ async function openSourceRawDialog(type, key, preserveState = false) {
         if (!values.includes(label)) values.push(label);
         sourceRawNodeSources.set(item.value, values);
       });
+      (Array.isArray(result.rawSources) ? result.rawSources : []).forEach((item) => {
+        const label = (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key + (item.remark ? ' · 备注：' + item.remark : '');
+        const values = Array.isArray(item.nodes) ? item.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+        sourceRawUnfilteredSourceNodes.set(label, values);
+        if (!sourceRawSourceMeta.has(label)) sourceRawSourceMeta.set(label, { type: item.type, key: item.key, remark: item.remark || '' });
+      });
       (result.status?.errors || []).forEach((item) => {
         const label = [...sourceRawSourceMeta.entries()].find(([, meta]) => meta.type === item.type && meta.key === item.key)?.[0];
         if (label) sourceRawSourceErrors.set(label, item.message || '检测失败');
@@ -2329,18 +2362,18 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     }
     updateSourceRawGroupControls();
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
-    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], status: nextStatus, savedAt: Date.now() });
+    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
-    if (rawContent) rawContent.textContent = sourceRawUnfilteredNodes.length ? sourceRawUnfilteredNodes.join('\\n') : '没有提取到未过滤节点。';
+    renderSourceRawResults(true);
     if (isManagedSource) {
       renderSourceStatusSummary();
       if ($('subsList')) renderSubs();
       if ($('apisList')) renderApis();
     }
-    if (copy) copy.disabled = sourceRawNodes.length === 0;
+    if (copy) copy.disabled = sourceRawNodes.length === 0 && sourceRawUnfilteredNodes.length === 0;
   } catch (error) {
     if (error?.name === 'AbortError') return;
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;

@@ -359,6 +359,8 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
     assert.equal(first.status, 200);
     const result = await first.json();
     assert.deepEqual(result.nodes, ["9.9.9.9:443#custom"]);
+    assert.deepEqual(result.unfilteredNodes, ["9.9.9.9:443#custom"]);
+    assert.deepEqual(result.rawSources, [{ type: "apis", key: sourceKey, remark: "API 源", nodes: ["9.9.9.9:443#custom"], filterStats: { inputCount: 1, outputCount: 1, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0 } }]);
     assert.deepEqual(result.sourceMeta, [{ type: "apis", key: sourceKey, remark: "API 源" }]);
     assert.deepEqual(result.nodeSources, [{ value: "9.9.9.9:443#custom", type: "apis", key: sourceKey, remark: "API 源" }]);
     const second = await request();

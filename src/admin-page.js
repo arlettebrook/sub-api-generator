@@ -82,7 +82,7 @@ export const adminHTML = `
       <button class="btn-subtle" type="button" id="collapseSourceRawGroupsButton">收起全部</button>
     </div>
     <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在检测数据源…</pre>
-    <pre id="sourceRawRawContent" class="source-raw-code source-raw-content" hidden>正在检测数据源…</pre>
+    <div id="sourceRawRawContent" class="source-raw-code source-raw-content" role="region" aria-label="未过滤节点" hidden>正在检测数据源…</div>
     <div class="source-raw-actions">
       <span id="sourceRawResultCount" class="source-raw-result-count"></span>
       <label class="source-raw-auto-refresh"><input id="sourceRawAutoRefresh" type="checkbox" /> 自动刷新 <select id="sourceRawRefreshInterval" aria-label="自动刷新间隔"><option value="30">30 秒</option><option value="60">60 秒</option><option value="120">2 分钟</option></select></label>

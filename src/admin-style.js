@@ -1838,7 +1838,7 @@ export const adminStyle = `
   }
 
   #sourceRawRawContent {
-    white-space: pre-wrap;
+    white-space: normal;
   }
 
   .source-raw-node-line {
