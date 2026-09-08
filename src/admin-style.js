@@ -626,6 +626,18 @@ export const adminStyle = `
     padding-top: 4px;
   }
 
+  .blacklist-toolbar > button,
+  .blacklist-toolbar > span {
+    white-space: nowrap;
+  }
+
+  .blacklist-toolbar .setting-tool-button { order: 1; }
+  .blacklist-toolbar .save-status { order: 2; }
+  .blacklist-toolbar .setting-undo-button { order: 3; }
+  .blacklist-toolbar .setting-reset-button { order: 4; }
+  .blacklist-toolbar .setting-batch-delete { order: 5; }
+  .blacklist-toolbar .btn-primary { order: 6; }
+
   .blacklist-toolbar .save-status {
     margin-right: auto;
   }
@@ -3701,10 +3713,21 @@ export const adminStyle = `
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       align-items: stretch;
+      gap: 8px;
+    }
+    .blacklist-toolbar > button,
+    .blacklist-toolbar > span {
+      min-width: 0;
+      width: 100%;
+      min-height: 40px;
+      padding: 0 8px;
+      font-size: 12px;
+      white-space: nowrap;
     }
     .blacklist-toolbar .save-status {
       grid-column: 1 / -1;
       margin-right: 0;
+      min-height: 28px;
     }
     .blacklist-toolbar .btn-primary {
       grid-column: 1 / -1;
