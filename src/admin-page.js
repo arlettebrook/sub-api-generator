@@ -395,15 +395,20 @@ export const adminHTML = `
       <div id="blacklistPagination" class="rule-pagination" hidden></div>
       <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
       <div class="blacklist-toolbar settings-editor-footer">
-        <button class="btn-subtle setting-tool-button" type="button" onclick="exportBlacklist()">📤 导出</button>
-        <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importBlacklistFile').click()">📥 导入</button>
-        <input type="file" id="importBlacklistFile" accept=".json,application/json" style="display:none" onchange="importBlacklist(event)" />
         <span class="save-status" id="blacklistSaveStatus">配置已保存</span>
-        <button class="btn-subtle setting-undo-button" type="button" onclick="undoBlacklistChanges()" disabled>↩ 撤销修改</button>
-        <button class="btn-subtle setting-reset-button" type="button" onclick="resetBlacklistDefaults()">↺ 恢复默认</button>
-        <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedBlacklist()">🗑 删除选中</button>
         <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
       </div>
+      <details class="settings-editor-more">
+        <summary>批量操作与备份</summary>
+        <div class="settings-editor-more-actions">
+          <button class="btn-subtle setting-tool-button" type="button" onclick="exportBlacklist()">📤 导出</button>
+          <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importBlacklistFile').click()">📥 导入</button>
+          <input type="file" id="importBlacklistFile" accept=".json,application/json" style="display:none" onchange="importBlacklist(event)" />
+          <button class="btn-subtle setting-undo-button" type="button" onclick="undoBlacklistChanges()" disabled>↩ 撤销修改</button>
+          <button class="btn-subtle setting-reset-button" type="button" onclick="resetBlacklistDefaults()">↺ 恢复默认</button>
+          <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedBlacklist()">🗑 删除选中</button>
+        </div>
+      </details>
         </div>
       </dialog>
     </div>
@@ -443,20 +448,29 @@ export const adminHTML = `
       <div id="filterRulesPagination" class="rule-pagination" hidden></div>
       <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
       <div class="filter-preview settings-editor-preview" aria-live="polite">
-        <div class="filter-preview-heading"><strong>实时预览</strong><span>根据当前规则截断并清理备注</span></div>
-        <label><span class="sr-only">输入示例备注</span><input id="filterPreviewInput" type="text" value="🇭🇰 香港 | IEPL 专线" placeholder="输入一段备注查看处理结果" /></label>
-        <div class="filter-preview-result"><span>处理结果</span><code id="filterPreviewOutput">🇭🇰 香港</code></div>
+        <details class="settings-editor-preview-details">
+          <summary><strong>实时预览</strong><span>点击查看处理结果</span></summary>
+          <div class="settings-editor-preview-body">
+            <label><span class="sr-only">输入示例备注</span><input id="filterPreviewInput" type="text" value="🇭🇰 香港 | IEPL 专线" placeholder="输入一段备注查看处理结果" /></label>
+            <div class="filter-preview-result"><span>处理结果</span><code id="filterPreviewOutput">🇭🇰 香港</code></div>
+          </div>
+        </details>
       </div>
       <div class="blacklist-toolbar settings-editor-footer">
-        <button class="btn-subtle setting-tool-button" type="button" onclick="exportFilterRules()">📤 导出</button>
-        <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importFilterRulesFile').click()">📥 导入</button>
-        <input type="file" id="importFilterRulesFile" accept=".json,application/json" style="display:none" onchange="importFilterRules(event)" />
         <span class="save-status" id="filterRulesSaveStatus">配置已保存</span>
-        <button class="btn-subtle setting-undo-button" type="button" onclick="undoFilterRulesChanges()" disabled>↩ 撤销修改</button>
-        <button class="btn-subtle setting-reset-button" type="button" onclick="resetFilterRulesDefaults()">↺ 恢复默认</button>
-        <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedFilterRules()">🗑 删除选中</button>
         <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
       </div>
+      <details class="settings-editor-more">
+        <summary>批量操作与备份</summary>
+        <div class="settings-editor-more-actions">
+          <button class="btn-subtle setting-tool-button" type="button" onclick="exportFilterRules()">📤 导出</button>
+          <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importFilterRulesFile').click()">📥 导入</button>
+          <input type="file" id="importFilterRulesFile" accept=".json,application/json" style="display:none" onchange="importFilterRules(event)" />
+          <button class="btn-subtle setting-undo-button" type="button" onclick="undoFilterRulesChanges()" disabled>↩ 撤销修改</button>
+          <button class="btn-subtle setting-reset-button" type="button" onclick="resetFilterRulesDefaults()">↺ 恢复默认</button>
+          <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedFilterRules()">🗑 删除选中</button>
+        </div>
+      </details>
         </div>
       </dialog>
     </div>

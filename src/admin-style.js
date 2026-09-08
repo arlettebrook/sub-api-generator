@@ -417,6 +417,106 @@ export const adminStyle = `
 
   .settings-editor-footer {
     margin-top: 14px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: 10px 0 0;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .settings-editor-footer .save-status {
+    grid-column: auto;
+    justify-self: start;
+    margin-right: 0;
+  }
+
+  .settings-editor-footer .btn-primary {
+    grid-column: auto;
+    width: auto;
+    min-width: 150px;
+  }
+
+  .settings-editor-more {
+    margin-top: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .settings-editor-more > summary,
+  .settings-editor-preview-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 38px;
+    padding: 0 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .settings-editor-more > summary::-webkit-details-marker,
+  .settings-editor-preview-details > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .settings-editor-more > summary::after,
+  .settings-editor-preview-details > summary::after {
+    content: '⌄';
+    color: var(--text-tertiary);
+    transition: transform .18s ease;
+  }
+
+  .settings-editor-more[open] > summary,
+  .settings-editor-preview-details[open] > summary {
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .settings-editor-more[open] > summary::after,
+  .settings-editor-preview-details[open] > summary::after {
+    transform: rotate(180deg);
+  }
+
+  .settings-editor-more-actions {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px 12px 12px;
+  }
+
+  .settings-editor-more-actions > button {
+    min-width: 0;
+    width: 100%;
+    white-space: nowrap;
+  }
+
+  .settings-editor-preview {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .settings-editor-preview-details {
+    border: 1px dashed var(--border-hover);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .settings-editor-preview-details > summary strong {
+    color: var(--text-primary);
+  }
+
+  .settings-editor-preview-details > summary span {
+    margin-left: auto;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .settings-editor-preview-body {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
   }
 
   .blacklist-add-row {
@@ -3712,6 +3812,22 @@ export const adminStyle = `
     .settings-editor-list {
       max-height: min(330px, 40vh);
     }
+    .settings-editor-footer {
+      grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
+    }
+    .settings-editor-footer .btn-primary {
+      min-width: 0;
+      width: 100%;
+    }
+    .settings-editor-more-actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .settings-editor-more-actions .setting-batch-delete {
+      grid-column: 1 / -1;
+    }
+    .settings-editor-preview-details > summary span {
+      font-size: 11px;
+    }
     .setting-block-heading {
       gap: 8px;
     }
@@ -3803,6 +3919,12 @@ export const adminStyle = `
     }
     .blacklist-toolbar .setting-batch-delete {
       grid-column: 1 / -1;
+    }
+    .settings-editor-footer.blacklist-toolbar .btn-primary {
+      grid-column: auto;
+    }
+    .settings-editor-footer.blacklist-toolbar .setting-batch-delete {
+      grid-column: auto;
     }
     .page-intro {
       margin: 0 0 10px;
