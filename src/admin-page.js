@@ -375,26 +375,26 @@ export const adminHTML = `
         <span class="section-summary" id="blacklistSummary">0 项</span>
       </div>
       <button class="btn-outline settings-edit-button" type="button" onclick="openSettingsDialog('blacklistDialog')">⚙ 编辑黑名单</button>
-      <dialog class="settings-dialog" id="blacklistDialog" aria-labelledby="blacklistDialogTitle">
+      <dialog class="settings-dialog settings-editor-dialog" id="blacklistDialog" aria-labelledby="blacklistDialogTitle">
         <div class="settings-dialog-head">
-          <div><h3 id="blacklistDialogTitle">黑名单</h3><p>过滤包含这些关键词的节点备注。</p></div>
+          <div><span class="settings-dialog-kicker">数据过滤设置</span><h3 id="blacklistDialogTitle">黑名单</h3><p>过滤包含这些关键词的节点备注。</p></div>
           <button class="dialog-close" type="button" onclick="closeSettingsDialog('blacklistDialog')" aria-label="关闭">×</button>
         </div>
         <div class="settings-dialog-body">
-      <div class="blacklist-add-row">
+      <div class="blacklist-add-row settings-editor-add">
         <input id="newBlacklistWord" type="text" maxlength="128" placeholder="输入要过滤的关键词" autocomplete="off" />
         <button class="btn-outline setting-add-button" id="addBlacklistButton" type="button" onclick="addBlacklistWord()">➕ 添加</button>
       </div>
-      <div class="rule-list-toolbar">
+      <div class="rule-list-toolbar settings-editor-toolbar">
         <label class="rule-search"><span aria-hidden="true">⌕</span><input id="blacklistSearch" type="search" placeholder="搜索黑名单" autocomplete="off" aria-label="搜索黑名单" /></label>
         <span class="selection-count" id="blacklistSelectionCount">未选择</span>
         <button class="btn-subtle" type="button" onclick="selectAllBlacklist()">全选</button>
         <button class="btn-subtle" type="button" onclick="clearBlacklistSelection()">清除选择</button>
       </div>
-      <div id="blacklistList" class="blacklist-list"></div>
+      <div id="blacklistList" class="blacklist-list settings-editor-list"></div>
       <div id="blacklistPagination" class="rule-pagination" hidden></div>
       <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
-      <div class="blacklist-toolbar">
+      <div class="blacklist-toolbar settings-editor-footer">
         <button class="btn-subtle setting-tool-button" type="button" onclick="exportBlacklist()">📤 导出</button>
         <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importBlacklistFile').click()">📥 导入</button>
         <input type="file" id="importBlacklistFile" accept=".json,application/json" style="display:none" onchange="importBlacklist(event)" />
@@ -416,13 +416,13 @@ export const adminHTML = `
         <span class="section-summary" id="filterRulesSummary">0 项</span>
       </div>
       <button class="btn-outline settings-edit-button" type="button" onclick="openSettingsDialog('filterRulesDialog')">⚙ 编辑备注过滤规则</button>
-      <dialog class="settings-dialog" id="filterRulesDialog" aria-labelledby="filterRulesDialogTitle">
+      <dialog class="settings-dialog settings-editor-dialog" id="filterRulesDialog" aria-labelledby="filterRulesDialogTitle">
         <div class="settings-dialog-head">
-          <div><h3 id="filterRulesDialogTitle">备注过滤规则</h3><p>设置节点备注的截断和清理规则。</p></div>
+          <div><span class="settings-dialog-kicker">数据清理设置</span><h3 id="filterRulesDialogTitle">备注过滤规则</h3><p>设置节点备注的截断和清理规则。</p></div>
           <button class="dialog-close" type="button" onclick="closeSettingsDialog('filterRulesDialog')" aria-label="关闭">×</button>
         </div>
         <div class="settings-dialog-body">
-      <div class="blacklist-add-row">
+      <div class="blacklist-add-row settings-editor-add">
         <input id="newFilterRule" type="text" maxlength="128" placeholder="例如：| 或 【" autocomplete="off" />
         <button class="btn-outline setting-add-button" id="addFilterRuleButton" type="button" onclick="addFilterRule()">➕ 添加</button>
       </div>
@@ -433,21 +433,21 @@ export const adminHTML = `
         <button class="rule-preset" type="button" data-filter-rule="空格">空格</button>
         <button class="rule-preset" type="button" data-filter-rule="符号">符号</button>
       </div>
-      <div class="rule-list-toolbar">
+      <div class="rule-list-toolbar settings-editor-toolbar">
         <label class="rule-search"><span aria-hidden="true">⌕</span><input id="filterRulesSearch" type="search" placeholder="搜索过滤规则" autocomplete="off" aria-label="搜索过滤规则" /></label>
         <span class="selection-count" id="filterRulesSelectionCount">未选择</span>
         <button class="btn-subtle" type="button" onclick="selectAllFilterRules()">全选</button>
         <button class="btn-subtle" type="button" onclick="clearFilterRulesSelection()">清除选择</button>
       </div>
-      <div id="filterRulesList" class="blacklist-list"></div>
+      <div id="filterRulesList" class="blacklist-list settings-editor-list"></div>
       <div id="filterRulesPagination" class="rule-pagination" hidden></div>
       <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
-      <div class="filter-preview" aria-live="polite">
+      <div class="filter-preview settings-editor-preview" aria-live="polite">
         <div class="filter-preview-heading"><strong>实时预览</strong><span>根据当前规则截断并清理备注</span></div>
         <label><span class="sr-only">输入示例备注</span><input id="filterPreviewInput" type="text" value="🇭🇰 香港 | IEPL 专线" placeholder="输入一段备注查看处理结果" /></label>
         <div class="filter-preview-result"><span>处理结果</span><code id="filterPreviewOutput">🇭🇰 香港</code></div>
       </div>
-      <div class="blacklist-toolbar">
+      <div class="blacklist-toolbar settings-editor-footer">
         <button class="btn-subtle setting-tool-button" type="button" onclick="exportFilterRules()">📤 导出</button>
         <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importFilterRulesFile').click()">📥 导入</button>
         <input type="file" id="importFilterRulesFile" accept=".json,application/json" style="display:none" onchange="importFilterRules(event)" />

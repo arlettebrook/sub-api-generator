@@ -349,6 +349,15 @@ export const adminStyle = `
     margin: 0 0 4px;
   }
 
+  .settings-dialog-kicker {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--accent-primary);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
   .settings-dialog-head p {
     margin: 0;
     color: var(--text-secondary);
@@ -375,6 +384,39 @@ export const adminStyle = `
     box-shadow: 0 -8px 18px rgba(2, 6, 23, .12);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+  }
+
+  .settings-editor-add {
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .settings-editor-add input {
+    min-height: 40px;
+    background: var(--bg-secondary);
+  }
+
+  .settings-editor-toolbar {
+    margin-top: 12px;
+  }
+
+  .settings-editor-list {
+    min-height: 48px;
+    max-height: min(420px, 46vh);
+    overflow-y: auto;
+    align-content: start;
+    padding: 4px 4px 4px 0;
+    scrollbar-gutter: stable;
+  }
+
+  .settings-editor-preview {
+    margin-top: 14px;
+  }
+
+  .settings-editor-footer {
+    margin-top: 14px;
   }
 
   .blacklist-add-row {
@@ -3663,6 +3705,12 @@ export const adminStyle = `
       bottom: -14px;
       margin: 12px -14px -14px;
       padding: 10px 14px 14px;
+    }
+    .settings-editor-add {
+      padding: 10px;
+    }
+    .settings-editor-list {
+      max-height: min(330px, 40vh);
     }
     .setting-block-heading {
       gap: 8px;

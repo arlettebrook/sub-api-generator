@@ -3447,6 +3447,8 @@ function openSettingsDialog(id) {
   if (!dialog || dialog.open) return;
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
+  const body = dialog.querySelector('.settings-dialog-body');
+  if (body) { body.scrollTop = 0; body.scrollLeft = 0; }
   dialog.querySelector('input, select, button')?.focus();
 }
 
