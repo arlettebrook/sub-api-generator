@@ -847,11 +847,31 @@ let sourceRawLastRawVisible = [];
 let sourceRawNodeSources = new Map();
 let sourceRawSourceMeta = new Map();
 let sourceRawSourceErrors = new Map();
+let sourceRawSourceStats = new Map();
 let sourceRawCollapsedGroups = new Set();
 let sourceRawSourceFilter = 'all';
 let sourceRawRetryingGroup = '';
+let sourceRawSourceSort = 'config';
 
 function sourceRawCacheKey(type, key) { return 'source-preview:' + type + ':' + key; }
+function sourceRawViewStateKey(type, key) { return 'source-preview-view:' + type + ':' + key; }
+function loadSourceRawViewState(type, key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(sourceRawViewStateKey(type, key)) || 'null');
+    return value && typeof value === 'object' ? value : null;
+  } catch { return null; }
+}
+function saveSourceRawViewState() {
+  if (sourceRawSelection?.type !== 'customApis') return;
+  const state = {
+    tab: sourceRawTab,
+    query: $('sourceRawSearch')?.value || '',
+    filter: sourceRawSourceFilter,
+    sort: sourceRawSourceSort,
+    collapsed: [...sourceRawCollapsedGroups],
+  };
+  try { localStorage.setItem(sourceRawViewStateKey(sourceRawSelection.type, sourceRawSelection.key), JSON.stringify(state)); } catch { /* ignore unavailable storage */ }
+}
 function loadSourceRawCache(type, key) {
   const cacheKey = sourceRawCacheKey(type, key);
   if (sourceRawCache.has(cacheKey)) return sourceRawCache.get(cacheKey);
@@ -899,6 +919,7 @@ function normalizeSourceRawCache(saved) {
   return {
     ...saved,
     sourceMeta: [...sourceMeta],
+    sourceStats: normalizeSourceNodes(saved.sourceStats),
     sourceErrors: (Array.isArray(saved.sourceErrors) ? saved.sourceErrors : []).map(([id, error]) => [normalizeId(id), error]),
     nodeSources: normalizeNodeSources(saved.nodeSources),
     unfilteredSourceNodes: normalizeSourceNodes(saved.unfilteredSourceNodes),
@@ -935,6 +956,25 @@ function sourceGroupLabelFromMeta(meta, keepType = false) {
 function sourceGroupDetailFromMeta(meta) {
   if (!meta) return '';
   return sourceGroupTypeLabel(meta.type) + ' · ' + meta.key;
+}
+
+function sourceGroupKeptCount(id) {
+  let count = 0;
+  sourceRawNodeSources.forEach((ids) => {
+    if (Array.isArray(ids) && ids.includes(id)) count += 1;
+  });
+  return count;
+}
+
+function sourceGroupStats(id, groupNodes) {
+  const stored = sourceRawSourceStats.get(id) || {};
+  const raw = Number(stored.raw ?? sourceRawUnfilteredSourceNodes.get(id)?.length ?? groupNodes.length) || 0;
+  const kept = Number(stored.kept ?? sourceGroupKeptCount(id)) || 0;
+  return { raw, kept, filtered: Math.max(0, raw - kept) };
+}
+
+function sourceGroupStatsText(stats) {
+  return '原始 ' + stats.raw + ' · 保留 ' + stats.kept + ' · 过滤 ' + stats.filtered;
 }
 
 let sourceRawTab = 'nodes';
@@ -2061,6 +2101,7 @@ function sourceRawEntry(type, key) {
 
 function closeSourceRawDialog() {
   if (sourceRawRequest) sourceRawRequest.abort();
+  saveSourceRawViewState();
   sourceRawRequest = null;
   sourceRawSelection = null;
   sourceRawNodes = [];
@@ -2070,9 +2111,11 @@ function closeSourceRawDialog() {
   sourceRawNodeSources = new Map();
   sourceRawSourceMeta = new Map();
   sourceRawSourceErrors = new Map();
+  sourceRawSourceStats = new Map();
   sourceRawCollapsedGroups = new Set();
   sourceRawSourceFilter = 'all';
   sourceRawRetryingGroup = '';
+  sourceRawSourceSort = 'config';
   sourceRawLastRawVisible = [];
   if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
   sourceRawRefreshTimer = null;
@@ -2187,7 +2230,20 @@ function renderSourceRawResults(rawMode = false) {
           });
         });
       }
-      groups.forEach((groupNodes, id) => {
+      const sortedGroups = [...groups.entries()].sort(([leftId, leftNodes], [rightId, rightNodes]) => {
+        const leftStats = sourceGroupStats(leftId, leftNodes);
+        const rightStats = sourceGroupStats(rightId, rightNodes);
+        if (sourceRawSourceSort === 'count') return (rightStats[rawMode ? 'raw' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : 'kept'] || 0);
+        if (sourceRawSourceSort === 'error') {
+          const errorDiff = Number(sourceRawSourceErrors.has(rightId)) - Number(sourceRawSourceErrors.has(leftId));
+          return errorDiff || ((rightStats[rawMode ? 'raw' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : 'kept'] || 0));
+        }
+        if (sourceRawSourceSort === 'name') {
+          return sourceGroupLabelFromMeta(sourceRawSourceMeta.get(leftId)).localeCompare(sourceGroupLabelFromMeta(sourceRawSourceMeta.get(rightId)), 'zh-CN');
+        }
+        return 0;
+      });
+      sortedGroups.forEach(([id, groupNodes]) => {
         if (!groupNodes.length && !sourceRawSourceErrors.has(id)) return;
         const meta = sourceRawSourceMeta.get(id);
         const group = document.createElement('section');
@@ -2229,16 +2285,40 @@ function renderSourceRawResults(rawMode = false) {
           };
           headingRow.appendChild(retry);
         }
+        const detailRow = document.createElement('div');
+        detailRow.className = 'source-raw-source-detail-row';
         const detail = document.createElement('small');
         detail.className = 'source-raw-source-detail';
         detail.textContent = sourceGroupDetailFromMeta(meta);
         detail.title = detail.textContent;
-        group.append(headingRow, detail);
+        detailRow.appendChild(detail);
+        if (meta) {
+          const copyAddress = document.createElement('button');
+          copyAddress.type = 'button';
+          copyAddress.className = 'source-raw-source-copy';
+          copyAddress.textContent = '复制地址';
+          copyAddress.title = '复制完整来源地址';
+          copyAddress.onclick = async (event) => {
+            event.stopPropagation();
+            try {
+              await navigator.clipboard.writeText(meta.key);
+              showToast('来源地址已复制', 'success');
+            } catch (error) {
+              showToast('复制失败：' + error.message, 'error');
+            }
+          };
+          detailRow.appendChild(copyAddress);
+        }
+        const stats = document.createElement('small');
+        stats.className = 'source-raw-source-stats';
+        stats.textContent = sourceGroupStatsText(sourceGroupStats(id, groupNodes));
+        group.append(headingRow, detailRow, stats);
         if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node)));
         const toggle = () => {
           if (sourceRawCollapsedGroups.has(id)) sourceRawCollapsedGroups.delete(id);
           else sourceRawCollapsedGroups.add(id);
           renderSourceRawResults(rawMode);
+          saveSourceRawViewState();
         };
         heading.onclick = toggle;
         heading.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } };
@@ -2256,6 +2336,7 @@ function renderSourceRawResults(rawMode = false) {
 function updateSourceRawGroupControls() {
   const controls = $('sourceRawGroupControls');
   const filter = $('sourceRawSourceFilter');
+  const sort = $('sourceRawSourceSort');
   const show = sourceRawSelection?.type === 'customApis';
   if (controls) controls.hidden = !show;
   if (!filter || !show) return;
@@ -2271,8 +2352,9 @@ function updateSourceRawGroupControls() {
     option.textContent = sourceGroupLabelFromMeta(sourceRawSourceMeta.get(id), true);
     filter.appendChild(option);
   });
-  sourceRawSourceFilter = ids.includes(sourceRawSourceFilter) ? sourceRawSourceFilter : 'all';
-  filter.value = sourceRawSourceFilter;
+  if (ids.length) sourceRawSourceFilter = ids.includes(sourceRawSourceFilter) ? sourceRawSourceFilter : 'all';
+  filter.value = ids.includes(sourceRawSourceFilter) ? sourceRawSourceFilter : 'all';
+  if (sort) sort.value = ['config', 'count', 'error', 'name'].includes(sourceRawSourceSort) ? sourceRawSourceSort : 'config';
 }
 
 async function retrySourceRawGroup(id) {
@@ -2302,6 +2384,7 @@ function setSourceRawTab(tab) {
   if (raw) raw.hidden = sourceRawTab !== 'raw';
   if (toolbar) toolbar.hidden = false;
   renderSourceRawResults(sourceRawTab === 'raw');
+  saveSourceRawViewState();
 }
 
 async function openSourceRawDialog(type, key, preserveState = false) {
@@ -2324,15 +2407,17 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const search = $('sourceRawSearch');
   const autoRefresh = $('sourceRawAutoRefresh');
   const refreshInterval = $('sourceRawRefreshInterval');
-  if (!preserveState) setSourceRawTab('nodes');
   if (!preserveState) {
-    sourceRawCollapsedGroups = new Set();
-    sourceRawSourceFilter = 'all';
+    const viewState = type === 'customApis' ? loadSourceRawViewState(type, key) : null;
+    sourceRawCollapsedGroups = new Set(Array.isArray(viewState?.collapsed) ? viewState.collapsed : []);
+    sourceRawSourceFilter = typeof viewState?.filter === 'string' ? viewState.filter : 'all';
+    sourceRawSourceSort = ['config', 'count', 'error', 'name'].includes(viewState?.sort) ? viewState.sort : 'config';
+    if (search) search.value = typeof viewState?.query === 'string' ? viewState.query : '';
+    setSourceRawTab(viewState?.tab === 'raw' ? 'raw' : 'nodes');
     renderSourceRawCacheStatus('正在检测数据…', 'checking');
   }
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
-  if (search && !preserveState) search.value = '';
   if (!preserveState) {
     if (body) body.scrollTop = 0;
     if (content) content.scrollTop = 0;
@@ -2349,6 +2434,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
     sourceRawSourceMeta = new Map(Array.isArray(cachedResult.sourceMeta) ? cachedResult.sourceMeta : []);
     sourceRawSourceErrors = new Map(Array.isArray(cachedResult.sourceErrors) ? cachedResult.sourceErrors : []);
+    sourceRawSourceStats = new Map(Array.isArray(cachedResult.sourceStats) ? cachedResult.sourceStats : []);
     renderSourceRawSummary(cachedResult.status);
     renderSourceRawProcess(cachedResult.status?.filterStats || {});
     renderSourceRawCacheStatus('上次检测：' + formatSourceRawTime(cachedResult.savedAt) + '，正在重新检测…', 'checking');
@@ -2375,6 +2461,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (search) search.oninput = () => {
     if (content) content.scrollTop = 0;
     renderSourceRawResults(sourceRawTab === 'raw');
+    saveSourceRawViewState();
   };
   if (autoRefresh && !preserveState) {
     autoRefresh.checked = false;
@@ -2395,18 +2482,28 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawSourceFilter = sourceFilter.value || 'all';
     renderSourceRawResults();
     renderSourceRawResults(true);
+    saveSourceRawViewState();
+  };
+  const sourceSort = $('sourceRawSourceSort');
+  if (sourceSort) sourceSort.onchange = () => {
+    sourceRawSourceSort = sourceSort.value || 'config';
+    renderSourceRawResults();
+    renderSourceRawResults(true);
+    saveSourceRawViewState();
   };
   const expandGroups = $('expandSourceRawGroupsButton');
   if (expandGroups) expandGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set();
     renderSourceRawResults();
     renderSourceRawResults(true);
+    saveSourceRawViewState();
   };
   const collapseGroups = $('collapseSourceRawGroupsButton');
   if (collapseGroups) collapseGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set(sourceRawSourceMeta.keys());
     renderSourceRawResults();
     renderSourceRawResults(true);
+    saveSourceRawViewState();
   };
   document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
     button.onclick = () => setSourceRawTab(button.dataset.sourceRawTab);
@@ -2442,6 +2539,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawNodeSources = new Map();
     sourceRawSourceMeta = new Map();
     sourceRawSourceErrors = new Map();
+    sourceRawSourceStats = new Map();
     if (type === 'customApis') {
       (Array.isArray(result.sourceMeta) ? result.sourceMeta : []).forEach((item) => {
         sourceRawSourceMeta.set(sourceGroupId(item.type, item.key), item);
@@ -2457,6 +2555,8 @@ async function openSourceRawDialog(type, key, preserveState = false) {
         const id = sourceGroupId(item.type, item.key);
         const values = Array.isArray(item.nodes) ? item.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
         sourceRawUnfilteredSourceNodes.set(id, values);
+        const filterStats = item.filterStats || {};
+        sourceRawSourceStats.set(id, { raw: values.length, kept: Number(filterStats.outputCount ?? values.length) || 0 });
         if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: item.type, key: item.key, remark: item.remark || '' });
       });
       (result.status?.errors || []).forEach((item) => {
@@ -2466,7 +2566,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     }
     updateSourceRawGroupControls();
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
-    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], status: nextStatus, savedAt: Date.now() });
+    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawCacheStatus('本次检测完成：' + formatSourceRawTime(Date.now()), sourceRawSourceErrors.size ? 'warning' : '');

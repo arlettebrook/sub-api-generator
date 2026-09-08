@@ -78,7 +78,13 @@ export const adminHTML = `
       <button class="btn-outline" type="button" id="copySourceRawButton">📋 复制筛选结果</button>
     </div>
     <div class="source-raw-group-controls" id="sourceRawGroupControls" hidden>
-      <select id="sourceRawSourceFilter" aria-label="按来源筛选"><option value="all">全部来源</option></select>
+      <select class="source-raw-source-filter" id="sourceRawSourceFilter" aria-label="按来源筛选"><option value="all">全部来源</option></select>
+      <select class="source-raw-source-sort" id="sourceRawSourceSort" aria-label="来源排序">
+        <option value="config">配置顺序</option>
+        <option value="count">节点数量</option>
+        <option value="error">异常优先</option>
+        <option value="name">来源名称</option>
+      </select>
       <button class="btn-subtle" type="button" id="expandSourceRawGroupsButton">展开全部</button>
       <button class="btn-subtle" type="button" id="collapseSourceRawGroupsButton">收起全部</button>
     </div>

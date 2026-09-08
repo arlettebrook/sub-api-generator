@@ -1748,6 +1748,10 @@ export const adminStyle = `
     height: 34px;
   }
 
+  .source-raw-group-controls .source-raw-source-sort {
+    min-width: 128px;
+  }
+
   .source-raw-group-controls .btn-subtle {
     height: 34px;
     padding: 0 9px;
@@ -1964,12 +1968,47 @@ export const adminStyle = `
   }
 
   .source-raw-source-detail {
-    display: block;
-    margin: 4px 0 6px;
+    display: -webkit-box;
+    min-width: 0;
+    margin: 0;
     color: var(--text-tertiary);
     font-size: 11px;
     line-height: 1.45;
     overflow-wrap: anywhere;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .source-raw-source-detail-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 4px 0 2px 18px;
+    min-width: 0;
+  }
+
+  .source-raw-source-copy {
+    flex: 0 0 auto;
+    min-height: 26px;
+    padding: 0 7px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-primary);
+    font-size: 11px;
+  }
+
+  .source-raw-source-copy:hover {
+    background: var(--accent-light);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .source-raw-source-stats {
+    display: block;
+    margin: 0 0 6px 18px;
+    color: var(--text-tertiary);
+    font-size: 11px;
   }
 
   .source-raw-source-error {
@@ -1982,8 +2021,9 @@ export const adminStyle = `
     white-space: nowrap;
   }
 
-  .source-raw-source-group.is-collapsed .source-raw-source-detail {
-    margin-bottom: 0;
+  .source-raw-source-group.is-collapsed .source-raw-source-detail-row,
+  .source-raw-source-group.is-collapsed .source-raw-source-stats {
+    display: none;
   }
 
   .source-raw-source-group .source-raw-node-line:last-child {
@@ -2992,7 +3032,11 @@ export const adminStyle = `
       align-items: stretch;
       flex-wrap: wrap;
     }
-    .source-raw-group-controls select {
+    .source-raw-group-controls .source-raw-source-filter {
+      flex: 1 1 100%;
+      width: 100%;
+    }
+    .source-raw-group-controls .source-raw-source-sort {
       flex: 1 1 100%;
       width: 100%;
     }
@@ -3038,7 +3082,14 @@ export const adminStyle = `
       grid-column: 2 / 4;
       grid-row: 2;
     }
-    .source-raw-source-detail {
+    .source-raw-source-detail-row {
+      margin-left: 18px;
+    }
+    .source-raw-source-copy {
+      min-width: 68px;
+      min-height: 32px;
+    }
+    .source-raw-source-stats {
       margin-left: 18px;
     }
     .source-raw-actions {
