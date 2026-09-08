@@ -2116,7 +2116,7 @@ function renderSourceRawResults(rawMode = false) {
         heading.setAttribute('role', 'button');
         heading.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         const title = document.createElement('strong');
-        title.textContent = formatSourceGroupLabel(label, true);
+        title.textContent = formatSourceGroupLabel(label);
         title.title = title.textContent;
         const total = document.createElement('span');
         total.textContent = groupNodes.length + ' 个节点';
@@ -2183,15 +2183,15 @@ function formatSourceGroupLabel(label, keepType = false) {
   if (remark) return keepType ? type + ' · ' + remark : remark;
   let shortName = key.split('/').pop() || key;
   shortName = shortName.split('?')[0].replace(/\.(txt|json|csv)$/i, '');
-  return type + ' · ' + shortName;
+  return keepType ? type + ' · ' + shortName : shortName;
 }
 
 function formatSourceGroupDetail(label) {
   if (!label || label === '未识别来源') return '';
   const parts = String(label).split(' · ');
-  parts.shift();
+  const type = parts.shift() || '';
   const key = parts.shift() || '';
-  return key;
+  return type + ' · ' + key;
 }
 
 function setSourceRawTab(tab) {
@@ -2223,6 +2223,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const title = $('sourceRawDialogSource');
   const content = $('sourceRawContent');
   const rawContent = $('sourceRawRawContent');
+  const body = dialog.querySelector('.source-raw-body');
   const summary = $('sourceRawSummary');
   const reload = $('reloadSourceRawButton');
   const copy = $('copySourceRawButton');
@@ -2230,10 +2231,18 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const autoRefresh = $('sourceRawAutoRefresh');
   const refreshInterval = $('sourceRawRefreshInterval');
   if (!preserveState) setSourceRawTab('nodes');
+  if (!preserveState) {
+    sourceRawCollapsedGroups = new Set();
+    sourceRawSourceFilter = 'all';
+  }
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
   if (search && !preserveState) search.value = '';
-  if (content && !preserveState) content.scrollTop = 0;
+  if (!preserveState) {
+    if (body) body.scrollTop = 0;
+    if (content) content.scrollTop = 0;
+    if (rawContent) rawContent.scrollTop = 0;
+  }
   if (content) content.textContent = '正在检测数据源…';
   if (rawContent) rawContent.textContent = '正在检测数据源…';
   const cachedResult = loadSourceRawCache(type, key);
