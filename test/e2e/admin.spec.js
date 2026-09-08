@@ -156,6 +156,10 @@ test("edits and saves the blacklist from settings", async ({ page }, testInfo) =
   await page.locator("#newBlacklistWord").fill(addedWord);
   await page.locator("#addBlacklistButton").click();
   await expect(page.locator("#blacklistList input").last()).toHaveValue(addedWord);
+  await page.locator("#blacklistSearch").fill(addedWord.slice(0, 18));
+  await expect(page.locator("#blacklistList .blacklist-row")).toHaveCount(1);
+  await page.locator("#blacklistSearch").fill("");
+  await expect.poll(() => page.locator("#blacklistList input").evaluateAll((inputs, expected) => inputs.some((input) => input.value === expected), addedWord)).toBe(true);
   await expect(page.locator("#blacklistSaveStatus")).toHaveText("有未保存的修改");
   await page.locator("#blacklistList input").last().fill(addedWord + "-编辑");
   await expect(page.locator("#blacklistList input").last()).toHaveValue(addedWord + "-编辑");

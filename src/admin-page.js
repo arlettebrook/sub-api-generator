@@ -394,10 +394,6 @@ export const adminHTML = `
       <div id="blacklistList" class="blacklist-list settings-editor-list"></div>
       <div id="blacklistPagination" class="rule-pagination" hidden></div>
       <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
-      <div class="blacklist-toolbar settings-editor-footer">
-        <span class="save-status" id="blacklistSaveStatus">配置已保存</span>
-        <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
-      </div>
       <details class="settings-editor-more">
         <summary>批量操作与备份</summary>
         <div class="settings-editor-more-actions">
@@ -409,6 +405,10 @@ export const adminHTML = `
           <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedBlacklist()">🗑 删除选中</button>
         </div>
       </details>
+      <div class="blacklist-toolbar settings-editor-footer">
+        <span class="save-status" id="blacklistSaveStatus">配置已保存</span>
+        <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
+      </div>
         </div>
       </dialog>
     </div>
@@ -456,10 +456,6 @@ export const adminHTML = `
           </div>
         </details>
       </div>
-      <div class="blacklist-toolbar settings-editor-footer">
-        <span class="save-status" id="filterRulesSaveStatus">配置已保存</span>
-        <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
-      </div>
       <details class="settings-editor-more">
         <summary>批量操作与备份</summary>
         <div class="settings-editor-more-actions">
@@ -471,6 +467,10 @@ export const adminHTML = `
           <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedFilterRules()">🗑 删除选中</button>
         </div>
       </details>
+      <div class="blacklist-toolbar settings-editor-footer">
+        <span class="save-status" id="filterRulesSaveStatus">配置已保存</span>
+        <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
+      </div>
         </div>
       </dialog>
     </div>

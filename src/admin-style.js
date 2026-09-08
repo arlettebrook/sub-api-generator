@@ -399,13 +399,23 @@ export const adminStyle = `
   }
 
   .settings-editor-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 8px;
     margin-top: 12px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
   }
 
   .settings-editor-list {
     min-height: 48px;
     max-height: min(420px, 46vh);
     overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     align-content: start;
     padding: 4px 4px 4px 0;
     scrollbar-gutter: stable;
@@ -440,6 +450,7 @@ export const adminStyle = `
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-tertiary);
+    overflow: hidden;
   }
 
   .settings-editor-more > summary,
@@ -454,6 +465,19 @@ export const adminStyle = `
     cursor: pointer;
     list-style: none;
     user-select: none;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .settings-editor-more > summary:focus-visible,
+  .settings-editor-preview-details > summary:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--accent-primary);
+  }
+
+  .settings-editor-more > summary:hover,
+  .settings-editor-preview-details > summary:hover {
+    background: color-mix(in srgb, var(--accent-light) 55%, transparent);
+    color: var(--text-primary);
   }
 
   .settings-editor-more > summary::-webkit-details-marker,
@@ -531,33 +555,41 @@ export const adminStyle = `
   }
 
   .rule-list-toolbar {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 8px;
-    position: sticky;
-    top: 8px;
-    z-index: 3;
-    padding: 6px;
-    margin: -6px;
+    position: static;
+    z-index: auto;
+    padding: 8px;
+    margin: 12px 0 10px;
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--surface-solid) 94%, transparent);
-    box-shadow: var(--shadow-sm);
-    backdrop-filter: blur(8px);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   .selection-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
     flex: 0 0 auto;
     color: var(--text-tertiary);
     font-size: 12px;
     white-space: nowrap;
+    justify-self: end;
   }
 
   .rule-search {
     display: flex;
     align-items: center;
-    flex: 1;
-    min-width: 160px;
+    min-width: 0;
+    width: 100%;
     height: 36px;
     padding: 0 10px;
     gap: 6px;
@@ -594,6 +626,8 @@ export const adminStyle = `
     padding: 0 9px;
     font-size: 12px;
     white-space: nowrap;
+    width: auto;
+    min-width: 0;
   }
 
   .blacklist-row .rule-select {
@@ -3835,19 +3869,23 @@ export const adminStyle = `
       grid-template-columns: 1fr;
     }
     .rule-list-toolbar {
-      align-items: stretch;
-      flex-wrap: wrap;
-      top: 4px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
     }
     .rule-search {
-      flex-basis: 100%;
+      grid-column: 1 / -1;
+      min-width: 0;
     }
     .rule-list-toolbar > button {
-      flex: 1;
+      width: 100%;
+      min-width: 0;
     }
     .selection-count {
-      order: -1;
-      width: 100%;
+      justify-self: start;
+      width: auto;
+      min-width: 0;
     }
     .filter-preview-heading,
     .filter-preview-result {
