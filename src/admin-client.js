@@ -855,6 +855,34 @@ let sourceRawSourceSort = 'config';
 
 function sourceRawCacheKey(type, key) { return 'source-preview:' + type + ':' + key; }
 function sourceRawViewStateKey(type, key) { return 'source-preview-view:' + type + ':' + key; }
+function sourceRawHistoryKey(type, key) { return 'source-preview-history:' + type + ':' + key; }
+function loadSourceRawHistory(type, key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(sourceRawHistoryKey(type, key)) || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch { return []; }
+}
+function saveSourceRawHistory(type, key, item) {
+  const history = [item, ...loadSourceRawHistory(type, key)].slice(0, 10);
+  try { localStorage.setItem(sourceRawHistoryKey(type, key), JSON.stringify(history)); } catch { /* ignore unavailable storage */ }
+  renderSourceRawHistory(history);
+}
+function renderSourceRawHistory(history = []) {
+  const list = $('sourceRawHistoryList');
+  if (!list) return;
+  list.replaceChildren();
+  if (!history.length) { list.textContent = '暂无检测记录'; return; }
+  history.forEach((item) => {
+    const row = document.createElement('div');
+    row.className = 'source-raw-history-item';
+    const time = document.createElement('time');
+    time.textContent = formatSourceRawTime(item.at);
+    const summary = document.createElement('span');
+    summary.textContent = '原始 ' + (item.raw ?? 0) + ' · 保留 ' + (item.kept ?? 0) + ' · 过滤 ' + (item.filtered ?? 0) + (item.errors ? ' · 异常 ' + item.errors : '');
+    row.append(time, summary);
+    list.appendChild(row);
+  });
+}
 function loadSourceRawViewState(type, key) {
   try {
     const value = JSON.parse(localStorage.getItem(sourceRawViewStateKey(type, key)) || 'null');
@@ -2416,6 +2444,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     setSourceRawTab(viewState?.tab === 'raw' ? 'raw' : 'nodes');
     renderSourceRawCacheStatus('正在检测数据…', 'checking');
   }
+  renderSourceRawHistory(type === 'customApis' ? loadSourceRawHistory(type, key) : []);
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
   if (!preserveState) {
@@ -2570,6 +2599,11 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawCacheStatus('本次检测完成：' + formatSourceRawTime(Date.now()), sourceRawSourceErrors.size ? 'warning' : '');
+    if (type === 'customApis') {
+      const rawTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.raw || 0), 0);
+      const keptTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.kept || 0), 0);
+      saveSourceRawHistory(type, key, { at: Date.now(), raw: rawTotal, kept: keptTotal, filtered: Math.max(0, rawTotal - keptTotal), errors: sourceRawSourceErrors.size });
+    }
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
     renderSourceRawResults(true);

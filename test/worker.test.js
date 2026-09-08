@@ -371,6 +371,41 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
   }
 });
 
+test("limits concurrent custom API previews independently", async () => {
+  const sourceKey = "https://custom-concurrency.example/data";
+  const paths = ["custom_parallel_a", "custom_parallel_b", "custom_parallel_c"];
+  const values = {
+    apis: { [sourceKey]: { remark: "并发测试源" } },
+    subs: {},
+    custom_apis: Object.fromEntries(paths.map((path) => [path, {
+      enabled: true,
+      sourceMode: "selected",
+      sources: [{ type: "apis", key: sourceKey }],
+    }])),
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    return new Response("8.8.8.8:443#parallel", { status: 200 });
+  };
+  const request = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ path }),
+  }), runtime);
+  try {
+    const responses = await Promise.all(paths.map(request));
+    assert.equal(responses.filter((response) => response.status === 200).length, 2);
+    assert.equal(responses.filter((response) => response.status === 429).length, 1);
+    const busy = responses.find((response) => response.status === 429);
+    assert.equal((await busy.json()).code, "BUSY");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reads and updates blacklist configuration", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

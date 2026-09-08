@@ -15,6 +15,14 @@ const env = {
   },
 };
 
+const nativeFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === "string" ? input : input?.url;
+  if (url === "https://api.example.com") return new Response("2.2.2.2:443#api\n3.3.3.3:443#api", { status: 200 });
+  if (url === "https://e.ye.gs" || url === "https://e.ye.gs/") return new Response("1.1.1.1:443#sub", { status: 200 });
+  return nativeFetch(input, init);
+};
+
 const server = http.createServer(async (request, response) => {
   if (request.url === "/health") {
     response.writeHead(200, { "content-type": "text/plain" });

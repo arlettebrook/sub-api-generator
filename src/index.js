@@ -45,19 +45,26 @@ function makeAssetVersion(...contents) {
 const ADMIN_ASSET_VERSION = makeAssetVersion(adminStyle, adminClientScript);
 const previewActive = new Map();
 const previewRecent = new Map();
+const previewActiveByScope = new Map();
 const PREVIEW_MAX_CONCURRENT = 4;
+const PREVIEW_SCOPE_LIMITS = { source: 3, custom: 2 };
 const PREVIEW_COOLDOWN_MS = 2500;
 
-function acquirePreviewProtection(key) {
+function acquirePreviewProtection(scope, key) {
+  const guardKey = scope + ':' + key;
   const now = Date.now();
-  const last = previewRecent.get(key) || 0;
+  const last = previewRecent.get(guardKey) || 0;
   if (now - last < PREVIEW_COOLDOWN_MS) return { error: pagesJsonResponse({ error: "检测过于频繁，请稍后重试", code: "RATE_LIMITED", retryAfterMs: PREVIEW_COOLDOWN_MS - (now - last) }, 429) };
-  if (previewActive.size >= PREVIEW_MAX_CONCURRENT && !previewActive.has(key)) return { error: pagesJsonResponse({ error: "检测任务繁忙，请稍后重试", code: "BUSY" }, 429) };
-  previewRecent.set(key, now);
-  previewActive.set(key, (previewActive.get(key) || 0) + 1);
+  const scopeActive = previewActiveByScope.get(scope) || 0;
+  if (previewActive.size >= PREVIEW_MAX_CONCURRENT || scopeActive >= (PREVIEW_SCOPE_LIMITS[scope] || PREVIEW_MAX_CONCURRENT)) return { error: pagesJsonResponse({ error: "检测任务繁忙，请稍后重试", code: "BUSY" }, 429) };
+  previewRecent.set(guardKey, now);
+  previewActive.set(guardKey, (previewActive.get(guardKey) || 0) + 1);
+  previewActiveByScope.set(scope, scopeActive + 1);
   return { release() {
-    const count = (previewActive.get(key) || 1) - 1;
-    if (count > 0) previewActive.set(key, count); else previewActive.delete(key);
+    const count = (previewActive.get(guardKey) || 1) - 1;
+    if (count > 0) previewActive.set(guardKey, count); else previewActive.delete(guardKey);
+    const nextScopeActive = (previewActiveByScope.get(scope) || 1) - 1;
+    if (nextScopeActive > 0) previewActiveByScope.set(scope, nextScopeActive); else previewActiveByScope.delete(scope);
   } };
 }
 
@@ -160,7 +167,7 @@ async function handleSourceRaw(request, env) {
   const configured = await env.KV.get(type === "subs" ? KV_KEY_SUBS : KV_KEY_APIS, "json");
   const normalized = normalizeKvData(configured, type);
   if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
-  const guard = acquirePreviewProtection('source:' + type + ':' + key);
+  const guard = acquirePreviewProtection('source', type + ':' + key);
   if (guard.error) return guard.error;
   subscriptions.clearAggregateCache();
   try {
@@ -197,7 +204,7 @@ async function handleCustomApiPreview(request, env) {
   const configured = normalizeCustomApiData(await env.KV.get(KV_KEY_CUSTOM_APIS, "json"));
   const entry = configured[path];
   if (!entry) return pagesTextResponse("优选 API 不存在", 404);
-  const guard = acquirePreviewProtection('custom:' + path);
+  const guard = acquirePreviewProtection('custom', path);
   if (guard.error) return guard.error;
   try {
   let sourceSelection = entry.sources;

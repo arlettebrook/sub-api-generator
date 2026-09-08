@@ -1678,6 +1678,37 @@ export const adminStyle = `
     color: var(--danger);
   }
 
+  .source-raw-history {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+  }
+
+  .source-raw-history summary {
+    padding: 8px 10px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .source-raw-history-list {
+    display: grid;
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+
+  .source-raw-history-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .source-raw-history-item span {
+    text-align: right;
+  }
+
   .source-raw-process span {
     padding: 5px 8px;
     border: 1px solid var(--border-color);
@@ -3023,6 +3054,13 @@ export const adminStyle = `
     }
     .source-raw-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .source-raw-history-item {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .source-raw-history-item span {
+      text-align: left;
     }
     .source-raw-toolbar {
       align-items: stretch;
