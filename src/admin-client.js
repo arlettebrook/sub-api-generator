@@ -849,6 +849,7 @@ let sourceRawSourceMeta = new Map();
 let sourceRawSourceErrors = new Map();
 let sourceRawCollapsedGroups = new Set();
 let sourceRawSourceFilter = 'all';
+let sourceRawRetryingGroup = '';
 
 function sourceRawCacheKey(type, key) { return 'source-preview:' + type + ':' + key; }
 function loadSourceRawCache(type, key) {
@@ -857,17 +858,85 @@ function loadSourceRawCache(type, key) {
   try {
     const saved = JSON.parse(localStorage.getItem(cacheKey) || 'null');
     if (saved && Array.isArray(saved.nodes) && Date.now() - Number(saved.savedAt || 0) < 24 * 60 * 60 * 1000) {
-      sourceRawCache.set(cacheKey, saved);
-      return saved;
+      const normalized = normalizeSourceRawCache(saved);
+      sourceRawCache.set(cacheKey, normalized);
+      return normalized;
     }
   } catch { /* ignore unavailable or malformed browser storage */ }
   return null;
+}
+
+function parseLegacySourceGroupLabel(label) {
+  if (!label || label === '未识别来源') return null;
+  const parts = String(label).split(' · ');
+  const typeLabel = parts.shift() || '';
+  const type = typeLabel === 'API 源' ? 'apis' : typeLabel === '订阅源' ? 'subs' : '';
+  const key = parts.shift() || '';
+  return type && key ? { type, key, remark: parts.join(' · ').replace(/^备注：/, '').trim() } : null;
+}
+
+function normalizeSourceRawCache(saved) {
+  const sourceMeta = new Map();
+  const sourceIds = new Map();
+  (Array.isArray(saved.sourceMeta) ? saved.sourceMeta : []).forEach(([legacyId, value]) => {
+    const meta = value && typeof value === 'object' ? value : parseLegacySourceGroupLabel(legacyId);
+    if (!meta?.type || !meta.key) return;
+    const id = sourceGroupId(meta.type, meta.key);
+    sourceMeta.set(id, { type: meta.type, key: meta.key, remark: meta.remark || '' });
+    sourceIds.set(legacyId, id);
+  });
+  const normalizeId = (value) => {
+    if (sourceIds.has(value)) return sourceIds.get(value);
+    if (sourceMeta.has(value)) return value;
+    const legacy = parseLegacySourceGroupLabel(value);
+    if (!legacy) return value;
+    const id = sourceGroupId(legacy.type, legacy.key);
+    if (!sourceMeta.has(id)) sourceMeta.set(id, legacy);
+    return id;
+  };
+  const normalizeNodeSources = (entries) => (Array.isArray(entries) ? entries : []).map(([node, ids]) => [node, Array.isArray(ids) ? ids.map(normalizeId) : ids]);
+  const normalizeSourceNodes = (entries) => (Array.isArray(entries) ? entries : []).map(([id, nodes]) => [normalizeId(id), nodes]);
+  return {
+    ...saved,
+    sourceMeta: [...sourceMeta],
+    sourceErrors: (Array.isArray(saved.sourceErrors) ? saved.sourceErrors : []).map(([id, error]) => [normalizeId(id), error]),
+    nodeSources: normalizeNodeSources(saved.nodeSources),
+    unfilteredSourceNodes: normalizeSourceNodes(saved.unfilteredSourceNodes),
+  };
 }
 function saveSourceRawCache(type, key, value) {
   const cacheKey = sourceRawCacheKey(type, key);
   sourceRawCache.set(cacheKey, value);
   try { localStorage.setItem(cacheKey, JSON.stringify(value)); } catch { /* memory cache remains available */ }
 }
+
+function sourceGroupId(type, key) {
+  return String(type || '') + ':' + String(key || '');
+}
+
+function sourceGroupTypeLabel(type) {
+  return type === 'apis' ? 'API 源' : type === 'subs' ? '订阅源' : '来源';
+}
+
+function sourceGroupShortName(key) {
+  let shortName = String(key || '').split('/').pop() || String(key || '');
+  return shortName.split('?')[0].replace(/\.(txt|json|csv)$/i, '');
+}
+
+function sourceGroupLabelFromMeta(meta, keepType = false) {
+  if (!meta) return '未识别来源';
+  const type = sourceGroupTypeLabel(meta.type);
+  const remark = String(meta.remark || '').trim();
+  if (remark) return keepType ? type + ' · ' + remark : remark;
+  const name = sourceGroupShortName(meta.key);
+  return keepType ? type + ' · ' + name : name;
+}
+
+function sourceGroupDetailFromMeta(meta) {
+  if (!meta) return '';
+  return sourceGroupTypeLabel(meta.type) + ' · ' + meta.key;
+}
+
 let sourceRawTab = 'nodes';
 
 function setCustomApisDirty(dirty = true) {
@@ -2003,6 +2072,7 @@ function closeSourceRawDialog() {
   sourceRawSourceErrors = new Map();
   sourceRawCollapsedGroups = new Set();
   sourceRawSourceFilter = 'all';
+  sourceRawRetryingGroup = '';
   sourceRawLastRawVisible = [];
   if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
   sourceRawRefreshTimer = null;
@@ -2038,6 +2108,20 @@ function renderSourceRawSummary(status) {
     error.textContent = current.error;
     summary.appendChild(error);
   }
+}
+
+function formatSourceRawTime(value) {
+  const timestamp = Number(value || 0);
+  if (!timestamp) return '未知时间';
+  return new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
+}
+
+function renderSourceRawCacheStatus(text, state = '') {
+  const el = $('sourceRawCacheStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'source-raw-cache-status' + (state ? ' is-' + state : '');
+  el.hidden = !text;
 }
 
 function renderSourceRawProcess(stats = {}) {
@@ -2081,34 +2165,37 @@ function renderSourceRawResults(rawMode = false) {
     };
     if (showSources) {
       const groups = new Map();
-      sourceRawSourceMeta.forEach((_, label) => {
-        if (sourceRawSourceFilter === 'all' || sourceRawSourceFilter === label) groups.set(label, []);
+      sourceRawSourceMeta.forEach((_, id) => {
+        if (sourceRawSourceFilter === 'all' || sourceRawSourceFilter === id) groups.set(id, []);
       });
       if (rawMode && !sourceRawUnfilteredSourceNodes.size && allNodes.length && sourceRawSourceFilter === 'all') {
         groups.set('未识别来源', allNodes.slice());
       }
       if (rawMode) {
-        sourceRawUnfilteredSourceNodes.forEach((nodes, label) => {
-          if (sourceRawSourceFilter !== 'all' && label !== sourceRawSourceFilter) return;
-          groups.set(label, nodes.filter((node) => !query || node.toLowerCase().includes(query)));
+        sourceRawUnfilteredSourceNodes.forEach((nodes, id) => {
+          if (sourceRawSourceFilter !== 'all' && id !== sourceRawSourceFilter) return;
+          groups.set(id, nodes.filter((node) => !query || node.toLowerCase().includes(query)));
         });
       } else {
         visible.forEach((node) => {
           const sources = nodeSources.get(node);
-          const labels = Array.isArray(sources) && sources.length ? sources : ['未识别来源'];
-          labels.forEach((label) => {
-            if (sourceRawSourceFilter !== 'all' && label !== sourceRawSourceFilter) return;
-            if (!groups.has(label)) groups.set(label, []);
-            groups.get(label).push(node);
+          const ids = Array.isArray(sources) && sources.length ? sources : ['未识别来源'];
+          ids.forEach((id) => {
+            if (sourceRawSourceFilter !== 'all' && id !== sourceRawSourceFilter) return;
+            if (!groups.has(id)) groups.set(id, []);
+            groups.get(id).push(node);
           });
         });
       }
-      groups.forEach((groupNodes, label) => {
-        if (!groupNodes.length && !sourceRawSourceErrors.has(label)) return;
+      groups.forEach((groupNodes, id) => {
+        if (!groupNodes.length && !sourceRawSourceErrors.has(id)) return;
+        const meta = sourceRawSourceMeta.get(id);
         const group = document.createElement('section');
         group.className = 'source-raw-source-group';
-        const collapsed = sourceRawCollapsedGroups.has(label);
+        const collapsed = sourceRawCollapsedGroups.has(id);
         group.classList.toggle('is-collapsed', collapsed);
+        const headingRow = document.createElement('div');
+        headingRow.className = 'source-raw-source-heading-row';
         const heading = document.createElement('button');
         heading.type = 'button';
         heading.className = 'source-raw-source-heading';
@@ -2116,11 +2203,11 @@ function renderSourceRawResults(rawMode = false) {
         heading.setAttribute('role', 'button');
         heading.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         const title = document.createElement('strong');
-        title.textContent = formatSourceGroupLabel(label);
+        title.textContent = sourceGroupLabelFromMeta(meta);
         title.title = title.textContent;
         const total = document.createElement('span');
         total.textContent = groupNodes.length + ' 个节点';
-        const error = sourceRawSourceErrors.get(label);
+        const error = sourceRawSourceErrors.get(id);
         if (error) {
           const status = document.createElement('em');
           status.className = 'source-raw-source-error';
@@ -2128,15 +2215,29 @@ function renderSourceRawResults(rawMode = false) {
           status.title = error;
           heading.append(title, status, total);
         } else heading.append(title, total);
+        headingRow.appendChild(heading);
+        if (error && id !== '未识别来源') {
+          const retry = document.createElement('button');
+          retry.type = 'button';
+          retry.className = 'source-raw-source-retry';
+          retry.textContent = sourceRawRetryingGroup === id ? '重试中…' : '重试';
+          retry.disabled = sourceRawRetryingGroup === id;
+          retry.title = '重新检测当前优选 API 的来源';
+          retry.onclick = (event) => {
+            event.stopPropagation();
+            retrySourceRawGroup(id);
+          };
+          headingRow.appendChild(retry);
+        }
         const detail = document.createElement('small');
         detail.className = 'source-raw-source-detail';
-        detail.textContent = formatSourceGroupDetail(label);
+        detail.textContent = sourceGroupDetailFromMeta(meta);
         detail.title = detail.textContent;
-        group.append(heading, detail);
+        group.append(headingRow, detail);
         if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node)));
         const toggle = () => {
-          if (sourceRawCollapsedGroups.has(label)) sourceRawCollapsedGroups.delete(label);
-          else sourceRawCollapsedGroups.add(label);
+          if (sourceRawCollapsedGroups.has(id)) sourceRawCollapsedGroups.delete(id);
+          else sourceRawCollapsedGroups.add(id);
           renderSourceRawResults(rawMode);
         };
         heading.onclick = toggle;
@@ -2158,40 +2259,33 @@ function updateSourceRawGroupControls() {
   const show = sourceRawSelection?.type === 'customApis';
   if (controls) controls.hidden = !show;
   if (!filter || !show) return;
-  const labels = [...sourceRawSourceMeta.keys()];
+  const ids = [...sourceRawSourceMeta.keys()];
   filter.replaceChildren();
   const allOption = document.createElement('option');
   allOption.value = 'all';
   allOption.textContent = '全部来源';
   filter.appendChild(allOption);
-  labels.forEach((label) => {
+  ids.forEach((id) => {
     const option = document.createElement('option');
-    option.value = label;
-    option.textContent = formatSourceGroupLabel(label, true);
+    option.value = id;
+    option.textContent = sourceGroupLabelFromMeta(sourceRawSourceMeta.get(id), true);
     filter.appendChild(option);
   });
-  sourceRawSourceFilter = labels.includes(sourceRawSourceFilter) ? sourceRawSourceFilter : 'all';
+  sourceRawSourceFilter = ids.includes(sourceRawSourceFilter) ? sourceRawSourceFilter : 'all';
   filter.value = sourceRawSourceFilter;
 }
 
-function formatSourceGroupLabel(label, keepType = false) {
-  if (!label || label === '未识别来源') return label || '未识别来源';
-  const parts = String(label).split(' · ');
-  const type = parts.shift() || '';
-  const key = parts.shift() || '';
-  const remark = parts.join(' · ').replace(/^备注：/, '').trim();
-  if (remark) return keepType ? type + ' · ' + remark : remark;
-  let shortName = key.split('/').pop() || key;
-  shortName = shortName.split('?')[0].replace(/\.(txt|json|csv)$/i, '');
-  return keepType ? type + ' · ' + shortName : shortName;
-}
-
-function formatSourceGroupDetail(label) {
-  if (!label || label === '未识别来源') return '';
-  const parts = String(label).split(' · ');
-  const type = parts.shift() || '';
-  const key = parts.shift() || '';
-  return type + ' · ' + key;
+async function retrySourceRawGroup(id) {
+  if (!sourceRawSelection || sourceRawSelection.type !== 'customApis' || sourceRawRetryingGroup) return;
+  sourceRawRetryingGroup = id;
+  renderSourceRawResults(sourceRawTab === 'raw');
+  renderSourceRawCacheStatus('正在重新检测来源…', 'checking');
+  try {
+    await openSourceRawDialog('customApis', sourceRawSelection.key, true);
+  } finally {
+    sourceRawRetryingGroup = '';
+    renderSourceRawResults(sourceRawTab === 'raw');
+  }
 }
 
 function setSourceRawTab(tab) {
@@ -2234,6 +2328,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (!preserveState) {
     sourceRawCollapsedGroups = new Set();
     sourceRawSourceFilter = 'all';
+    renderSourceRawCacheStatus('正在检测数据…', 'checking');
   }
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
@@ -2256,6 +2351,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawSourceErrors = new Map(Array.isArray(cachedResult.sourceErrors) ? cachedResult.sourceErrors : []);
     renderSourceRawSummary(cachedResult.status);
     renderSourceRawProcess(cachedResult.status?.filterStats || {});
+    renderSourceRawCacheStatus('上次检测：' + formatSourceRawTime(cachedResult.savedAt) + '，正在重新检测…', 'checking');
     renderSourceRawResults();
     renderSourceRawResults(true);
   }
@@ -2348,25 +2444,24 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawSourceErrors = new Map();
     if (type === 'customApis') {
       (Array.isArray(result.sourceMeta) ? result.sourceMeta : []).forEach((item) => {
-        const label = (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key + (item.remark ? ' · 备注：' + item.remark : '');
-        sourceRawSourceMeta.set(label, item);
+        sourceRawSourceMeta.set(sourceGroupId(item.type, item.key), item);
       });
       (Array.isArray(result.nodeSources) ? result.nodeSources : []).forEach((item) => {
-        const label = (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key + (item.remark ? ' · 备注：' + item.remark : '');
-        if (!sourceRawSourceMeta.has(label)) sourceRawSourceMeta.set(label, { type: item.type, key: item.key, remark: item.remark || '' });
+        const id = sourceGroupId(item.type, item.key);
+        if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: item.type, key: item.key, remark: item.remark || '' });
         const values = sourceRawNodeSources.get(item.value) || [];
-        if (!values.includes(label)) values.push(label);
+        if (!values.includes(id)) values.push(id);
         sourceRawNodeSources.set(item.value, values);
       });
       (Array.isArray(result.rawSources) ? result.rawSources : []).forEach((item) => {
-        const label = (item.type === 'apis' ? 'API 源 · ' : '订阅源 · ') + item.key + (item.remark ? ' · 备注：' + item.remark : '');
+        const id = sourceGroupId(item.type, item.key);
         const values = Array.isArray(item.nodes) ? item.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
-        sourceRawUnfilteredSourceNodes.set(label, values);
-        if (!sourceRawSourceMeta.has(label)) sourceRawSourceMeta.set(label, { type: item.type, key: item.key, remark: item.remark || '' });
+        sourceRawUnfilteredSourceNodes.set(id, values);
+        if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: item.type, key: item.key, remark: item.remark || '' });
       });
       (result.status?.errors || []).forEach((item) => {
-        const label = [...sourceRawSourceMeta.entries()].find(([, meta]) => meta.type === item.type && meta.key === item.key)?.[0];
-        if (label) sourceRawSourceErrors.set(label, item.message || '检测失败');
+        const id = sourceGroupId(item.type, item.key);
+        if (sourceRawSourceMeta.has(id)) sourceRawSourceErrors.set(id, item.message || '检测失败');
       });
     }
     updateSourceRawGroupControls();
@@ -2374,6 +2469,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
+    renderSourceRawCacheStatus('本次检测完成：' + formatSourceRawTime(Date.now()), sourceRawSourceErrors.size ? 'warning' : '');
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
     renderSourceRawResults(true);
@@ -2387,9 +2483,19 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     if (error?.name === 'AbortError') return;
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
     const failedStatus = { ...previousStatus, state: 'network-error', error: error.message || '检测失败' };
+    renderSourceRawCacheStatus(cachedResult
+      ? '本次检测失败；当前显示最近一次检测结果：' + formatSourceRawTime(cachedResult.savedAt)
+      : '本次检测失败：' + failedStatus.error, 'warning');
     if (isManagedSource) sourceStatuses[type][normalizedKey] = failedStatus;
-    renderSourceRawSummary(failedStatus);
-    if (content) content.textContent = '数据源检测失败：' + failedStatus.error;
+    if (cachedResult && sourceRawNodes.length) {
+      renderSourceRawSummary(cachedResult.status);
+      renderSourceRawProcess(cachedResult.status?.filterStats || {});
+      renderSourceRawResults();
+      renderSourceRawResults(true);
+    } else {
+      renderSourceRawSummary(failedStatus);
+      if (content) content.textContent = '数据源检测失败：' + failedStatus.error;
+    }
     if (isManagedSource) {
       renderSourceStatusSummary();
       if ($('subsList')) renderSubs();

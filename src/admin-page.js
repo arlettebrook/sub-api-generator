@@ -67,6 +67,7 @@ export const adminHTML = `
   </div>
   <div class="source-raw-body">
     <div class="source-raw-summary" id="sourceRawSummary" aria-live="polite"></div>
+    <div class="source-raw-cache-status" id="sourceRawCacheStatus" aria-live="polite" hidden></div>
     <div class="source-raw-process" id="sourceRawProcess" aria-live="polite"></div>
     <div class="source-raw-tabs" role="tablist" aria-label="查看内容">
       <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-raw-tab="nodes">节点结果</button>
