@@ -112,7 +112,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#sourceRawSearch")).toHaveValue("2.2.2.2");
   await expect(page.locator("#sourceRawSourceSort")).toHaveValue("count");
   await expect(page.locator('[data-source-raw-tab="raw"]')).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#sourceRawRawContent .source-raw-source-heading").first()).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#sourceRawRawContent .source-raw-source-heading").first()).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#sourceRawHistoryPanel")).toContainText("原始");
   await page.locator("#sourceRawDialog .dialog-close").click();
   await createdRow.getByRole("button", { name: "🗑 删除" }).click();

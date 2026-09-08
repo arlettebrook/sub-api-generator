@@ -914,7 +914,6 @@ function saveSourceRawViewState() {
     query: $('sourceRawSearch')?.value || '',
     filter: sourceRawSourceFilter,
     sort: sourceRawSourceSort,
-    collapsed: [...sourceRawCollapsedGroups],
   };
   try { localStorage.setItem(sourceRawViewStateKey(sourceRawSelection.type, sourceRawSelection.key), JSON.stringify(state)); } catch { /* ignore unavailable storage */ }
 }
@@ -2479,7 +2478,8 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const refreshInterval = $('sourceRawRefreshInterval');
   if (!preserveState) {
     const viewState = type === 'customApis' ? loadSourceRawViewState(type, key) : null;
-    sourceRawCollapsedGroups = new Set(Array.isArray(viewState?.collapsed) ? viewState.collapsed : []);
+    // 折叠状态只作用于当前查看会话；重新打开时始终展开来源分组。
+    sourceRawCollapsedGroups = new Set();
     sourceRawSourceFilter = typeof viewState?.filter === 'string' ? viewState.filter : 'all';
     sourceRawSourceSort = ['config', 'count', 'error', 'name'].includes(viewState?.sort) ? viewState.sort : 'config';
     if (search) search.value = typeof viewState?.query === 'string' ? viewState.query : '';
