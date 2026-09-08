@@ -56,6 +56,31 @@ export const adminHTML = `
 </dialog>
 <!-- ADMIN_SECTION:customApiDialog:END -->
 
+<!-- ==================== 数据源原始数据查看 ==================== -->
+<dialog class="source-raw-dialog" id="sourceRawDialog" aria-labelledby="sourceRawDialogTitle">
+  <div class="custom-api-dialog-head">
+    <div>
+      <h3 id="sourceRawDialogTitle">原始数据查看</h3>
+      <p class="source-raw-dialog-subtitle" id="sourceRawDialogSource"></p>
+    </div>
+    <button class="dialog-close" type="button" onclick="closeSourceRawDialog()" title="关闭" aria-label="关闭">×</button>
+  </div>
+  <div class="source-raw-body">
+    <section class="source-raw-section">
+      <div class="source-raw-section-heading"><h4>原始配置</h4><button class="btn-outline icon-action" type="button" id="copySourceRawConfigButton">复制 JSON</button></div>
+      <pre id="sourceRawConfig" class="source-raw-code">-</pre>
+    </section>
+    <section class="source-raw-section">
+      <div class="source-raw-section-heading"><h4>源返回数据</h4><span id="sourceRawStatus" class="source-raw-status">加载中…</span></div>
+      <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在请求原始数据…</pre>
+    </section>
+    <div class="source-raw-actions">
+      <button class="btn-outline" type="button" id="reloadSourceRawButton">🔄 重新加载</button>
+      <button class="btn-primary" type="button" onclick="closeSourceRawDialog()">关闭</button>
+    </div>
+  </div>
+</dialog>
+
 <!-- ADMIN_SECTION:overview:START -->
 <!-- ==================== 优选节点预览 ==================== -->
 <div class="card" id="previewSection">

@@ -134,6 +134,22 @@ async function handlePostApis(request, env) {
   return pagesJsonResponse({ ok: true });
 }
 
+async function handleSourceRaw(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  const type = body?.type;
+  const key = typeof body?.key === "string" ? body.key.trim() : "";
+  if (!["subs", "apis"].includes(type) || !key) return pagesTextResponse("数据源参数无效", 400);
+  const configured = await env.KV.get(type === "subs" ? KV_KEY_SUBS : KV_KEY_APIS, "json");
+  const normalized = normalizeKvData(configured, type);
+  if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
+  try {
+    return pagesJsonResponse(await subscriptions.fetchRawSource(type, key));
+  } catch (error) {
+    return pagesJsonResponse({ error: error.message || "原始数据请求失败", code: error.code || "ERROR" }, error.statusCode >= 400 ? error.statusCode : 502);
+  }
+}
+
 async function handleGetBlacklist(env) {
   const data = await env.KV.get(KV_KEY_BLACKLIST, "json");
   return pagesJsonResponse(normalizeBlacklist(data));
@@ -300,6 +316,9 @@ export default {
           return pagesMethodNotAllowed("GET");
         case "/api/source-status/check":
           if (method === "POST") return await checkSourceStatuses(env, request);
+          return pagesMethodNotAllowed("POST");
+        case "/api/source-raw":
+          if (method === "POST") return await handleSourceRaw(request, env);
           return pagesMethodNotAllowed("POST");
         case "/api/blacklist":
           if (method === "GET") return await handleGetBlacklist(env);

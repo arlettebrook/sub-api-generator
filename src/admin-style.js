@@ -1606,6 +1606,94 @@ export const adminStyle = `
     white-space: nowrap;
   }
 
+  .source-view-button {
+    white-space: nowrap;
+  }
+
+  .source-raw-dialog {
+    width: min(960px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    margin: auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-lg);
+    background: var(--surface-solid);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .source-raw-dialog::backdrop {
+    background: rgba(2, 6, 23, 0.72);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .source-raw-dialog-subtitle {
+    margin: 4px 0 0;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .source-raw-body {
+    display: grid;
+    gap: 14px;
+    max-height: calc(100vh - 132px);
+    padding: 16px;
+    overflow: auto;
+  }
+
+  .source-raw-section {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .source-raw-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .source-raw-section-heading h4 {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .source-raw-status {
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .source-raw-code {
+    min-height: 72px;
+    max-height: 220px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font: 12px/1.65 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    white-space: pre-wrap;
+    overflow: auto;
+    overflow-wrap: anywhere;
+  }
+
+  .source-raw-content {
+    min-height: 180px;
+    max-height: min(52vh, 520px);
+  }
+
+  .source-raw-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 2px;
+  }
+
   #subsList .row:nth-child(even),
   #apisList .row:nth-child(even),
   #customApisList .row:nth-child(even) {
@@ -2541,6 +2629,20 @@ export const adminStyle = `
       width: calc(100vw - 24px);
       max-height: calc(100dvh - 24px);
       padding: 20px 16px max(20px, env(safe-area-inset-bottom, 0px));
+    }
+    .source-raw-dialog {
+      width: calc(100vw - 16px);
+      max-height: calc(100dvh - 16px);
+      border-radius: var(--radius-md);
+      align-self: end;
+    }
+    .source-raw-body {
+      max-height: calc(100dvh - 94px);
+      padding: 14px;
+    }
+    .source-raw-actions button {
+      flex: 1;
+      min-height: 42px;
     }
     .source-picker-head {
       flex-wrap: wrap;

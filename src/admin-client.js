@@ -834,6 +834,8 @@ let customApisDirty = false;
 let blacklistDirty = false;
 let filterRulesDirty = false;
 let pendingCustomApiDelete = null;
+let sourceRawRequest = null;
+let sourceRawSelection = null;
 
 function setCustomApisDirty(dirty = true) {
   customApisDirty = dirty;
@@ -1699,6 +1701,13 @@ function renderSubs() {
     row.appendChild(createCopyButton(host, '订阅源地址'));
     row.appendChild(health);
     row.appendChild(createSourceCheckButton('subs', host));
+    const viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'btn-outline source-view-button';
+    viewBtn.textContent = '查看';
+    viewBtn.setAttribute('aria-label', '查看订阅源原始数据 ' + host);
+    viewBtn.onclick = () => openSourceRawDialog('subs', host);
+    row.appendChild(viewBtn);
     row.appendChild(delBtn);
     el.appendChild(row);
   });
@@ -1909,9 +1918,89 @@ function renderApis() {
     row.appendChild(createCopyButton(url, 'API 地址'));
     row.appendChild(health);
     row.appendChild(createSourceCheckButton('apis', url));
+    const viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'btn-outline source-view-button';
+    viewBtn.textContent = '查看';
+    viewBtn.setAttribute('aria-label', '查看 API 源原始数据 ' + url);
+    viewBtn.onclick = () => openSourceRawDialog('apis', url);
+    row.appendChild(viewBtn);
     row.appendChild(delBtn);
     el.appendChild(row);
   });
+}
+
+function sourceRawEntry(type, key) {
+  const data = type === 'subs' ? subs : apis;
+  return data && Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
+}
+
+function closeSourceRawDialog() {
+  if (sourceRawRequest) sourceRawRequest.abort();
+  sourceRawRequest = null;
+  sourceRawSelection = null;
+  const dialog = $('sourceRawDialog');
+  if (dialog?.open) dialog.close();
+}
+
+async function openSourceRawDialog(type, key) {
+  const entry = sourceRawEntry(type, key);
+  const dialog = $('sourceRawDialog');
+  if (!entry || !dialog) return;
+  if (sourceRawRequest) sourceRawRequest.abort();
+  const controller = new AbortController();
+  sourceRawRequest = controller;
+  sourceRawSelection = { type, key };
+  const title = $('sourceRawDialogSource');
+  const config = $('sourceRawConfig');
+  const content = $('sourceRawContent');
+  const status = $('sourceRawStatus');
+  const reload = $('reloadSourceRawButton');
+  const copy = $('copySourceRawConfigButton');
+  if (title) title.textContent = (type === 'subs' ? '订阅源 · ' : 'API 源 · ') + key;
+  if (config) config.textContent = JSON.stringify({ [key]: entry }, null, 2);
+  if (content) content.textContent = '正在请求原始数据…';
+  if (status) status.textContent = '加载中…';
+  if (reload) reload.disabled = true;
+  if (copy) {
+    copy.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(config?.textContent || '');
+        showToast('配置 JSON 已复制', 'success');
+      } catch (error) {
+        showToast('复制失败：' + error.message, 'error');
+      }
+    };
+  }
+  if (!dialog.open) dialog.showModal();
+  try {
+    const response = await fetch('/api/source-raw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, key }),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    let result = null;
+    try { result = await response.json(); } catch { /* handled below */ }
+    if (!response.ok) throw new Error(result?.error || '请求失败（HTTP ' + response.status + '）');
+    if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
+    if (content) content.textContent = typeof result.content === 'string' ? result.content : JSON.stringify(result.content ?? '', null, 2);
+    if (status) status.textContent = 'HTTP ' + (result.statusCode || response.status) + ' · ' + (result.content?.length || 0) + ' 字符';
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
+    if (content) content.textContent = '原始数据加载失败：' + (error.message || '请求失败');
+    if (status) status.textContent = '加载失败';
+  } finally {
+    if (sourceRawSelection?.type === type && sourceRawSelection?.key === key) {
+      sourceRawRequest = null;
+      if (reload) {
+        reload.disabled = false;
+        reload.onclick = () => openSourceRawDialog(type, key);
+      }
+    }
+  }
 }
 
 function addApi() {
