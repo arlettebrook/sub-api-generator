@@ -1370,6 +1370,11 @@ export const adminStyle = `
     min-width: 0;
   }
 
+  .custom-api-dialog .form-field select {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
@@ -1710,6 +1715,26 @@ export const adminStyle = `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .custom-api-output-preview {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .custom-api-output-preview code {
+    min-width: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
   }
 
   .custom-api-edit-dialog .source-picker {

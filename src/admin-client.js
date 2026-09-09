@@ -713,7 +713,49 @@ function renderNodeView() {
 }
 
 function formatPreviewNodeLine(node) {
-  return node?.remark && node.remark !== '未命名' ? node.host + '#' + node.remark : node?.host || '';
+  return node?.outputValue || (node?.remark && node.remark !== '未命名' ? node.host + '#' + node.remark : node?.host || '');
+}
+
+function previewOutputValue(value = '8.209.253.101:34237#JP') {
+  const prefix = $('editCustomApiPrefix')?.value || '';
+  const separator = $('editCustomApiSuffixSeparator')?.value || '';
+  const suffix = $('editCustomApiSuffix')?.value || '';
+  const strategy = $('editCustomApiSuffixStrategy')?.value || 'skip';
+  const hashIndex = value.indexOf('#');
+  const base = hashIndex >= 0 ? value.slice(0, hashIndex) : value;
+  const remark = hashIndex >= 0 ? value.slice(hashIndex + 1) : '';
+  const suffixPart = suffix ? separator + suffix : '';
+  let outputRemark = remark;
+  if (strategy === 'replace') outputRemark = prefix + suffixPart;
+  else {
+    if (prefix && !outputRemark.startsWith(prefix)) outputRemark = prefix + outputRemark;
+    if (suffixPart && !(strategy === 'skip' && outputRemark.endsWith(suffixPart))) outputRemark += suffixPart;
+  }
+  return outputRemark ? base + '#' + outputRemark : base;
+}
+
+function updateCustomApiOutputPreview() {
+  const output = $('editCustomApiOutputPreview');
+  if (output) output.textContent = previewOutputValue();
+}
+
+function bindCustomApiOutputPreview() {
+  ['editCustomApiPrefix', 'editCustomApiSuffixSeparator', 'editCustomApiSuffix', 'editCustomApiSuffixStrategy'].forEach((id) => {
+    const input = $(id);
+    if (!input || input.dataset.previewBound === 'true') return;
+    input.dataset.previewBound = 'true';
+    input.addEventListener('input', updateCustomApiOutputPreview);
+    input.addEventListener('change', updateCustomApiOutputPreview);
+  });
+}
+
+function readCustomApiOutputSetting(id, maxLength, label) {
+  const input = $(id);
+  const value = input?.value || '';
+  if (/[\u0000-\u001F\u007F]/u.test(value)) throw new Error(label + '不能包含换行或控制字符');
+  const normalized = value.trim();
+  if (normalized.length > maxLength) throw new Error(label + '不能超过 ' + maxLength + ' 个字符');
+  return normalized;
 }
 
 function getPreviewApiUrl() {
@@ -781,7 +823,18 @@ async function fetchNodes(emptyRetry = 0) {
     
     const sourceMap = new Map(nodeSources.map((item) => [item.value, item]));
     nodes.forEach((node) => {
-      const source = sourceMap.get(node.host + (node.remark !== '未命名' ? '#' + node.remark : ''));
+      const outputValue = node.host + (node.remark !== '未命名' ? '#' + node.remark : '');
+      const source = sourceMap.get(outputValue);
+      const originalValue = source?.originalValue || outputValue;
+      const originalHashIndex = originalValue.indexOf('#');
+      if (originalHashIndex >= 0) {
+        node.host = originalValue.slice(0, originalHashIndex).trim();
+        node.remark = originalValue.slice(originalHashIndex + 1).trim() || '未命名';
+      } else {
+        node.host = originalValue;
+        node.remark = '未命名';
+      }
+      node.outputValue = outputValue;
       if (source) { node.sourceType = source.type; node.sourceKey = source.key; }
     });
     currentNodes = nodes;
@@ -893,7 +946,7 @@ function renderNodes(nodes) {
     copyBtn.title = '复制此节点';
     copyBtn.setAttribute('aria-label', '复制节点 ' + node.host);
     copyBtn.onclick = async () => {
-      try { await navigator.clipboard.writeText(node.host + (node.remark !== '未命名' ? '#' + node.remark : '')); copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制'; }, 1200); }
+      try { await navigator.clipboard.writeText(formatPreviewNodeLine(node)); copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制'; }, 1200); }
       catch (error) { showToast('复制失败：' + error.message, 'error'); }
     };
     const meta = document.createElement('div'); meta.className = 'node-meta'; meta.append(tagEl, copyBtn);
@@ -1775,6 +1828,12 @@ function renderCustomApis() {
       ? '已选择 ' + (Array.isArray(entry.sources) ? entry.sources.length : 0) + ' 个数据源'
       : '跟随全部数据源';
     identity.append(title, pathText, sourceSummary);
+    if (entry.prefix || entry.suffix) {
+      const outputSummary = document.createElement('span');
+      outputSummary.className = 'custom-api-source-summary';
+      outputSummary.textContent = '输出：' + (entry.prefix ? '前缀「' + entry.prefix + '」' : '') + (entry.suffix ? (entry.prefix ? ' · ' : '') + '后缀「' + (entry.suffixSeparator || '') + entry.suffix + '」' : '');
+      identity.appendChild(outputSummary);
+    }
     const url = document.createElement('code');
     url.className = 'custom-api-url';
     url.textContent = window.location.origin + '/' + path;
@@ -1907,11 +1966,15 @@ function openCustomApiEditDialog(path) {
   const remarkInput = $('editCustomApiRemark');
   const suffixSeparatorInput = $('editCustomApiSuffixSeparator');
   const suffixInput = $('editCustomApiSuffix');
+  const prefixInput = $('editCustomApiPrefix');
+  const suffixStrategyInput = $('editCustomApiSuffixStrategy');
   const hint = $('editCustomApiPathHint');
   if (pathInput) pathInput.value = path;
   if (remarkInput) remarkInput.value = entry.remark || '';
   if (suffixSeparatorInput) suffixSeparatorInput.value = entry.suffixSeparator || '';
   if (suffixInput) suffixInput.value = entry.suffix || '';
+  if (prefixInput) prefixInput.value = entry.prefix || '';
+  if (suffixStrategyInput) suffixStrategyInput.value = entry.suffixStrategy || 'skip';
   if (hint) {
     hint.textContent = '仅支持字母、数字、短横线和下划线。';
     hint.className = '';
@@ -1926,6 +1989,8 @@ function openCustomApiEditDialog(path) {
     container.innerHTML = '';
     container.appendChild(editingCustomApiPicker);
   }
+  bindCustomApiOutputPreview();
+  updateCustomApiOutputPreview();
   dialog.showModal();
   pathInput?.focus();
 }
@@ -1943,6 +2008,8 @@ async function saveCustomApiEdit() {
   const remarkInput = $('editCustomApiRemark');
   const suffixSeparatorInput = $('editCustomApiSuffixSeparator');
   const suffixInput = $('editCustomApiSuffix');
+  const prefixInput = $('editCustomApiPrefix');
+  const suffixStrategyInput = $('editCustomApiSuffixStrategy');
   const newPath = normalizeCustomApiPath(pathInput?.value);
   const error = validateCustomApiPath(newPath, editingCustomApiPath);
   if (error) {
@@ -1957,9 +2024,22 @@ async function saveCustomApiEdit() {
     sourceMode: entry.sourceMode === 'selected' ? 'selected' : 'all',
     sources: Array.isArray(entry.sources) ? entry.sources : [],
   };
+  let outputSettings;
+  try {
+    outputSettings = {
+      prefix: readCustomApiOutputSetting('editCustomApiPrefix', 128, '默认前缀'),
+      suffixSeparator: readCustomApiOutputSetting('editCustomApiSuffixSeparator', 32, '后缀连接符'),
+      suffix: readCustomApiOutputSetting('editCustomApiSuffix', 128, '输出后缀'),
+    };
+  } catch (error) {
+    showToast(error.message, 'error');
+    return;
+  }
   entry.remark = remarkInput?.value.trim() || '';
-  entry.suffixSeparator = suffixSeparatorInput?.value || '';
-  entry.suffix = suffixInput?.value || '';
+  entry.prefix = outputSettings.prefix;
+  entry.suffixSeparator = outputSettings.suffixSeparator;
+  entry.suffix = outputSettings.suffix;
+  entry.suffixStrategy = ['append', 'replace', 'skip'].includes(suffixStrategyInput?.value) ? suffixStrategyInput.value : 'skip';
   entry.sourceMode = selection.sourceMode;
   entry.sources = selection.sources;
   if (newPath !== editingCustomApiPath) {

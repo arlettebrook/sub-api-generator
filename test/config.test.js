@@ -131,6 +131,11 @@ test("normalizes optional custom API result suffix settings", () => {
   });
 });
 
+test("rejects unsafe custom API output labels and unknown strategies", () => {
+  assert.throws(() => validateApiPathPayload({ safe: { suffix: "bad\nvalue" } }), /控制字符/);
+  assert.throws(() => validateApiPathPayload({ safe: { suffixStrategy: "unknown" } }), /追加策略无效/);
+});
+
 test("reads and validates JSON request bodies", async () => {
   const request = new Request("https://example.test/api/subs", {
     method: "POST",

@@ -322,25 +322,56 @@ function normalizeSourceSelection(sourceSelection) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules, outputSuffix = "") {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules, outputTransform = {}) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
     blacklist,
     filterRules,
-    outputSuffix,
+    outputTransform,
   });
 }
 
-function getOutputSuffix(options = {}) {
+function getOutputTransform(options = {}) {
   const suffix = typeof options.suffix === "string" ? options.suffix : "";
   const separator = typeof options.suffixSeparator === "string" ? options.suffixSeparator : "";
-  return suffix ? separator + suffix : "";
+  const prefix = typeof options.prefix === "string" ? options.prefix : "";
+  const suffixStrategy = ["append", "replace", "skip"].includes(options.suffixStrategy) ? options.suffixStrategy : "skip";
+  return { prefix, separator, suffix, suffixStrategy };
 }
 
-function appendOutputSuffix(value, outputSuffix) {
-  return outputSuffix && value ? value + outputSuffix : value;
+function transformOutputValue(value, transform) {
+  const line = String(value || "").trim();
+  if (!line) return { value: "", originalValue: "", originalRemark: "", outputRemark: "" };
+  const hashIndex = line.indexOf("#");
+  const base = hashIndex >= 0 ? line.slice(0, hashIndex) : line;
+  const remark = hashIndex >= 0 ? line.slice(hashIndex + 1) : "";
+  const suffixPart = transform.suffix ? transform.separator + transform.suffix : "";
+  let outputRemark = remark;
+  if (transform.suffixStrategy === "replace") {
+    outputRemark = transform.prefix + suffixPart;
+  } else {
+    if (transform.prefix && !outputRemark.startsWith(transform.prefix)) outputRemark = transform.prefix + outputRemark;
+    if (suffixPart && !(transform.suffixStrategy === "skip" && outputRemark.endsWith(suffixPart))) outputRemark += suffixPart;
+  }
+  const outputValue = outputRemark ? `${base}#${outputRemark}` : base;
+  return { value: outputValue, originalValue: line, originalRemark: remark, outputRemark };
+}
+
+function makeNodeSource(value, transform, type, key, remark) {
+  const transformed = transformOutputValue(value, transform);
+  return {
+    value: transformed.value,
+    ...(transformed.value !== transformed.originalValue ? {
+      originalValue: transformed.originalValue,
+      originalRemark: transformed.originalRemark,
+      outputRemark: transformed.outputRemark,
+    } : {}),
+    type,
+    key,
+    remark,
+  };
 }
 
 function pruneAggregateCache(now = Date.now()) {
@@ -385,8 +416,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
 
     const blacklist = normalizeBlacklist(blacklistConfig);
     const filterRules = normalizeFilterRules(filterRulesConfig);
-    const outputSuffix = getOutputSuffix(options);
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules, outputSuffix);
+    const outputTransform = getOutputTransform(options);
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules, outputTransform);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -515,7 +546,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       if (result.status === "fulfilled") {
         preferred.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
-        result.value.values.forEach((value) => nodeSources.push({ value: appendOutputSuffix(value, outputSuffix), type: "subs", key: result.value.key, remark: result.value.remark }));
+        result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "subs", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "subs", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
@@ -524,13 +555,17 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       if (result.status === "fulfilled") {
         extra.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
-        result.value.values.forEach((value) => nodeSources.push({ value: appendOutputSuffix(value, outputSuffix), type: "apis", key: result.value.key, remark: result.value.remark }));
+        result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "apis", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
 
     const filtered = [...new Set(preferred)];
-    const output = [...filtered, ...extra].map((value) => appendOutputSuffix(value, outputSuffix)).join("\n");
+    const transformedSeen = new Set();
+    const transformedValues = [...filtered, ...extra]
+      .map((value) => transformOutputValue(value, outputTransform))
+      .filter((item) => item.value && !transformedSeen.has(item.value) && transformedSeen.add(item.value));
+    const output = transformedValues.map((item) => item.value).join("\n");
     filterStats.outputCount = output ? output.split("\n").filter(Boolean).length : 0;
     const generatedAt = new Date().toISOString();
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。

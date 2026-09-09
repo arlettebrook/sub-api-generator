@@ -192,6 +192,27 @@ test("appends a configured suffix to every generated result", async () => {
   }
 });
 
+test("skips duplicate suffixes and keeps original node metadata separate", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("8.209.253.101:34237#JP\n8.209.253.101:34237#JP-后缀", { status: 200 });
+  const runtime = { KV: { async get(key) {
+    if (key === "subs") return {};
+    if (key === "apis") return { "https://api.example/source": {} };
+    return null;
+  } } };
+  try {
+    clearAggregateCache();
+    const options = { includeRaw: true, suffixSeparator: "-", suffix: "后缀", suffixStrategy: "skip" };
+    const response = await handleRoot(runtime, [{ type: "apis", key: "https://api.example/source" }], options);
+    assert.equal(await response.text(), "8.209.253.101:34237#JP-后缀");
+    assert.equal(options.nodeSources[0].originalValue, "8.209.253.101:34237#JP");
+    assert.equal(options.nodeSources[0].outputRemark, "JP-后缀");
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("invalidates aggregate cache when blacklist configuration changes", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#blocked";

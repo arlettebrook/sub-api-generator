@@ -255,8 +255,9 @@ export const adminHTML = `
           <small id="newCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
         </label>
         <label class="form-field">
-          <span>备注</span>
+          <span>API 名称 / 备注</span>
           <input id="newCustomApiRemark" placeholder="可选" autocomplete="off" />
+          <small>仅用于后台标识和搜索，不会写入节点结果。</small>
         </label>
       </div>
       <div id="newCustomApiSources"><div class="source-picker-skeleton" aria-label="正在加载数据源"></div></div>
@@ -280,19 +281,40 @@ export const adminHTML = `
           <small id="editCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
         </label>
         <label class="form-field">
-          <span>备注</span>
+          <span>API 名称 / 备注</span>
           <input id="editCustomApiRemark" placeholder="可选" autocomplete="off" />
+          <small>仅用于后台标识和搜索，不会写入节点结果。</small>
         </label>
         <label class="form-field">
-          <span>后缀连接符</span>
+          <span>默认前缀</span>
+          <input id="editCustomApiPrefix" placeholder="例如 VIP-" autocomplete="off" maxlength="128" />
+          <small>加在节点原始备注前，仅用于输出结果。</small>
+        </label>
+        <label class="form-field">
+          <span>输出后缀连接符</span>
           <input id="editCustomApiSuffixSeparator" placeholder="例如 -" autocomplete="off" maxlength="32" />
           <small>追加到每条结果前的连接符。</small>
         </label>
         <label class="form-field">
-          <span>后缀内容</span>
+          <span>输出后缀</span>
           <input id="editCustomApiSuffix" placeholder="例如 后缀" autocomplete="off" maxlength="128" />
           <small>留空则不追加后缀。</small>
         </label>
+        <label class="form-field">
+          <span>后缀追加策略</span>
+          <select id="editCustomApiSuffixStrategy">
+            <option value="skip">智能追加（防重复）</option>
+            <option value="append">始终追加</option>
+            <option value="replace">替换原备注</option>
+          </select>
+          <small>智能追加会检测已有后缀，避免重复追加。</small>
+        </label>
+      </div>
+      <div class="custom-api-output-preview" aria-live="polite">
+        <span>原始备注</span>
+        <code>8.209.253.101:34237#JP</code>
+        <span>输出结果</span>
+        <code id="editCustomApiOutputPreview">8.209.253.101:34237#JP</code>
       </div>
       <div class="custom-api-edit-url" id="editCustomApiUrl"></div>
       <div id="editCustomApiSources"><div class="source-picker-skeleton" aria-label="正在加载数据源"></div></div>

@@ -12,6 +12,8 @@ export const MAX_FILTER_RULES = 200;
 export const MAX_FILTER_RULE_LENGTH = 128;
 export const MAX_API_SUFFIX_SEPARATOR_LENGTH = 32;
 export const MAX_API_SUFFIX_LENGTH = 128;
+export const MAX_API_PREFIX_LENGTH = 128;
+export const API_SUFFIX_STRATEGIES = new Set(["append", "replace", "skip"]);
 export const SOURCE_MODE_ALL = "all";
 export const SOURCE_MODE_SELECTED = "selected";
 
@@ -20,6 +22,15 @@ export const DEFAULT_FILTER_RULES = [];
 
 const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);
+
+function validateApiText(value, maxLength, label) {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw new Error(`${label}必须是字符串`);
+  if (/[\u0000-\u001F\u007F]/u.test(value)) throw new Error(`${label}不能包含换行或控制字符`);
+  const normalized = value.trim();
+  if (normalized.length > maxLength) throw new Error(`${label}不能超过 ${maxLength} 个字符`);
+  return normalized;
+}
 
 export function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -203,13 +214,20 @@ export function validateApiPathPayload(body) {
         normalizedSources.push({ type: source.type, key });
       }
     }
-    const suffixSeparator = typeof value.suffixSeparator === "string" ? value.suffixSeparator.slice(0, MAX_API_SUFFIX_SEPARATOR_LENGTH) : "";
-    const suffix = typeof value.suffix === "string" ? value.suffix.slice(0, MAX_API_SUFFIX_LENGTH) : "";
+    const prefix = validateApiText(value.prefix, MAX_API_PREFIX_LENGTH, "输出前缀");
+    const suffixSeparator = validateApiText(value.suffixSeparator, MAX_API_SUFFIX_SEPARATOR_LENGTH, "后缀连接符");
+    const suffix = validateApiText(value.suffix, MAX_API_SUFFIX_LENGTH, "输出后缀");
+    const suffixStrategy = value.suffixStrategy === undefined ? "skip" : value.suffixStrategy;
+    if (typeof suffixStrategy !== "string" || !API_SUFFIX_STRATEGIES.has(suffixStrategy)) {
+      throw new Error(`后缀追加策略无效: ${rawPath}`);
+    }
     normalized[path] = {
       enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
+      ...(prefix ? { prefix } : {}),
       ...(suffixSeparator ? { suffixSeparator } : {}),
       ...(suffix ? { suffix } : {}),
+      ...(suffixStrategy !== "skip" ? { suffixStrategy } : {}),
       sourceMode,
       sources: sourceMode === SOURCE_MODE_SELECTED ? normalizedSources : [],
     };
@@ -227,13 +245,17 @@ export function normalizeCustomApiData(data) {
       const sourceMode = value.sourceMode === SOURCE_MODE_SELECTED
         ? SOURCE_MODE_SELECTED
         : SOURCE_MODE_ALL;
-      const suffixSeparator = typeof value.suffixSeparator === "string" ? value.suffixSeparator.slice(0, MAX_API_SUFFIX_SEPARATOR_LENGTH) : "";
-      const suffix = typeof value.suffix === "string" ? value.suffix.slice(0, MAX_API_SUFFIX_LENGTH) : "";
+      const prefix = typeof value.prefix === "string" ? value.prefix.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_PREFIX_LENGTH) : "";
+      const suffixSeparator = typeof value.suffixSeparator === "string" ? value.suffixSeparator.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_SUFFIX_SEPARATOR_LENGTH) : "";
+      const suffix = typeof value.suffix === "string" ? value.suffix.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_SUFFIX_LENGTH) : "";
+      const suffixStrategy = API_SUFFIX_STRATEGIES.has(value.suffixStrategy) ? value.suffixStrategy : "skip";
       normalized[path] = {
         enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",
+        ...(prefix ? { prefix } : {}),
         ...(suffixSeparator ? { suffixSeparator } : {}),
         ...(suffix ? { suffix } : {}),
+        ...(suffixStrategy !== "skip" ? { suffixStrategy } : {}),
         sourceMode,
         sources: sourceMode === SOURCE_MODE_SELECTED && Array.isArray(value.sources)
           ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis"].includes(source.type) && typeof source.key === "string")
