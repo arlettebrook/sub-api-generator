@@ -1496,6 +1496,32 @@ function createSourceHealth(type, key) {
   return health;
 }
 
+function refreshSourceHealthRows(type, sourceKeys = null) {
+  const list = $(type === 'subs' ? 'subsList' : 'apisList');
+  if (!list) return;
+  const normalizedKeys = sourceKeys ? new Set(sourceKeys.map((key) => normalizeSourceKeyClient(type, key))) : null;
+  list.querySelectorAll('.row[data-source-key]').forEach((row) => {
+    if (normalizedKeys && !normalizedKeys.has(normalizeSourceKeyClient(type, row.dataset.sourceKey || ''))) return;
+    const health = row.querySelector('.source-health');
+    if (health) health.replaceWith(createSourceHealth(type, row.dataset.sourceKey || ''));
+  });
+}
+
+function refreshRenderedSourceStatuses(sources = null) {
+  renderSourceStatusSummary();
+  if (sources?.length) {
+    const grouped = { subs: [], apis: [] };
+    sources.forEach(({ type, key }) => {
+      if (grouped[type]) grouped[type].push(key);
+    });
+    refreshSourceHealthRows('subs', grouped.subs);
+    refreshSourceHealthRows('apis', grouped.apis);
+    return;
+  }
+  refreshSourceHealthRows('subs');
+  refreshSourceHealthRows('apis');
+}
+
 async function loadSourceStatuses(mode = 'read', sources = []) {
   const manual = mode !== 'read';
   const refreshButton = $('sourceStatusRefreshButton');
@@ -1518,9 +1544,7 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
       const normalizedKey = normalizeSourceKeyClient(type, key);
       if (sourceStatuses[type]?.[normalizedKey]) sourceStatuses[type][normalizedKey] = { ...sourceStatuses[type][normalizedKey], state: 'checking', error: '' };
     });
-    renderSourceStatusSummary();
-    if ($('subsList')) renderSubs();
-    if ($('apisList')) renderApis();
+    refreshRenderedSourceStatuses(mode === 'selected' ? sources : null);
   }
   try {
     const requestOptions = mode === 'read' ? {} : {
@@ -1533,15 +1557,11 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
       '数据源状态',
       requestOptions,
     );
-    renderSourceStatusSummary();
-    if ($('subsList')) renderSubs();
-    if ($('apisList')) renderApis();
+    refreshRenderedSourceStatuses();
     if (nodesContainer && currentNodes.length) renderNodeView();
   } catch {
     sourceStatuses = previousStatuses;
-    renderSourceStatusSummary();
-    if ($('subsList')) renderSubs();
-    if ($('apisList')) renderApis();
+    refreshRenderedSourceStatuses();
     // 状态接口不可用时保留配置页面，不阻断管理操作。
   } finally {
     if (manual && refreshButton) {
@@ -2249,9 +2269,11 @@ function renderSubs() {
   const sort = $('subsSort')?.value || 'default';
   let entries = Object.entries(subs).filter(([host, entry]) => !query || (host + ' ' + (entry.remark || '')).toLowerCase().includes(query));
   if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
+  const fragment = document.createDocumentFragment();
   entries.forEach(([host, entry]) => {
     const row = document.createElement('div');
     row.className = 'row';
+    row.dataset.sourceKey = host;
     const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'source-select'; select.checked = false; select.dataset.key = host; select.setAttribute('aria-label', '选择订阅源 ' + host);
 
     const remarkInput = document.createElement('input');
@@ -2323,8 +2345,9 @@ function renderSubs() {
     downloadBtn.onclick = () => downloadSourceData('subs', host, entry, downloadBtn);
     row.appendChild(downloadBtn);
     row.appendChild(delBtn);
-    el.appendChild(row);
+    fragment.appendChild(row);
   });
+  el.appendChild(fragment);
 }
 
 async function applySourceBatch(type, action, trigger) {
@@ -2478,9 +2501,11 @@ function renderApis() {
   const sort = $('apisSort')?.value || 'default';
   let entries = Object.entries(apis).filter(([url, entry]) => !query || (url + ' ' + (entry.remark || '')).toLowerCase().includes(query));
   if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
+  const fragment = document.createDocumentFragment();
   entries.forEach(([url, entry]) => {
     const row = document.createElement('div');
     row.className = 'row';
+    row.dataset.sourceKey = url;
     const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'source-select'; select.dataset.key = url; select.setAttribute('aria-label', '选择 API 源 ' + url);
 
     const remarkInput = document.createElement('input');
@@ -2552,8 +2577,9 @@ function renderApis() {
     downloadBtn.onclick = () => downloadSourceData('apis', url, entry, downloadBtn);
     row.appendChild(downloadBtn);
     row.appendChild(delBtn);
-    el.appendChild(row);
+    fragment.appendChild(row);
   });
+  el.appendChild(fragment);
 }
 
 function sourceRawEntry(type, key) {
@@ -3010,9 +3036,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (isManagedSource) {
     sourceStatuses[type] ||= {};
     sourceStatuses[type][normalizedKey] = { ...previousStatus, state: 'checking', error: '' };
-    renderSourceStatusSummary();
-    if ($('subsList')) renderSubs();
-    if ($('apisList')) renderApis();
+    refreshRenderedSourceStatuses([{ type, key }]);
   }
   try {
     const response = await fetch(type === 'customApis' ? '/api/custom-api-preview' : '/api/source-raw', {
@@ -3073,11 +3097,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
     renderSourceRawResults(true);
-    if (isManagedSource) {
-      renderSourceStatusSummary();
-      if ($('subsList')) renderSubs();
-      if ($('apisList')) renderApis();
-    }
+    if (isManagedSource) refreshRenderedSourceStatuses([{ type, key }]);
     if (copy) copy.disabled = sourceRawNodes.length === 0 && sourceRawUnfilteredNodes.length === 0;
   } catch (error) {
     if (error?.name === 'AbortError') return;
@@ -3096,11 +3116,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
       renderSourceRawSummary(failedStatus);
       if (content) content.textContent = '数据源检测失败：' + failedStatus.error;
     }
-    if (isManagedSource) {
-      renderSourceStatusSummary();
-      if ($('subsList')) renderSubs();
-      if ($('apisList')) renderApis();
-    }
+    if (isManagedSource) refreshRenderedSourceStatuses([{ type, key }]);
   } finally {
     if (sourceRawSelection?.type === type && sourceRawSelection?.key === key) {
       sourceRawRequest = null;

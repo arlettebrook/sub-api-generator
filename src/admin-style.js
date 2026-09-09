@@ -2156,6 +2156,13 @@ export const adminStyle = `
     background: var(--bg-tertiary);
   }
 
+  /* 管理列表可能包含大量数据源。让浏览器跳过视口外行的绘制，滚动时只处理当前可见区域。 */
+  #subsList .row,
+  #apisList .row {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 86px;
+  }
+
   .source-check-button {
     white-space: nowrap;
   }
