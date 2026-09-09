@@ -44,6 +44,27 @@ test("loads the dashboard and switches theme", async ({ page }) => {
   await page.locator('a[data-nav-page="overview"]').click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.locator("#nodesContainer")).toBeVisible();
+  await page.evaluate(() => {
+    const preview = document.querySelector("#previewSection");
+    const raw = document.createElement("pre");
+    raw.className = "preview-api-data";
+    raw.style.height = "48px";
+    raw.style.overflow = "auto";
+    raw.textContent = Array.from({ length: 40 }, (_, index) => "node-" + index).join("\n");
+    const spacer = document.createElement("div");
+    spacer.id = "e2e-scroll-spacer";
+    spacer.style.height = "1800px";
+    preview.append(raw, spacer);
+    raw.scrollTop = 220;
+    window.scrollTo(0, 600);
+  });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(120);
+  await expect.poll(() => page.locator("#previewSection .preview-api-data").evaluate((element) => element.scrollTop)).toBe(220);
+  await page.locator("#scrollTopButton").click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(2);
+  await expect.poll(() => page.locator("#previewSection .preview-api-data").evaluate((element) => element.scrollTop)).toBe(0);
+  await page.locator("#e2e-scroll-spacer").evaluate((element) => element.remove());
+  await page.locator("#previewSection .preview-api-data").evaluate((element) => element.remove());
   await expect(page.locator("#previewApiSelect")).toBeHidden();
   await expect(page.locator("[data-preview-mode]")).toHaveCount(2);
   await page.locator('[data-preview-mode="api"]').click();

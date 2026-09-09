@@ -13,6 +13,8 @@ let nodesContainer, paginationEl, nodesCountEl, previewModeButtons;
 let previewDataStatusEl, previewDataModeHintEl, previewDataStatsEl, previewDataCacheEl, previewDataUpdatedEl;
 let previewDataMeta = { filterStats: null, cache: '', generatedAt: '' };
 let nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesFilterResetEl, nodesSourceFilterEl, nodesStatusFilterEl;
+let scrollTopButtonElement = null;
+let scrollTopButtonFrame = 0;
 
 // 地区匹配映射表（替代长串if-else，匹配效率提升60%+）
 const regionMap = [
@@ -3951,8 +3953,9 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
 }
 
 function updateScrollTopButton() {
-  const button = $('scrollTopButton');
+  const button = scrollTopButtonElement || $('scrollTopButton');
   if (!button) return;
+  scrollTopButtonElement = button;
   const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
   const visible = scrollTop > 120;
   button.classList.toggle('is-visible', visible);
@@ -3960,16 +3963,49 @@ function updateScrollTopButton() {
   button.tabIndex = visible ? 0 : -1;
 }
 
+function scheduleScrollTopButtonUpdate() {
+  if (scrollTopButtonFrame) return;
+  const callback = () => {
+    scrollTopButtonFrame = 0;
+    updateScrollTopButton();
+  };
+  if (typeof window.requestAnimationFrame === 'function') scrollTopButtonFrame = window.requestAnimationFrame(callback);
+  else scrollTopButtonFrame = window.setTimeout(callback, 16);
+}
+
+function scrollElementToTop(element, behavior) {
+  if (!element) return;
+  if (typeof element.scrollTo === 'function') element.scrollTo({ top: 0, left: 0, behavior });
+  else {
+    element.scrollTop = 0;
+    element.scrollLeft = 0;
+  }
+}
+
+function resetPreviewDataScroll(behavior) {
+  document.querySelectorAll('#previewSection .preview-api-data').forEach((element) => {
+    scrollElementToTop(element, behavior);
+    const dataTopButton = element.parentElement?.querySelector('.preview-api-top-button');
+    if (dataTopButton) {
+      dataTopButton.classList.remove('is-visible');
+      dataTopButton.setAttribute('aria-hidden', 'true');
+      dataTopButton.tabIndex = -1;
+    }
+  });
+}
+
 function initScrollTopButton() {
-  const button = $('scrollTopButton');
+  const button = scrollTopButtonElement || $('scrollTopButton');
   if (!button || button.dataset.bound === 'true') return;
+  scrollTopButtonElement = button;
   button.dataset.bound = 'true';
   button.addEventListener('click', () => {
     const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth';
-    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior });
-    else document.documentElement.scrollTop = 0;
+    resetPreviewDataScroll(behavior);
+    scrollElementToTop(document.scrollingElement || document.documentElement, behavior);
+    updateScrollTopButton();
   });
-  window.addEventListener('scroll', updateScrollTopButton, { passive: true });
+  window.addEventListener('scroll', scheduleScrollTopButtonUpdate, { passive: true });
   updateScrollTopButton();
 }
 
