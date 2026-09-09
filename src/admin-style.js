@@ -700,6 +700,7 @@ export const adminStyle = `
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+    margin-top: 10px;
     color: var(--text-tertiary);
     font-size: 12px;
   }
@@ -3885,24 +3886,41 @@ export const adminStyle = `
       width: 100%;
     }
     .settings-dialog {
-      width: calc(100vw - 20px);
-      height: calc(100vh - 20px);
-      max-height: calc(100vh - 20px);
+      width: min(calc(100vw - 16px), 560px);
+      height: calc(100dvh - 16px);
+      max-height: calc(100dvh - 16px);
       border-radius: 14px;
     }
     .settings-dialog-head {
-      padding: 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 40px;
+      align-items: start;
+      gap: 10px;
+      padding: 14px 14px 12px;
+    }
+    .settings-dialog-head h3 {
+      font-size: 18px;
+      line-height: 1.25;
+    }
+    .settings-dialog-head p {
+      max-width: 34ch;
+      line-height: 1.45;
+    }
+    .settings-dialog-head .dialog-close {
+      width: 40px;
+      height: 40px;
+      margin: -4px -4px 0 0;
     }
     .settings-dialog-body {
       min-height: 0;
       max-height: none;
-      padding: 14px;
+      padding: 14px 12px calc(16px + env(safe-area-inset-bottom, 0px));
     }
     .settings-dialog-footer,
     .settings-dialog-footer.blacklist-toolbar {
       grid-template-columns: 1fr;
       gap: 8px;
-      padding: 10px 14px 14px;
+      padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
     }
     .settings-dialog-footer .save-status {
       min-height: 32px;
@@ -3917,6 +3935,7 @@ export const adminStyle = `
     .settings-editor-section-head span {
       display: block;
       margin: 0;
+      line-height: 1.4;
     }
     .settings-editor-add-section {
       padding-bottom: 14px;
@@ -3937,9 +3956,23 @@ export const adminStyle = `
     }
     .settings-editor-more-actions {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      padding: 8px;
+    }
+    .settings-editor-more-actions > button {
+      min-height: 40px;
+      padding: 0 6px;
+      font-size: 12px;
     }
     .settings-editor-more-actions .setting-batch-delete {
       grid-column: 1 / -1;
+    }
+    .settings-editor-more > summary small {
+      max-width: 46%;
+      overflow: hidden;
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .settings-editor-preview-details > summary span {
       font-size: 11px;
@@ -3965,6 +3998,7 @@ export const adminStyle = `
       min-width: 0;
     }
     .selection-count {
+      grid-column: 1 / -1;
       justify-self: start;
       width: auto;
       min-width: 0;
@@ -4004,6 +4038,28 @@ export const adminStyle = `
     }
     .blacklist-list {
       grid-template-columns: 1fr;
+    }
+    .blacklist-row {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+    }
+    .blacklist-row .rule-select {
+      justify-self: center;
+    }
+    .blacklist-row input:not(.rule-select) {
+      min-width: 0;
+      min-height: 40px;
+      height: 40px;
+      font-size: 15px;
+    }
+    .blacklist-row .del-btn {
+      min-width: 58px;
+      min-height: 40px;
+      padding: 0 8px;
+      font-size: 12px;
     }
     .blacklist-list.is-large {
       max-height: none;
