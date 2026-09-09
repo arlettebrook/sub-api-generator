@@ -2024,7 +2024,7 @@ async function saveCustomApiEdit() {
   let outputSettings;
   try {
     outputSettings = {
-      prefix: readCustomApiOutputSetting('editCustomApiPrefix', 128, '默认前缀'),
+      prefix: readCustomApiOutputSetting('editCustomApiPrefix', 128, '输出前缀'),
       suffix: readCustomApiOutputSetting('editCustomApiSuffix', 128, '输出后缀'),
     };
   } catch (error) {

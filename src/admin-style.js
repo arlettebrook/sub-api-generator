@@ -1718,10 +1718,10 @@ export const adminStyle = `
   }
 
   .custom-api-output-preview {
-    display: flex;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
     align-items: baseline;
-    flex-wrap: wrap;
-    gap: 6px 10px;
+    gap: 8px 12px;
     margin-top: 12px;
     padding: 10px 12px;
     border: 1px solid var(--border-color);
@@ -1729,6 +1729,41 @@ export const adminStyle = `
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     font-size: 12px;
+  }
+
+  .custom-api-output-settings {
+    margin-top: 16px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .custom-api-output-settings-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .custom-api-output-settings-head strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .custom-api-output-settings-head small {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .custom-api-output-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
   }
 
   .custom-api-output-preview code {
@@ -3785,6 +3820,9 @@ export const adminStyle = `
     .form-grid {
       grid-template-columns: 1fr;
     }
+    .custom-api-output-grid {
+      grid-template-columns: 1fr;
+    }
     .custom-api-create {
       padding: 12px;
     }
@@ -4500,6 +4538,9 @@ export const adminStyle = `
   @media screen and (min-width: 769px) and (max-width: 900px), screen and (min-device-width: 769px) and (max-device-width: 900px) {
     .custom-api-dialog .form-grid {
       grid-template-columns: 1fr;
+    }
+    .custom-api-output-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 

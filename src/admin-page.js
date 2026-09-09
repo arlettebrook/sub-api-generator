@@ -285,26 +285,33 @@ export const adminHTML = `
           <input id="editCustomApiRemark" placeholder="可选" autocomplete="off" />
           <small>仅用于后台标识和搜索，不会写入节点结果。</small>
         </label>
-        <label class="form-field">
-          <span>默认前缀</span>
-          <input id="editCustomApiPrefix" placeholder="例如 VIP-" autocomplete="off" maxlength="128" />
-          <small>加在节点原始备注前，仅用于输出结果。</small>
-        </label>
-        <label class="form-field">
-          <span>输出后缀</span>
-          <input id="editCustomApiSuffix" placeholder="例如 后缀" autocomplete="off" maxlength="128" />
-          <small>留空则不追加后缀。</small>
-        </label>
-        <label class="form-field">
-          <span>后缀追加策略</span>
-          <select id="editCustomApiSuffixStrategy">
-            <option value="skip">智能追加（防重复）</option>
-            <option value="append">始终追加</option>
-            <option value="replace">替换原备注</option>
-          </select>
-          <small>智能追加会检测已有后缀，避免重复追加。</small>
-        </label>
       </div>
+      <section class="custom-api-output-settings" aria-labelledby="customApiOutputSettingsTitle">
+        <div class="custom-api-output-settings-head">
+          <div>
+            <strong id="customApiOutputSettingsTitle">节点输出设置</strong>
+            <small>仅影响最终输出，不改变原始节点备注。</small>
+          </div>
+        </div>
+        <div class="custom-api-output-grid">
+          <label class="form-field">
+            <span>输出前缀</span>
+            <input id="editCustomApiPrefix" placeholder="例如 VIP-" autocomplete="off" maxlength="128" />
+          </label>
+          <label class="form-field">
+            <span>输出后缀</span>
+            <input id="editCustomApiSuffix" placeholder="例如 -后缀" autocomplete="off" maxlength="128" />
+          </label>
+          <label class="form-field">
+            <span>追加策略</span>
+            <select id="editCustomApiSuffixStrategy">
+              <option value="skip">智能追加（防重复）</option>
+              <option value="append">始终追加</option>
+              <option value="replace">替换原备注</option>
+            </select>
+          </label>
+        </div>
+      </section>
       <div class="custom-api-output-preview" aria-live="polite">
         <span>原始备注</span>
         <code>8.209.253.101:34237#JP</code>
