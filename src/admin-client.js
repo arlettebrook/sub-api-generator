@@ -3449,7 +3449,11 @@ function openSettingsDialog(id) {
   else dialog.setAttribute('open', '');
   const body = dialog.querySelector('.settings-dialog-body');
   if (body) { body.scrollTop = 0; body.scrollLeft = 0; }
-  dialog.querySelector('input, select, button')?.focus();
+  dialog.querySelectorAll('.settings-editor-list, [data-scroll-container]').forEach((element) => {
+    element.scrollTop = 0;
+    element.scrollLeft = 0;
+  });
+  dialog.querySelector('.settings-dialog-body input, .settings-dialog-body select')?.focus();
 }
 
 function closeSettingsDialog(id) {
@@ -3618,13 +3622,17 @@ function initSettingsEnhancements() {
   if (blacklistSearch && blacklistSearch.dataset.bound !== 'true') {
     blacklistSearch.dataset.bound = 'true';
     blacklistSearch.value = blacklistSearchTerm;
-    blacklistSearch.addEventListener('input', debounce(() => { blacklistSearchTerm = blacklistSearch.value; blacklistPage = 1; renderBlacklist(); }, 180));
+    const updateBlacklistSearch = () => { blacklistSearchTerm = blacklistSearch.value; blacklistPage = 1; renderBlacklist(); };
+    blacklistSearch.addEventListener('input', debounce(updateBlacklistSearch, 180));
+    blacklistSearch.addEventListener('search', updateBlacklistSearch);
   }
   const filterSearch = $('filterRulesSearch');
   if (filterSearch && filterSearch.dataset.bound !== 'true') {
     filterSearch.dataset.bound = 'true';
     filterSearch.value = filterRulesSearchTerm;
-    filterSearch.addEventListener('input', debounce(() => { filterRulesSearchTerm = filterSearch.value; filterRulesPage = 1; renderFilterRules(); }, 180));
+    const updateFilterSearch = () => { filterRulesSearchTerm = filterSearch.value; filterRulesPage = 1; renderFilterRules(); };
+    filterSearch.addEventListener('input', debounce(updateFilterSearch, 180));
+    filterSearch.addEventListener('search', updateFilterSearch);
   }
   const previewInput = $('filterPreviewInput');
   if (previewInput && previewInput.dataset.bound !== 'true') {

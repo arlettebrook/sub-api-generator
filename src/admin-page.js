@@ -381,34 +381,40 @@ export const adminHTML = `
           <button class="dialog-close" type="button" onclick="closeSettingsDialog('blacklistDialog')" aria-label="关闭">×</button>
         </div>
         <div class="settings-dialog-body">
-      <div class="blacklist-add-row settings-editor-add">
-        <input id="newBlacklistWord" type="text" maxlength="128" placeholder="输入要过滤的关键词" autocomplete="off" />
-        <button class="btn-outline setting-add-button" id="addBlacklistButton" type="button" onclick="addBlacklistWord()">➕ 添加</button>
-      </div>
-      <div class="rule-list-toolbar settings-editor-toolbar">
-        <label class="rule-search"><span aria-hidden="true">⌕</span><input id="blacklistSearch" type="search" placeholder="搜索黑名单" autocomplete="off" aria-label="搜索黑名单" /></label>
-        <span class="selection-count" id="blacklistSelectionCount">未选择</span>
-        <button class="btn-subtle" type="button" onclick="selectAllBlacklist()">全选</button>
-        <button class="btn-subtle" type="button" onclick="clearBlacklistSelection()">清除选择</button>
-      </div>
-      <div id="blacklistList" class="blacklist-list settings-editor-list"></div>
-      <div id="blacklistPagination" class="rule-pagination" hidden></div>
-      <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
-      <details class="settings-editor-more">
-        <summary>批量操作与备份</summary>
-        <div class="settings-editor-more-actions">
-          <button class="btn-subtle setting-tool-button" type="button" onclick="exportBlacklist()">📤 导出</button>
-          <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importBlacklistFile').click()">📥 导入</button>
-          <input type="file" id="importBlacklistFile" accept=".json,application/json" style="display:none" onchange="importBlacklist(event)" />
-          <button class="btn-subtle setting-undo-button" type="button" onclick="undoBlacklistChanges()" disabled>↩ 撤销修改</button>
-          <button class="btn-subtle setting-reset-button" type="button" onclick="resetBlacklistDefaults()">↺ 恢复默认</button>
-          <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedBlacklist()">🗑 删除选中</button>
+          <section class="settings-editor-section settings-editor-add-section">
+            <div class="settings-editor-section-head"><div><strong>添加关键词</strong><span>匹配节点备注后将被过滤</span></div></div>
+            <div class="blacklist-add-row settings-editor-add">
+              <input id="newBlacklistWord" type="text" maxlength="128" placeholder="输入要过滤的关键词" autocomplete="off" />
+              <button class="btn-primary setting-add-button" id="addBlacklistButton" type="button" onclick="addBlacklistWord()">➕ 添加关键词</button>
+            </div>
+          </section>
+          <section class="settings-editor-section settings-editor-list-section">
+            <div class="settings-editor-section-head"><div><strong>已配置关键词</strong><span>可直接编辑，勾选后可批量处理</span></div></div>
+            <div class="rule-list-toolbar settings-editor-toolbar">
+              <label class="rule-search"><span aria-hidden="true">⌕</span><input id="blacklistSearch" type="search" placeholder="搜索关键词" autocomplete="off" aria-label="搜索黑名单" /></label>
+              <span class="selection-count" id="blacklistSelectionCount">未选择</span>
+              <button class="btn-subtle" type="button" onclick="selectAllBlacklist()">全选</button>
+              <button class="btn-subtle" type="button" onclick="clearBlacklistSelection()">清除选择</button>
+            </div>
+            <div id="blacklistList" class="blacklist-list settings-editor-list"></div>
+            <div id="blacklistPagination" class="rule-pagination" hidden></div>
+            <div id="blacklistEmpty" class="blacklist-empty" hidden>暂无黑名单词条，所有节点都将参与聚合。</div>
+          </section>
+          <details class="settings-editor-more">
+            <summary><span>批量操作与备份</span><small>导入、导出和恢复配置</small></summary>
+            <div class="settings-editor-more-actions">
+              <button class="btn-subtle setting-tool-button" type="button" onclick="exportBlacklist()">📤 导出</button>
+              <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importBlacklistFile').click()">📥 导入</button>
+              <input type="file" id="importBlacklistFile" accept=".json,application/json" style="display:none" onchange="importBlacklist(event)" />
+              <button class="btn-subtle setting-undo-button" type="button" onclick="undoBlacklistChanges()" disabled>↩ 撤销修改</button>
+              <button class="btn-subtle setting-reset-button" type="button" onclick="resetBlacklistDefaults()">↺ 恢复默认</button>
+              <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedBlacklist()">🗑 删除选中</button>
+            </div>
+          </details>
         </div>
-      </details>
-      <div class="blacklist-toolbar settings-editor-footer">
-        <span class="save-status" id="blacklistSaveStatus">配置已保存</span>
-        <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
-      </div>
+        <div class="blacklist-toolbar settings-editor-footer settings-dialog-footer">
+          <span class="save-status" id="blacklistSaveStatus">配置已保存</span>
+          <button class="btn-primary" id="saveBlacklistButton" type="button" onclick="saveBlacklist()" disabled>💾 保存黑名单</button>
         </div>
       </dialog>
     </div>
@@ -427,50 +433,56 @@ export const adminHTML = `
           <button class="dialog-close" type="button" onclick="closeSettingsDialog('filterRulesDialog')" aria-label="关闭">×</button>
         </div>
         <div class="settings-dialog-body">
-      <div class="blacklist-add-row settings-editor-add">
-        <input id="newFilterRule" type="text" maxlength="128" placeholder="例如：| 或 【" autocomplete="off" />
-        <button class="btn-outline setting-add-button" id="addFilterRuleButton" type="button" onclick="addFilterRule()">➕ 添加</button>
-      </div>
-      <div class="filter-rule-presets" aria-label="常用过滤规则">
-        <span>快捷示例</span>
-        <button class="rule-preset" type="button" data-filter-rule="|">|</button>
-        <button class="rule-preset" type="button" data-filter-rule="【">【</button>
-        <button class="rule-preset" type="button" data-filter-rule="空格">空格</button>
-        <button class="rule-preset" type="button" data-filter-rule="符号">符号</button>
-      </div>
-      <div class="rule-list-toolbar settings-editor-toolbar">
-        <label class="rule-search"><span aria-hidden="true">⌕</span><input id="filterRulesSearch" type="search" placeholder="搜索过滤规则" autocomplete="off" aria-label="搜索过滤规则" /></label>
-        <span class="selection-count" id="filterRulesSelectionCount">未选择</span>
-        <button class="btn-subtle" type="button" onclick="selectAllFilterRules()">全选</button>
-        <button class="btn-subtle" type="button" onclick="clearFilterRulesSelection()">清除选择</button>
-      </div>
-      <div id="filterRulesList" class="blacklist-list settings-editor-list"></div>
-      <div id="filterRulesPagination" class="rule-pagination" hidden></div>
-      <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
-      <div class="filter-preview settings-editor-preview" aria-live="polite">
-        <details class="settings-editor-preview-details">
-          <summary><strong>实时预览</strong><span>点击查看处理结果</span></summary>
-          <div class="settings-editor-preview-body">
-            <label><span class="sr-only">输入示例备注</span><input id="filterPreviewInput" type="text" value="🇭🇰 香港 | IEPL 专线" placeholder="输入一段备注查看处理结果" /></label>
-            <div class="filter-preview-result"><span>处理结果</span><code id="filterPreviewOutput">🇭🇰 香港</code></div>
+          <section class="settings-editor-section settings-editor-add-section">
+            <div class="settings-editor-section-head"><div><strong>添加过滤规则</strong><span>命中后保留规则前面的内容</span></div></div>
+            <div class="blacklist-add-row settings-editor-add">
+              <input id="newFilterRule" type="text" maxlength="128" placeholder="例如：| 或 【" autocomplete="off" />
+              <button class="btn-primary setting-add-button" id="addFilterRuleButton" type="button" onclick="addFilterRule()">➕ 添加规则</button>
+            </div>
+            <div class="filter-rule-presets" aria-label="常用过滤规则">
+              <span>快捷示例</span>
+              <button class="rule-preset" type="button" data-filter-rule="|">|</button>
+              <button class="rule-preset" type="button" data-filter-rule="【">【</button>
+              <button class="rule-preset" type="button" data-filter-rule="空格">空格</button>
+              <button class="rule-preset" type="button" data-filter-rule="符号">符号</button>
+            </div>
+          </section>
+          <section class="settings-editor-section settings-editor-list-section">
+            <div class="settings-editor-section-head"><div><strong>已配置过滤规则</strong><span>可直接编辑，规则按当前顺序执行</span></div></div>
+            <div class="rule-list-toolbar settings-editor-toolbar">
+              <label class="rule-search"><span aria-hidden="true">⌕</span><input id="filterRulesSearch" type="search" placeholder="搜索过滤规则" autocomplete="off" aria-label="搜索过滤规则" /></label>
+              <span class="selection-count" id="filterRulesSelectionCount">未选择</span>
+              <button class="btn-subtle" type="button" onclick="selectAllFilterRules()">全选</button>
+              <button class="btn-subtle" type="button" onclick="clearFilterRulesSelection()">清除选择</button>
+            </div>
+            <div id="filterRulesList" class="blacklist-list settings-editor-list"></div>
+            <div id="filterRulesPagination" class="rule-pagination" hidden></div>
+            <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
+          </section>
+          <div class="filter-preview settings-editor-preview" aria-live="polite">
+            <details class="settings-editor-preview-details">
+              <summary><strong>实时预览</strong><span>输入示例备注查看处理结果</span></summary>
+              <div class="settings-editor-preview-body">
+                <label><span class="sr-only">输入示例备注</span><input id="filterPreviewInput" type="text" value="🇭🇰 香港 | IEPL 专线" placeholder="输入一段备注查看处理结果" /></label>
+                <div class="filter-preview-result"><span>处理结果</span><code id="filterPreviewOutput">🇭🇰 香港</code></div>
+              </div>
+            </details>
           </div>
-        </details>
-      </div>
-      <details class="settings-editor-more">
-        <summary>批量操作与备份</summary>
-        <div class="settings-editor-more-actions">
-          <button class="btn-subtle setting-tool-button" type="button" onclick="exportFilterRules()">📤 导出</button>
-          <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importFilterRulesFile').click()">📥 导入</button>
-          <input type="file" id="importFilterRulesFile" accept=".json,application/json" style="display:none" onchange="importFilterRules(event)" />
-          <button class="btn-subtle setting-undo-button" type="button" onclick="undoFilterRulesChanges()" disabled>↩ 撤销修改</button>
-          <button class="btn-subtle setting-reset-button" type="button" onclick="resetFilterRulesDefaults()">↺ 恢复默认</button>
-          <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedFilterRules()">🗑 删除选中</button>
+          <details class="settings-editor-more">
+            <summary><span>批量操作与备份</span><small>导入、导出和恢复配置</small></summary>
+            <div class="settings-editor-more-actions">
+              <button class="btn-subtle setting-tool-button" type="button" onclick="exportFilterRules()">📤 导出</button>
+              <button class="btn-subtle setting-tool-button" type="button" onclick="document.getElementById('importFilterRulesFile').click()">📥 导入</button>
+              <input type="file" id="importFilterRulesFile" accept=".json,application/json" style="display:none" onchange="importFilterRules(event)" />
+              <button class="btn-subtle setting-undo-button" type="button" onclick="undoFilterRulesChanges()" disabled>↩ 撤销修改</button>
+              <button class="btn-subtle setting-reset-button" type="button" onclick="resetFilterRulesDefaults()">↺ 恢复默认</button>
+              <button class="btn-danger setting-batch-delete" type="button" onclick="deleteSelectedFilterRules()">🗑 删除选中</button>
+            </div>
+          </details>
         </div>
-      </details>
-      <div class="blacklist-toolbar settings-editor-footer">
-        <span class="save-status" id="filterRulesSaveStatus">配置已保存</span>
-        <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
-      </div>
+        <div class="blacklist-toolbar settings-editor-footer settings-dialog-footer">
+          <span class="save-status" id="filterRulesSaveStatus">配置已保存</span>
+          <button class="btn-primary" id="saveFilterRulesButton" type="button" onclick="saveFilterRules()" disabled>💾 保存过滤规则</button>
         </div>
       </dialog>
     </div>

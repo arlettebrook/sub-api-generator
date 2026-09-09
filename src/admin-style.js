@@ -318,7 +318,10 @@ export const adminStyle = `
   }
 
   .settings-dialog {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     width: min(760px, calc(100vw - 32px));
+    height: min(760px, calc(100vh - 40px));
     max-height: min(760px, calc(100vh - 40px));
     margin: auto;
     padding: 0;
@@ -328,6 +331,10 @@ export const adminStyle = `
     background: var(--surface-solid);
     color: var(--text-primary);
     box-shadow: var(--shadow-lg);
+  }
+
+  .settings-dialog:not([open]) {
+    display: none;
   }
 
   .settings-dialog::backdrop {
@@ -365,7 +372,8 @@ export const adminStyle = `
   }
 
   .settings-dialog-body {
-    max-height: calc(100vh - 150px);
+    min-height: 0;
+    max-height: none;
     padding: 18px 20px 20px;
     overflow-x: hidden;
     overflow-y: auto;
@@ -373,17 +381,60 @@ export const adminStyle = `
     scrollbar-gutter: stable;
   }
 
-  .settings-dialog-body > .blacklist-toolbar {
-    position: sticky;
-    bottom: -20px;
-    z-index: 4;
-    margin: 14px -20px -20px;
-    padding: 12px 20px 20px;
+  .settings-editor-section {
+    min-width: 0;
+  }
+
+  .settings-editor-section + .settings-editor-section,
+  .settings-editor-section + .filter-preview,
+  .filter-preview + .settings-editor-more,
+  .settings-editor-more + .settings-dialog-footer {
+    margin-top: 18px;
+  }
+
+  .settings-editor-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .settings-editor-section-head strong {
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .settings-editor-section-head span {
+    margin-left: 8px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .settings-editor-add-section {
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .settings-dialog-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 14px 20px 16px;
     border-top: 1px solid var(--border-color);
-    background: color-mix(in srgb, var(--surface-solid) 94%, transparent);
-    box-shadow: 0 -8px 18px rgba(2, 6, 23, .12);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: var(--surface-solid);
+  }
+
+  .settings-dialog-footer .save-status {
+    min-width: 0;
+    margin: 0;
+  }
+
+  .settings-dialog-footer .btn-primary {
+    width: 100%;
+    min-width: 0;
   }
 
   .settings-editor-add {
@@ -426,11 +477,7 @@ export const adminStyle = `
   }
 
   .settings-editor-footer {
-    margin-top: 14px;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    padding: 10px 0 0;
-    border-top: 1px solid var(--border-color);
   }
 
   .settings-editor-footer .save-status {
@@ -478,6 +525,13 @@ export const adminStyle = `
   .settings-editor-preview-details > summary:hover {
     background: color-mix(in srgb, var(--accent-light) 55%, transparent);
     color: var(--text-primary);
+  }
+
+  .settings-editor-more > summary small {
+    margin-left: auto;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 400;
   }
 
   .settings-editor-more > summary::-webkit-details-marker,
@@ -833,6 +887,19 @@ export const adminStyle = `
   .blacklist-toolbar .btn-primary { order: 6; grid-column: span 2; }
 
   .blacklist-toolbar .save-status { margin-right: 0; }
+
+  .settings-dialog-footer.blacklist-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+    align-items: center;
+    gap: 12px;
+    padding-top: 14px;
+  }
+
+  .settings-dialog-footer.blacklist-toolbar .save-status,
+  .settings-dialog-footer.blacklist-toolbar .btn-primary {
+    order: initial;
+    grid-column: auto;
+  }
 
   .setting-add-button {
     flex: 0 0 auto;
@@ -3825,6 +3892,7 @@ export const adminStyle = `
     }
     .settings-dialog {
       width: calc(100vw - 20px);
+      height: calc(100vh - 20px);
       max-height: calc(100vh - 20px);
       border-radius: 14px;
     }
@@ -3832,13 +3900,32 @@ export const adminStyle = `
       padding: 14px;
     }
     .settings-dialog-body {
-      max-height: calc(100vh - 112px);
+      min-height: 0;
+      max-height: none;
       padding: 14px;
     }
-    .settings-dialog-body > .blacklist-toolbar {
-      bottom: -14px;
-      margin: 12px -14px -14px;
+    .settings-dialog-footer,
+    .settings-dialog-footer.blacklist-toolbar {
+      grid-template-columns: 1fr;
+      gap: 8px;
       padding: 10px 14px 14px;
+    }
+    .settings-dialog-footer .save-status {
+      min-height: 32px;
+      justify-content: center;
+      text-align: center;
+    }
+    .settings-editor-section-head {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .settings-editor-section-head span {
+      display: block;
+      margin: 0;
+    }
+    .settings-editor-add-section {
+      padding-bottom: 14px;
     }
     .settings-editor-add {
       padding: 10px;
