@@ -3932,6 +3932,7 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
     if (historyMode === 'push') window.history.pushState({ page: nextPage }, '', target.pathname + target.search + target.hash);
     currentRouteUrl = window.location.href;
     window.scrollTo({ top: 0, behavior: 'auto' });
+    updateScrollTopButton();
   } catch (error) {
     if (error.name !== 'AbortError') {
       if (historyMode === 'none') {
@@ -3947,6 +3948,28 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
       pageNavigationRequest = null;
     }
   }
+}
+
+function updateScrollTopButton() {
+  const button = $('scrollTopButton');
+  if (!button) return;
+  const visible = (window.scrollY || document.documentElement.scrollTop || 0) > 180;
+  button.classList.toggle('is-visible', visible);
+  button.setAttribute('aria-hidden', String(!visible));
+  button.tabIndex = visible ? 0 : -1;
+}
+
+function initScrollTopButton() {
+  const button = $('scrollTopButton');
+  if (!button || button.dataset.bound === 'true') return;
+  button.dataset.bound = 'true';
+  button.addEventListener('click', () => {
+    const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth';
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior });
+    else document.documentElement.scrollTop = 0;
+  });
+  window.addEventListener('scroll', updateScrollTopButton, { passive: true });
+  updateScrollTopButton();
 }
 
 // 页面初始化
@@ -3994,6 +4017,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   $('themeSwitch')?.addEventListener('click', toggleTheme);
   $('logoutButton')?.addEventListener('click', logout);
+  initScrollTopButton();
   initTheme();
   loadActivePage(page);
 });

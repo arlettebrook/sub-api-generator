@@ -182,6 +182,46 @@ export const adminStyle = `
   @keyframes page-load-progress { to { transform: scaleX(.82); } }
   .page-navigating .card { opacity: .82; transition: opacity .15s ease; }
 
+  .scroll-top-button {
+    position: fixed;
+    right: max(24px, env(safe-area-inset-right, 0px));
+    bottom: max(24px, env(safe-area-inset-bottom, 0px));
+    z-index: 1000;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    border-color: var(--border-hover);
+    background: var(--surface-solid);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(10px);
+    transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s;
+  }
+
+  .scroll-top-button.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+    transition-delay: 0s;
+  }
+
+  .scroll-top-button span {
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scroll-top-button {
+      transition: none;
+      transform: none;
+    }
+  }
+
   body[data-page="overview"] #subsSection,
   body[data-page="overview"] #apisSection,
   body[data-page="overview"] #customApiSection,
@@ -3837,6 +3877,10 @@ export const adminStyle = `
     .theme-switch {
       width: 46px;
       height: 26px;
+    }
+    .scroll-top-button {
+      right: max(16px, env(safe-area-inset-right, 0px));
+      bottom: calc(76px + env(safe-area-inset-bottom, 0px));
     }
     .theme-switch::before {
       width: 19px;

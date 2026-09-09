@@ -41,6 +41,10 @@ export const adminHTML = `
 </nav>
 <div class="page-load-indicator" aria-hidden="true"></div>
 
+<button class="scroll-top-button" id="scrollTopButton" type="button" title="返回顶部" aria-label="返回顶部" aria-hidden="true" tabindex="-1">
+  <span aria-hidden="true">↑</span>
+</button>
+
 <p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
 
 <main id="adminPageContent">
