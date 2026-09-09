@@ -2051,6 +2051,27 @@ export const adminStyle = `
     box-shadow: var(--shadow-sm);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translate3d(0, -8px, 0) scale(.96);
+    transform-origin: top right;
+    transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+  }
+
+  .preview-api-top-button.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate3d(0, 0, 0) scale(1);
+    transition-delay: 0s;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .preview-api-top-button {
+      transition: none;
+      transform: none;
+    }
   }
 
   .preview-data-status {

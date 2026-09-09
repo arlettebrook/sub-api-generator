@@ -834,8 +834,15 @@ function renderNodes(nodes) {
     topButton.type = 'button';
     topButton.className = 'btn-subtle preview-api-top-button';
     topButton.textContent = '返回数据顶部';
-    const updateTopButton = () => { topButton.hidden = raw.scrollTop <= 160; };
-    topButton.hidden = true;
+    topButton.setAttribute('aria-label', '返回 API 数据顶部');
+    topButton.setAttribute('aria-hidden', 'true');
+    topButton.tabIndex = -1;
+    const updateTopButton = () => {
+      const visible = raw.scrollTop > 160;
+      topButton.classList.toggle('is-visible', visible);
+      topButton.setAttribute('aria-hidden', String(!visible));
+      topButton.tabIndex = visible ? 0 : -1;
+    };
     topButton.onclick = () => {
       if (typeof raw.scrollTo === 'function') raw.scrollTo({ top: 0, behavior: 'smooth' });
       else raw.scrollTop = 0;
