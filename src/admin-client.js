@@ -1270,7 +1270,6 @@ function loadSourceRawViewState(type, key) {
 function saveSourceRawViewState() {
   if (sourceRawSelection?.type !== 'customApis') return;
   const state = {
-    tab: sourceRawTab,
     query: $('sourceRawSearch')?.value || '',
     filter: sourceRawSourceFilter,
     sort: sourceRawSourceSort,
@@ -2901,7 +2900,8 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     sourceRawSourceFilter = typeof viewState?.filter === 'string' ? viewState.filter : 'all';
     sourceRawSourceSort = ['config', 'count', 'error', 'name'].includes(viewState?.sort) ? viewState.sort : 'config';
     if (search) search.value = typeof viewState?.query === 'string' ? viewState.query : '';
-    setSourceRawTab(viewState?.tab === 'raw' ? 'raw' : 'nodes');
+    // 每次重新打开原始数据弹窗都从“节点结果”开始；自动刷新会通过 preserveState 保留当前标签。
+    setSourceRawTab('nodes');
     renderSourceRawCacheStatus('正在检测数据…', 'checking');
   }
   renderSourceRawHistory(type === 'customApis' ? loadSourceRawHistory(type, key) : []);

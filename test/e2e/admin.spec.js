@@ -180,7 +180,8 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect.poll(() => page.locator("#sourceRawDialog .source-raw-body").evaluate((element) => element.scrollTop)).toBe(0);
   await expect(page.locator("#sourceRawSearch")).toHaveValue("2.2.2.2");
   await expect(page.locator("#sourceRawSourceSort")).toHaveValue("count");
-  await expect(page.locator('[data-source-raw-tab="raw"]')).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator('[data-source-raw-tab="nodes"]')).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator('[data-source-raw-tab="raw"]')).toHaveAttribute("aria-selected", "false");
   await expect(page.locator("#sourceRawRawContent .source-raw-source-heading").first()).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#sourceRawHistoryPanel")).toContainText("原始");
   await page.locator("#sourceRawHistoryPanel summary").click();
