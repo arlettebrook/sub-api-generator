@@ -184,7 +184,7 @@ test("appends a configured suffix to every generated result", async () => {
     const response = await handleRoot(runtime, [{ type: "apis", key: "https://api.example/source" }], {
       suffix: "后缀",
     });
-    assert.equal(await response.text(), "8.209.253.101:34237#JP-后缀");
+    assert.equal(await response.text(), "8.209.253.101:34237#JP后缀");
   } finally {
     clearAggregateCache();
     globalThis.fetch = originalFetch;
@@ -193,7 +193,7 @@ test("appends a configured suffix to every generated result", async () => {
 
 test("skips duplicate suffixes and keeps original node metadata separate", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response("8.209.253.101:34237#JP\n8.209.253.101:34237#JP-后缀", { status: 200 });
+  globalThis.fetch = async () => new Response("8.209.253.101:34237#JP\n8.209.253.101:34237#JP后缀", { status: 200 });
   const runtime = { KV: { async get(key) {
     if (key === "subs") return {};
     if (key === "apis") return { "https://api.example/source": {} };
@@ -201,11 +201,11 @@ test("skips duplicate suffixes and keeps original node metadata separate", async
   } } };
   try {
     clearAggregateCache();
-    const options = { includeRaw: true, suffixSeparator: "-", suffix: "后缀", suffixStrategy: "skip" };
+    const options = { includeRaw: true, suffix: "后缀", suffixStrategy: "skip" };
     const response = await handleRoot(runtime, [{ type: "apis", key: "https://api.example/source" }], options);
-    assert.equal(await response.text(), "8.209.253.101:34237#JP-后缀");
+    assert.equal(await response.text(), "8.209.253.101:34237#JP后缀");
     assert.equal(options.nodeSources[0].originalValue, "8.209.253.101:34237#JP");
-    assert.equal(options.nodeSources[0].outputRemark, "JP-后缀");
+    assert.equal(options.nodeSources[0].outputRemark, "JP后缀");
   } finally {
     clearAggregateCache();
     globalThis.fetch = originalFetch;

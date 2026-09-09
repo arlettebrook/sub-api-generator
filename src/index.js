@@ -350,7 +350,6 @@ async function handleCustomApiPreview(request, env) {
   const resultOptions = {
     includeRaw: true,
     prefix: entry.prefix,
-    suffixSeparator: entry.suffixSeparator,
     suffix: entry.suffix,
     suffixStrategy: entry.suffixStrategy,
   };
@@ -475,7 +474,6 @@ async function handleCustomApiPath(path, env) {
   return subscriptions.handleRoot(env, sourceSelection, {
     diagnostics: true,
     prefix: api.prefix,
-    suffixSeparator: api.suffixSeparator,
     suffix: api.suffix,
     suffixStrategy: api.suffixStrategy,
   });

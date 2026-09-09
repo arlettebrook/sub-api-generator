@@ -10,7 +10,6 @@ export const MAX_BLACKLIST_ENTRIES = 200;
 export const MAX_BLACKLIST_WORD_LENGTH = 128;
 export const MAX_FILTER_RULES = 200;
 export const MAX_FILTER_RULE_LENGTH = 128;
-export const MAX_API_SUFFIX_SEPARATOR_LENGTH = 32;
 export const MAX_API_SUFFIX_LENGTH = 128;
 export const MAX_API_PREFIX_LENGTH = 128;
 export const API_SUFFIX_STRATEGIES = new Set(["append", "replace", "skip"]);
@@ -215,7 +214,6 @@ export function validateApiPathPayload(body) {
       }
     }
     const prefix = validateApiText(value.prefix, MAX_API_PREFIX_LENGTH, "输出前缀");
-    const suffixSeparator = validateApiText(value.suffixSeparator, MAX_API_SUFFIX_SEPARATOR_LENGTH, "后缀连接符");
     const suffix = validateApiText(value.suffix, MAX_API_SUFFIX_LENGTH, "输出后缀");
     const suffixStrategy = value.suffixStrategy === undefined ? "skip" : value.suffixStrategy;
     if (typeof suffixStrategy !== "string" || !API_SUFFIX_STRATEGIES.has(suffixStrategy)) {
@@ -225,7 +223,6 @@ export function validateApiPathPayload(body) {
       enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
       ...(prefix ? { prefix } : {}),
-      ...(suffixSeparator ? { suffixSeparator } : {}),
       ...(suffix ? { suffix } : {}),
       ...(suffixStrategy !== "skip" ? { suffixStrategy } : {}),
       sourceMode,
@@ -246,14 +243,12 @@ export function normalizeCustomApiData(data) {
         ? SOURCE_MODE_SELECTED
         : SOURCE_MODE_ALL;
       const prefix = typeof value.prefix === "string" ? value.prefix.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_PREFIX_LENGTH) : "";
-      const suffixSeparator = typeof value.suffixSeparator === "string" ? value.suffixSeparator.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_SUFFIX_SEPARATOR_LENGTH) : "";
       const suffix = typeof value.suffix === "string" ? value.suffix.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_SUFFIX_LENGTH) : "";
       const suffixStrategy = API_SUFFIX_STRATEGIES.has(value.suffixStrategy) ? value.suffixStrategy : "skip";
       normalized[path] = {
         enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",
         ...(prefix ? { prefix } : {}),
-        ...(suffixSeparator ? { suffixSeparator } : {}),
         ...(suffix ? { suffix } : {}),
         ...(suffixStrategy !== "skip" ? { suffixStrategy } : {}),
         sourceMode,

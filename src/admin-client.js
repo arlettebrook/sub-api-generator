@@ -718,7 +718,7 @@ function formatPreviewNodeLine(node) {
 
 function previewOutputValue(value = '8.209.253.101:34237#JP') {
   const prefix = $('editCustomApiPrefix')?.value || '';
-  const separator = '-';
+  const separator = '';
   const suffix = $('editCustomApiSuffix')?.value || '';
   const strategy = $('editCustomApiSuffixStrategy')?.value || 'skip';
   const hashIndex = value.indexOf('#');
@@ -1831,7 +1831,7 @@ function renderCustomApis() {
     if (entry.prefix || entry.suffix) {
       const outputSummary = document.createElement('span');
       outputSummary.className = 'custom-api-source-summary';
-      outputSummary.textContent = '输出：' + (entry.prefix ? '前缀「' + entry.prefix + '」' : '') + (entry.suffix ? (entry.prefix ? ' · ' : '') + '后缀「' + (entry.suffixSeparator || '-') + entry.suffix + '」' : '');
+      outputSummary.textContent = '输出：' + (entry.prefix ? '前缀「' + entry.prefix + '」' : '') + (entry.suffix ? (entry.prefix ? ' · ' : '') + '后缀「' + entry.suffix + '」' : '');
       identity.appendChild(outputSummary);
     }
     const url = document.createElement('code');
@@ -2034,7 +2034,6 @@ async function saveCustomApiEdit() {
   entry.remark = remarkInput?.value.trim() || '';
   entry.prefix = outputSettings.prefix;
   entry.suffix = outputSettings.suffix;
-  delete entry.suffixSeparator;
   entry.suffixStrategy = ['append', 'replace', 'skip'].includes(suffixStrategyInput?.value) ? suffixStrategyInput.value : 'skip';
   entry.sourceMode = selection.sourceMode;
   entry.sources = selection.sources;

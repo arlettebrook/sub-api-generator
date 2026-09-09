@@ -335,10 +335,9 @@ function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklis
 
 function getOutputTransform(options = {}) {
   const suffix = typeof options.suffix === "string" ? options.suffix : "";
-  const separator = typeof options.suffixSeparator === "string" && options.suffixSeparator ? options.suffixSeparator : "-";
   const prefix = typeof options.prefix === "string" ? options.prefix : "";
   const suffixStrategy = ["append", "replace", "skip"].includes(options.suffixStrategy) ? options.suffixStrategy : "skip";
-  return { prefix, separator, suffix, suffixStrategy };
+  return { prefix, suffix, suffixStrategy };
 }
 
 function transformOutputValue(value, transform) {
@@ -347,7 +346,7 @@ function transformOutputValue(value, transform) {
   const hashIndex = line.indexOf("#");
   const base = hashIndex >= 0 ? line.slice(0, hashIndex) : line;
   const remark = hashIndex >= 0 ? line.slice(hashIndex + 1) : "";
-  const suffixPart = transform.suffix ? transform.separator + transform.suffix : "";
+  const suffixPart = transform.suffix || "";
   let outputRemark = remark;
   if (transform.suffixStrategy === "replace") {
     outputRemark = transform.prefix + suffixPart;
