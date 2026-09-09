@@ -115,6 +115,16 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.getByRole("button", { name: "创建 API" }).click();
   await expect(page.locator("#customApiDialog")).not.toBeVisible();
   await expect(page.locator("#customApisList .row")).toHaveCount(initialApiCount + 1);
+  const customApiSearch = page.locator("#customApiSearch");
+  await customApiSearch.fill(customPath);
+  await expect(page.locator("#customApisList .row")).toHaveCount(1);
+  await expect(page).toHaveURL(new RegExp("customQ=" + customPath));
+  await customApiSearch.fill("not-found-custom-api");
+  await expect(page.locator("#customApisList .row")).toHaveCount(0);
+  await expect(page.locator("#customApisList")).toContainText("没有匹配的优选 API");
+  await customApiSearch.fill("");
+  await expect(page.locator("#customApisList .row")).toHaveCount(initialApiCount + 1);
+  await expect(page).toHaveURL(/\/admin\/custom-apis$/);
   await expect(page.locator("#saveCustomApisButton")).toHaveCount(0);
   await expect(page.locator("#customApiSaveStatus")).toHaveCount(0);
   const apiSwitch = page.locator("#customApisList .custom-api-switch input").last();

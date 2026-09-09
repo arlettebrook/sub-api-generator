@@ -1734,20 +1734,27 @@ let editingCustomApiPicker = null;
 function renderCustomApis() {
   const el = $('customApisList');
   const summary = $('customApiSummary');
+  const query = ($('customApiSearch')?.value || '').trim().toLowerCase();
+  const allEntries = Object.entries(customApis);
+  const entries = allEntries.filter(([path, entry]) => !query || ('/' + path + ' ' + (entry.remark || '') + ' ' + window.location.origin + '/' + path).toLowerCase().includes(query));
   if (summary) {
-    const count = Object.keys(customApis).length;
+    const count = allEntries.length;
     const enabled = Object.values(customApis).filter((entry) => entry.enabled).length;
-    summary.textContent = count + ' 个 API · ' + enabled + ' 个启用';
+    summary.textContent = query
+      ? entries.length + ' / ' + count + ' 个 API · ' + enabled + ' 个启用'
+      : count + ' 个 API · ' + enabled + ' 个启用';
   }
   el.innerHTML = '';
-  if (!Object.keys(customApis).length) {
+  if (!entries.length) {
     const empty = document.createElement('div');
     empty.className = 'custom-api-empty';
-    empty.innerHTML = '<strong>还没有优选 API</strong>';
+    empty.innerHTML = query
+      ? '<strong>没有匹配的优选 API</strong><span>请尝试其他访问路径或备注。</span>'
+      : '<strong>还没有优选 API</strong>';
     el.appendChild(empty);
     return;
   }
-  Object.entries(customApis).forEach(([path, entry]) => {
+  entries.forEach(([path, entry]) => {
     const row = document.createElement('div');
     row.className = 'row custom-api-row';
     row.dataset.path = path;
@@ -3753,6 +3760,7 @@ function syncRouteState() {
     updates.apisQ = $('apisSearch')?.value || '';
     updates.apisSort = $('apisSort')?.value === 'default' ? '' : $('apisSort')?.value || '';
   }
+  if (page === 'customApis') updates.customQ = $('customApiSearch')?.value || '';
   setRouteState(updates);
 }
 
@@ -3777,6 +3785,10 @@ function hydratePageState(page) {
     const sort = $('apisSort');
     if (search) search.value = routeStateValue('apisQ');
     if (sort) sort.value = routeStateValue('apisSort') || 'default';
+  }
+  if (page === 'customApis') {
+    const search = $('customApiSearch');
+    if (search) search.value = routeStateValue('customQ');
   }
 }
 
@@ -3817,6 +3829,14 @@ function bindPageControls() {
     button.dataset.bound = 'true';
     button.addEventListener('click', () => setPreviewDataMode(button.dataset.previewMode));
   });
+  const customApiSearch = $('customApiSearch');
+  if (customApiSearch && customApiSearch.dataset.bound !== 'true') {
+    customApiSearch.dataset.bound = 'true';
+    customApiSearch.addEventListener('input', () => {
+      renderCustomApis();
+      syncRouteState();
+    });
+  }
   [nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesSourceFilterEl, nodesStatusFilterEl].forEach((element) => {
     if (!element || element.dataset.bound === 'true') return;
     element.dataset.bound = 'true';
@@ -3929,6 +3949,7 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
     currentContent.replaceWith(nextContent);
     updatePageChrome(nextPage);
     cachePageElements();
+    hydratePageState(nextPage);
     bindPageControls();
     loadActivePage(nextPage);
     if (historyMode === 'push') window.history.pushState({ page: nextPage }, '', target.pathname + target.search + target.hash);

@@ -292,6 +292,12 @@ export const adminHTML = `
       </div>
     </div>
   </dialog>
+  <div class="toolbar custom-api-toolbar">
+    <label class="custom-api-search">
+      <span aria-hidden="true">⌕</span>
+      <input id="customApiSearch" class="list-search" type="search" placeholder="搜索访问路径或备注" aria-label="搜索优选 API" autocomplete="off" />
+    </label>
+  </div>
   <div id="customApisList"></div>
 </div>
 <!-- ADMIN_SECTION:customApis:END -->

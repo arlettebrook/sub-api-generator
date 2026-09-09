@@ -1472,9 +1472,42 @@ export const adminStyle = `
   }
 
   .custom-api-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: -4px 0 18px;
+    padding: 10px 12px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+  }
+
+  .custom-api-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .custom-api-search > span {
+    position: absolute;
+    left: 12px;
+    z-index: 1;
+    color: var(--text-tertiary);
+    font-size: 18px;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .custom-api-search .list-search {
+    width: 100%;
+    min-width: 0;
+    padding-left: 34px;
+  }
+
+  .custom-api-toolbar {
     justify-content: flex-end;
-    margin-top: 16px;
-    padding-bottom: 16px;
   }
 
   .save-status {
