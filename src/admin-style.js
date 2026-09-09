@@ -184,8 +184,8 @@ export const adminStyle = `
 
   .scroll-top-button {
     position: fixed;
-    right: max(24px, env(safe-area-inset-right, 0px));
-    bottom: max(24px, env(safe-area-inset-bottom, 0px));
+    right: max(16px, calc((100vw - 1180px) / 2), env(safe-area-inset-right, 0px));
+    bottom: max(28px, env(safe-area-inset-bottom, 0px));
     z-index: 1000;
     width: 48px;
     height: 48px;
