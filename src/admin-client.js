@@ -3442,9 +3442,29 @@ function settingConfirm(message) {
   return typeof window.confirm !== 'function' || window.confirm(message);
 }
 
+let settingsDialogPageScrollY = 0;
+let settingsDialogScrollLocked = false;
+
+function lockSettingsDialogPageScroll() {
+  if (settingsDialogScrollLocked) return;
+  settingsDialogPageScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  settingsDialogScrollLocked = true;
+  document.documentElement.classList.add('settings-editor-scroll-locked');
+  document.body.classList.add('settings-editor-scroll-locked');
+}
+
+function unlockSettingsDialogPageScroll() {
+  if (!settingsDialogScrollLocked) return;
+  settingsDialogScrollLocked = false;
+  document.documentElement.classList.remove('settings-editor-scroll-locked');
+  document.body.classList.remove('settings-editor-scroll-locked');
+  window.scrollTo(0, settingsDialogPageScrollY);
+}
+
 function openSettingsDialog(id) {
   const dialog = $(id);
   if (!dialog || dialog.open) return;
+  lockSettingsDialogPageScroll();
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
   const body = dialog.querySelector('.settings-dialog-body');
@@ -3461,6 +3481,7 @@ function closeSettingsDialog(id) {
   if (!dialog) return;
   if (typeof dialog.close === 'function') dialog.close();
   else dialog.removeAttribute('open');
+  unlockSettingsDialogPageScroll();
 }
 
 function updateSettingsActionState() {
@@ -3607,6 +3628,11 @@ function deleteSelectedFilterRules() {
 }
 
 function initSettingsEnhancements() {
+  document.querySelectorAll('.settings-editor-dialog').forEach((dialog) => {
+    if (dialog.dataset.scrollBound === 'true') return;
+    dialog.dataset.scrollBound = 'true';
+    dialog.addEventListener('close', unlockSettingsDialogPageScroll);
+  });
   const importDialog = $('ruleImportPreviewDialog');
   if (importDialog && importDialog.dataset.bound !== 'true') {
     importDialog.dataset.bound = 'true';

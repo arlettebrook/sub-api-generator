@@ -343,6 +343,12 @@ export const adminStyle = `
     -webkit-backdrop-filter: blur(4px);
   }
 
+  html.settings-editor-scroll-locked,
+  body.settings-editor-scroll-locked {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   .settings-dialog-head {
     display: flex;
     align-items: flex-start;
@@ -463,13 +469,10 @@ export const adminStyle = `
 
   .settings-editor-list {
     min-height: 48px;
-    max-height: min(420px, 46vh);
-    overflow-y: auto;
     overscroll-behavior: contain;
     touch-action: pan-y;
     align-content: start;
-    padding: 4px 4px 4px 0;
-    scrollbar-gutter: stable;
+    padding: 4px 0;
   }
 
   .settings-editor-preview {
@@ -770,17 +773,8 @@ export const adminStyle = `
   }
 
   .blacklist-list.is-large {
-    max-height: min(460px, 52vh);
-    overflow-y: auto;
     align-content: start;
-    padding: 4px 6px 4px 0;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
-
-  .blacklist-list.is-large .blacklist-row {
-    content-visibility: auto;
-    contain-intrinsic-size: 42px;
+    padding: 4px 0;
   }
 
   .rule-pagination {
@@ -3931,7 +3925,8 @@ export const adminStyle = `
       padding: 10px;
     }
     .settings-editor-list {
-      max-height: min(330px, 40vh);
+      max-height: none;
+      overflow: visible;
     }
     .settings-editor-footer {
       grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
@@ -4011,7 +4006,8 @@ export const adminStyle = `
       grid-template-columns: 1fr;
     }
     .blacklist-list.is-large {
-      max-height: min(360px, 46vh);
+      max-height: none;
+      overflow: visible;
     }
     .rule-pagination {
       padding-bottom: 2px;
