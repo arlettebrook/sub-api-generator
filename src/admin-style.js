@@ -4473,25 +4473,65 @@ export const adminStyle = `
       opacity: 1;
       pointer-events: auto;
     }
+    /* 管理列表移动端按信息层级排列，避免四个操作按钮在窄屏挤成一行。 */
+    #subsList .row,
+    #apisList .row {
+      align-items: center;
+      gap: 8px;
+      padding: 10px;
+    }
+    #subsList .row .source-select,
+    #apisList .row .source-select {
+      order: 1;
+      flex: 0 0 20px;
+      width: 16px;
+      min-width: 16px;
+      margin: 0;
+    }
+    #subsList .row .remark-input,
+    #apisList .row .remark-input {
+      order: 1;
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+    }
+    #subsList .row .copy-source-button,
+    #apisList .row .copy-source-button {
+      order: 1;
+      flex: 0 0 32px;
+      width: 32px;
+      min-width: 32px;
+      padding: 0;
+    }
+    #subsList .row .host-input,
+    #apisList .row .host-input {
+      order: 2;
+      flex: 1 1 100%;
+      width: 100%;
+      min-width: 0;
+    }
     #subsList .row .source-health,
     #apisList .row .source-health {
+      order: 3;
       flex: 1 1 100%;
       width: 100%;
       max-width: none;
-      order: 3;
     }
     #subsList .row .source-check-button,
     #subsList .row .source-view-button,
     #subsList .row .source-download-button,
-    #subsList .row .del-btn,
+    #subsList .row .source-delete-button,
     #apisList .row .source-check-button,
     #apisList .row .source-view-button,
     #apisList .row .source-download-button,
-    #apisList .row .del-btn {
+    #apisList .row .source-delete-button {
       order: 4;
-      flex: 0 1 auto;
-      min-height: 34px;
-      padding: 0 10px;
+      flex: 1 1 calc(50% - 4px);
+      width: calc(50% - 4px);
+      min-width: 0;
+      min-height: 40px;
+      padding: 0 8px;
+      font-size: 12px;
     }
     .nodes-count {
       width: 100%;
