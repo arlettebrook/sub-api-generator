@@ -347,7 +347,11 @@ async function handleCustomApiPreview(request, env) {
   }
   subscriptions.clearAggregateCache();
   const startedAt = Date.now();
-  const resultOptions = { includeRaw: true };
+  const resultOptions = {
+    includeRaw: true,
+    suffixSeparator: entry.suffixSeparator,
+    suffix: entry.suffix,
+  };
   const response = await subscriptions.handleRoot(env, sourceSelection, resultOptions);
   const text = await response.text();
   const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -466,7 +470,11 @@ async function handleCustomApiPath(path, env) {
       ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
     ];
   }
-  return subscriptions.handleRoot(env, sourceSelection, { diagnostics: true });
+  return subscriptions.handleRoot(env, sourceSelection, {
+    diagnostics: true,
+    suffixSeparator: api.suffixSeparator,
+    suffix: api.suffix,
+  });
 }
 
 function handleAdmin(page = "overview") {

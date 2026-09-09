@@ -166,6 +166,32 @@ test("allows custom APIs to select any configured source", async () => {
   }
 });
 
+test("appends a configured suffix to every generated result", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = "8.209.253.101:34237#JP";
+  globalThis.fetch = async () => new Response(source, { status: 200 });
+  const runtime = {
+    KV: {
+      async get(key) {
+        if (key === "subs") return {};
+        if (key === "apis") return { "https://api.example/source": {} };
+        return null;
+      },
+    },
+  };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime, [{ type: "apis", key: "https://api.example/source" }], {
+      suffixSeparator: "-",
+      suffix: "后缀",
+    });
+    assert.equal(await response.text(), "8.209.253.101:34237#JP-后缀");
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("invalidates aggregate cache when blacklist configuration changes", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#blocked";

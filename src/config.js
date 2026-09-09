@@ -10,6 +10,8 @@ export const MAX_BLACKLIST_ENTRIES = 200;
 export const MAX_BLACKLIST_WORD_LENGTH = 128;
 export const MAX_FILTER_RULES = 200;
 export const MAX_FILTER_RULE_LENGTH = 128;
+export const MAX_API_SUFFIX_SEPARATOR_LENGTH = 32;
+export const MAX_API_SUFFIX_LENGTH = 128;
 export const SOURCE_MODE_ALL = "all";
 export const SOURCE_MODE_SELECTED = "selected";
 
@@ -201,9 +203,13 @@ export function validateApiPathPayload(body) {
         normalizedSources.push({ type: source.type, key });
       }
     }
+    const suffixSeparator = typeof value.suffixSeparator === "string" ? value.suffixSeparator.slice(0, MAX_API_SUFFIX_SEPARATOR_LENGTH) : "";
+    const suffix = typeof value.suffix === "string" ? value.suffix.slice(0, MAX_API_SUFFIX_LENGTH) : "";
     normalized[path] = {
       enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
+      ...(suffixSeparator ? { suffixSeparator } : {}),
+      ...(suffix ? { suffix } : {}),
       sourceMode,
       sources: sourceMode === SOURCE_MODE_SELECTED ? normalizedSources : [],
     };
@@ -221,9 +227,13 @@ export function normalizeCustomApiData(data) {
       const sourceMode = value.sourceMode === SOURCE_MODE_SELECTED
         ? SOURCE_MODE_SELECTED
         : SOURCE_MODE_ALL;
+      const suffixSeparator = typeof value.suffixSeparator === "string" ? value.suffixSeparator.slice(0, MAX_API_SUFFIX_SEPARATOR_LENGTH) : "";
+      const suffix = typeof value.suffix === "string" ? value.suffix.slice(0, MAX_API_SUFFIX_LENGTH) : "";
       normalized[path] = {
         enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",
+        ...(suffixSeparator ? { suffixSeparator } : {}),
+        ...(suffix ? { suffix } : {}),
         sourceMode,
         sources: sourceMode === SOURCE_MODE_SELECTED && Array.isArray(value.sources)
           ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis"].includes(source.type) && typeof source.key === "string")

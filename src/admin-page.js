@@ -283,6 +283,16 @@ export const adminHTML = `
           <span>备注</span>
           <input id="editCustomApiRemark" placeholder="可选" autocomplete="off" />
         </label>
+        <label class="form-field">
+          <span>后缀连接符</span>
+          <input id="editCustomApiSuffixSeparator" placeholder="例如 -" autocomplete="off" maxlength="32" />
+          <small>追加到每条结果前的连接符。</small>
+        </label>
+        <label class="form-field">
+          <span>后缀内容</span>
+          <input id="editCustomApiSuffix" placeholder="例如 后缀" autocomplete="off" maxlength="128" />
+          <small>留空则不追加后缀。</small>
+        </label>
       </div>
       <div class="custom-api-edit-url" id="editCustomApiUrl"></div>
       <div id="editCustomApiSources"><div class="source-picker-skeleton" aria-label="正在加载数据源"></div></div>

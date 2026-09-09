@@ -114,6 +114,23 @@ test("validates custom API access paths", () => {
   });
 });
 
+test("normalizes optional custom API result suffix settings", () => {
+  assert.deepEqual(validateApiPathPayload({
+    "suffix-api": {
+      enabled: true,
+      suffixSeparator: "-",
+      suffix: "后缀",
+    },
+  })["suffix-api"], {
+    enabled: true,
+    remark: "",
+    suffixSeparator: "-",
+    suffix: "后缀",
+    sourceMode: "all",
+    sources: [],
+  });
+});
+
 test("reads and validates JSON request bodies", async () => {
   const request = new Request("https://example.test/api/subs", {
     method: "POST",

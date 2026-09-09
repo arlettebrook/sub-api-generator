@@ -1905,9 +1905,13 @@ function openCustomApiEditDialog(path) {
   editingCustomApiPath = path;
   const pathInput = $('editCustomApiPath');
   const remarkInput = $('editCustomApiRemark');
+  const suffixSeparatorInput = $('editCustomApiSuffixSeparator');
+  const suffixInput = $('editCustomApiSuffix');
   const hint = $('editCustomApiPathHint');
   if (pathInput) pathInput.value = path;
   if (remarkInput) remarkInput.value = entry.remark || '';
+  if (suffixSeparatorInput) suffixSeparatorInput.value = entry.suffixSeparator || '';
+  if (suffixInput) suffixInput.value = entry.suffix || '';
   if (hint) {
     hint.textContent = '仅支持字母、数字、短横线和下划线。';
     hint.className = '';
@@ -1937,6 +1941,8 @@ async function saveCustomApiEdit() {
   if (!editingCustomApiPath || !customApis[editingCustomApiPath]) return;
   const pathInput = $('editCustomApiPath');
   const remarkInput = $('editCustomApiRemark');
+  const suffixSeparatorInput = $('editCustomApiSuffixSeparator');
+  const suffixInput = $('editCustomApiSuffix');
   const newPath = normalizeCustomApiPath(pathInput?.value);
   const error = validateCustomApiPath(newPath, editingCustomApiPath);
   if (error) {
@@ -1952,6 +1958,8 @@ async function saveCustomApiEdit() {
     sources: Array.isArray(entry.sources) ? entry.sources : [],
   };
   entry.remark = remarkInput?.value.trim() || '';
+  entry.suffixSeparator = suffixSeparatorInput?.value || '';
+  entry.suffix = suffixInput?.value || '';
   entry.sourceMode = selection.sourceMode;
   entry.sources = selection.sources;
   if (newPath !== editingCustomApiPath) {
