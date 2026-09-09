@@ -183,7 +183,6 @@ export const adminStyle = `
   .page-navigating .card { opacity: .82; transition: opacity .15s ease; }
 
   .scroll-top-button {
-    --scroll-progress: 0%;
     position: fixed;
     right: max(24px, env(safe-area-inset-right, 0px));
     bottom: max(24px, env(safe-area-inset-bottom, 0px));
@@ -192,33 +191,23 @@ export const adminStyle = `
     height: 48px;
     padding: 0;
     border-radius: 50%;
-    border: 0;
-    background: var(--bg-secondary);
-    background: conic-gradient(from -45deg, var(--accent-primary) var(--scroll-progress), var(--border-color) 0);
+    border: 1px solid var(--border-hover);
+    background: var(--surface-solid);
     color: var(--text-secondary);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, .24), 0 2px 8px rgba(99, 102, 241, .14);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, .2), inset 0 1px 0 rgba(255, 255, 255, .08);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transform: translateY(10px);
-    transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s, box-shadow .2s ease, color .2s ease;
-  }
-
-  .scroll-top-button::before {
-    content: '';
-    position: absolute;
-    inset: 3px;
-    z-index: 0;
-    border-radius: 50%;
-    background: var(--surface-solid);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+    transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s, box-shadow .2s ease, color .2s ease, background .2s ease, border-color .2s ease;
   }
 
   .scroll-top-button:hover {
-    background: conic-gradient(from -45deg, var(--accent-primary) var(--scroll-progress), var(--border-hover) 0);
-    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    color: #fff;
     transform: translateY(-3px) scale(1.04);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, .28), 0 4px 14px rgba(99, 102, 241, .22);
+    box-shadow: 0 12px 26px var(--accent-light), 0 4px 12px rgba(15, 23, 42, .18);
   }
 
   .scroll-top-button:active {
@@ -231,6 +220,33 @@ export const adminStyle = `
     outline-offset: 4px;
   }
 
+  .scroll-top-button::after {
+    content: attr(aria-label);
+    position: absolute;
+    right: calc(100% + 10px);
+    top: 50%;
+    padding: 5px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--surface-solid);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%) translateX(4px);
+    transition: opacity .16s ease, transform .16s ease;
+  }
+
+  .scroll-top-button:hover::after,
+  .scroll-top-button:focus-visible::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+
   .scroll-top-button.is-visible {
     opacity: 1;
     visibility: visible;
@@ -241,7 +257,6 @@ export const adminStyle = `
 
   .scroll-top-button span {
     position: relative;
-    z-index: 1;
     font-size: 22px;
     font-weight: 700;
     line-height: 1;
@@ -256,6 +271,9 @@ export const adminStyle = `
     .scroll-top-button:hover,
     .scroll-top-button:active {
       transform: none;
+    }
+    .scroll-top-button::after {
+      transition: none;
     }
   }
 
@@ -3924,6 +3942,9 @@ export const adminStyle = `
     .scroll-top-button:hover,
     .scroll-top-button:active {
       transform: translateY(0);
+    }
+    .scroll-top-button::after {
+      display: none;
     }
     .theme-switch::before {
       width: 19px;
