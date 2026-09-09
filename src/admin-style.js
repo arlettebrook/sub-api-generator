@@ -183,23 +183,52 @@ export const adminStyle = `
   .page-navigating .card { opacity: .82; transition: opacity .15s ease; }
 
   .scroll-top-button {
+    --scroll-progress: 0%;
     position: fixed;
     right: max(24px, env(safe-area-inset-right, 0px));
     bottom: max(24px, env(safe-area-inset-bottom, 0px));
     z-index: 1000;
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     padding: 0;
     border-radius: 50%;
-    border-color: var(--border-hover);
-    background: var(--surface-solid);
+    border: 0;
+    background: var(--bg-secondary);
+    background: conic-gradient(from -45deg, var(--accent-primary) var(--scroll-progress), var(--border-color) 0);
     color: var(--text-secondary);
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .24), 0 2px 8px rgba(99, 102, 241, .14);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transform: translateY(10px);
-    transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s;
+    transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s, box-shadow .2s ease, color .2s ease;
+  }
+
+  .scroll-top-button::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    z-index: 0;
+    border-radius: 50%;
+    background: var(--surface-solid);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+  }
+
+  .scroll-top-button:hover {
+    background: conic-gradient(from -45deg, var(--accent-primary) var(--scroll-progress), var(--border-hover) 0);
+    color: var(--accent-primary);
+    transform: translateY(-3px) scale(1.04);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, .28), 0 4px 14px rgba(99, 102, 241, .22);
+  }
+
+  .scroll-top-button:active {
+    transform: translateY(-1px) scale(.94);
+    box-shadow: 0 5px 14px rgba(15, 23, 42, .2);
+  }
+
+  .scroll-top-button:focus-visible {
+    outline: 3px solid var(--accent-light);
+    outline-offset: 4px;
   }
 
   .scroll-top-button.is-visible {
@@ -211,13 +240,21 @@ export const adminStyle = `
   }
 
   .scroll-top-button span {
+    position: relative;
+    z-index: 1;
     font-size: 22px;
+    font-weight: 700;
     line-height: 1;
+    transform: translateY(-1px);
   }
 
   @media (prefers-reduced-motion: reduce) {
     .scroll-top-button {
       transition: none;
+      transform: none;
+    }
+    .scroll-top-button:hover,
+    .scroll-top-button:active {
       transform: none;
     }
   }
@@ -3881,6 +3918,12 @@ export const adminStyle = `
     .scroll-top-button {
       right: max(16px, env(safe-area-inset-right, 0px));
       bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+      width: 46px;
+      height: 46px;
+    }
+    .scroll-top-button:hover,
+    .scroll-top-button:active {
+      transform: translateY(0);
     }
     .theme-switch::before {
       width: 19px;

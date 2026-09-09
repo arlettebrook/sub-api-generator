@@ -3953,7 +3953,11 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
 function updateScrollTopButton() {
   const button = $('scrollTopButton');
   if (!button) return;
-  const visible = (window.scrollY || document.documentElement.scrollTop || 0) > 180;
+  const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+  const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  const progress = maxScroll ? Math.min(100, Math.round((scrollTop / maxScroll) * 100)) : 0;
+  button.style.setProperty('--scroll-progress', progress + '%');
+  const visible = scrollTop > 120;
   button.classList.toggle('is-visible', visible);
   button.setAttribute('aria-hidden', String(!visible));
   button.tabIndex = visible ? 0 : -1;
