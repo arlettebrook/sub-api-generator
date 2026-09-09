@@ -2022,7 +2022,8 @@ export const adminStyle = `
     margin: 0;
     padding: 14px 16px;
     overflow: auto;
-    overscroll-behavior: contain;
+    /* 到达数据边界后允许滚轮自然传递给页面，避免鼠标停留在数据区时页面无法继续滚动。 */
+    overscroll-behavior: auto;
     scrollbar-gutter: stable;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
