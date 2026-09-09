@@ -291,11 +291,6 @@ export const adminHTML = `
           <small>加在节点原始备注前，仅用于输出结果。</small>
         </label>
         <label class="form-field">
-          <span>输出后缀连接符</span>
-          <input id="editCustomApiSuffixSeparator" placeholder="例如 -" autocomplete="off" maxlength="32" />
-          <small>追加到每条结果前的连接符。</small>
-        </label>
-        <label class="form-field">
           <span>输出后缀</span>
           <input id="editCustomApiSuffix" placeholder="例如 后缀" autocomplete="off" maxlength="128" />
           <small>留空则不追加后缀。</small>

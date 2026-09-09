@@ -335,7 +335,7 @@ function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklis
 
 function getOutputTransform(options = {}) {
   const suffix = typeof options.suffix === "string" ? options.suffix : "";
-  const separator = typeof options.suffixSeparator === "string" ? options.suffixSeparator : "";
+  const separator = typeof options.suffixSeparator === "string" && options.suffixSeparator ? options.suffixSeparator : "-";
   const prefix = typeof options.prefix === "string" ? options.prefix : "";
   const suffixStrategy = ["append", "replace", "skip"].includes(options.suffixStrategy) ? options.suffixStrategy : "skip";
   return { prefix, separator, suffix, suffixStrategy };

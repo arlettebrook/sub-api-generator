@@ -182,7 +182,6 @@ test("appends a configured suffix to every generated result", async () => {
   try {
     clearAggregateCache();
     const response = await handleRoot(runtime, [{ type: "apis", key: "https://api.example/source" }], {
-      suffixSeparator: "-",
       suffix: "后缀",
     });
     assert.equal(await response.text(), "8.209.253.101:34237#JP-后缀");

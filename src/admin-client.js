@@ -718,7 +718,7 @@ function formatPreviewNodeLine(node) {
 
 function previewOutputValue(value = '8.209.253.101:34237#JP') {
   const prefix = $('editCustomApiPrefix')?.value || '';
-  const separator = $('editCustomApiSuffixSeparator')?.value || '';
+  const separator = '-';
   const suffix = $('editCustomApiSuffix')?.value || '';
   const strategy = $('editCustomApiSuffixStrategy')?.value || 'skip';
   const hashIndex = value.indexOf('#');
@@ -740,7 +740,7 @@ function updateCustomApiOutputPreview() {
 }
 
 function bindCustomApiOutputPreview() {
-  ['editCustomApiPrefix', 'editCustomApiSuffixSeparator', 'editCustomApiSuffix', 'editCustomApiSuffixStrategy'].forEach((id) => {
+  ['editCustomApiPrefix', 'editCustomApiSuffix', 'editCustomApiSuffixStrategy'].forEach((id) => {
     const input = $(id);
     if (!input || input.dataset.previewBound === 'true') return;
     input.dataset.previewBound = 'true';
@@ -1831,7 +1831,7 @@ function renderCustomApis() {
     if (entry.prefix || entry.suffix) {
       const outputSummary = document.createElement('span');
       outputSummary.className = 'custom-api-source-summary';
-      outputSummary.textContent = '输出：' + (entry.prefix ? '前缀「' + entry.prefix + '」' : '') + (entry.suffix ? (entry.prefix ? ' · ' : '') + '后缀「' + (entry.suffixSeparator || '') + entry.suffix + '」' : '');
+      outputSummary.textContent = '输出：' + (entry.prefix ? '前缀「' + entry.prefix + '」' : '') + (entry.suffix ? (entry.prefix ? ' · ' : '') + '后缀「' + (entry.suffixSeparator || '-') + entry.suffix + '」' : '');
       identity.appendChild(outputSummary);
     }
     const url = document.createElement('code');
@@ -1964,14 +1964,12 @@ function openCustomApiEditDialog(path) {
   editingCustomApiPath = path;
   const pathInput = $('editCustomApiPath');
   const remarkInput = $('editCustomApiRemark');
-  const suffixSeparatorInput = $('editCustomApiSuffixSeparator');
   const suffixInput = $('editCustomApiSuffix');
   const prefixInput = $('editCustomApiPrefix');
   const suffixStrategyInput = $('editCustomApiSuffixStrategy');
   const hint = $('editCustomApiPathHint');
   if (pathInput) pathInput.value = path;
   if (remarkInput) remarkInput.value = entry.remark || '';
-  if (suffixSeparatorInput) suffixSeparatorInput.value = entry.suffixSeparator || '';
   if (suffixInput) suffixInput.value = entry.suffix || '';
   if (prefixInput) prefixInput.value = entry.prefix || '';
   if (suffixStrategyInput) suffixStrategyInput.value = entry.suffixStrategy || 'skip';
@@ -2006,7 +2004,6 @@ async function saveCustomApiEdit() {
   if (!editingCustomApiPath || !customApis[editingCustomApiPath]) return;
   const pathInput = $('editCustomApiPath');
   const remarkInput = $('editCustomApiRemark');
-  const suffixSeparatorInput = $('editCustomApiSuffixSeparator');
   const suffixInput = $('editCustomApiSuffix');
   const prefixInput = $('editCustomApiPrefix');
   const suffixStrategyInput = $('editCustomApiSuffixStrategy');
@@ -2028,7 +2025,6 @@ async function saveCustomApiEdit() {
   try {
     outputSettings = {
       prefix: readCustomApiOutputSetting('editCustomApiPrefix', 128, '默认前缀'),
-      suffixSeparator: readCustomApiOutputSetting('editCustomApiSuffixSeparator', 32, '后缀连接符'),
       suffix: readCustomApiOutputSetting('editCustomApiSuffix', 128, '输出后缀'),
     };
   } catch (error) {
@@ -2037,8 +2033,8 @@ async function saveCustomApiEdit() {
   }
   entry.remark = remarkInput?.value.trim() || '';
   entry.prefix = outputSettings.prefix;
-  entry.suffixSeparator = outputSettings.suffixSeparator;
   entry.suffix = outputSettings.suffix;
+  delete entry.suffixSeparator;
   entry.suffixStrategy = ['append', 'replace', 'skip'].includes(suffixStrategyInput?.value) ? suffixStrategyInput.value : 'skip';
   entry.sourceMode = selection.sourceMode;
   entry.sources = selection.sources;
