@@ -15,14 +15,14 @@ export function isAuthenticated(request, validHash) {
   return !!(match && match[1] === validHash);
 }
 
-export async function handleLogin(request, validHash, loginPage) {
+export async function handleLogin(request, validHash, loginPage, redirectPath = "/") {
   const formData = await request.formData();
   const password = (formData.get("password") || "").toString();
   const inputHash = await sha256Hex(password);
 
   if (inputHash === validHash) {
     const secure = new URL(request.url).protocol === "https:";
-    return redirectResponse(request, "/", {
+    return redirectResponse(request, redirectPath, {
       "cache-control": "no-store",
       "set-cookie": `auth=${validHash}; Path=/; HttpOnly; ${secure ? "Secure; " : ""}SameSite=Lax; Max-Age=2592000`,
     });

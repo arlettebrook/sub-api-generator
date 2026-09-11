@@ -3,6 +3,7 @@ import {
   KV_KEY_APIS,
   KV_KEY_BLACKLIST,
   KV_KEY_FILTER_RULES,
+  KV_KEY_SETTINGS,
   KV_KEY_SUBS,
   KV_KEY_SOURCE_STATUS,
   getRuntimeConfig as getPagesRuntimeConfig,
@@ -10,6 +11,7 @@ import {
   normalizeCustomApiData,
   normalizeBlacklist,
   normalizeFilterRules,
+  normalizeSettings,
   normalizeKvData,
   isPlainObject,
   readJsonObject as readPagesJsonObject,
@@ -17,10 +19,12 @@ import {
   validateApiPathPayload,
   validateBlacklistPayload,
   validateFilterRulesPayload,
+  validateSettingsPayload,
 } from "./config.js";
 import {
   jsonResponse as pagesJsonResponse,
   methodNotAllowed as pagesMethodNotAllowed,
+  redirectResponse,
   textResponse as pagesTextResponse,
   withSecurityHeaders as pagesSecurityHeaders,
 } from "./http.js";
@@ -436,6 +440,21 @@ async function handlePostFilterRules(request, env) {
   return pagesJsonResponse({ ok: true });
 }
 
+async function handleGetSettings(env) {
+  return pagesJsonResponse(normalizeSettings(await env.KV.get(KV_KEY_SETTINGS, "json")));
+}
+
+async function handlePostSettings(request, env) {
+  let body;
+  try {
+    body = validateSettingsPayload(await request.json());
+  } catch (error) {
+    throw new Error(`请求 JSON 无效: ${error.message}`);
+  }
+  await env.KV.put(KV_KEY_SETTINGS, JSON.stringify(body));
+  return pagesJsonResponse(body);
+}
+
 async function handleGetCustomApis(env) {
   const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
   return pagesJsonResponse(normalizeCustomApiData(data));
@@ -479,8 +498,8 @@ async function handleCustomApiPath(path, env) {
   });
 }
 
-function handleAdmin(page = "overview") {
-  const html = renderAdminPage(page);
+function handleAdmin(page = "overview", adminBasePath = "/admin") {
+  const html = renderAdminPage(page, adminBasePath);
   return new Response(html, {
     headers: pagesSecurityHeaders({
       "content-type": "text/html; charset=utf-8",
@@ -489,16 +508,52 @@ function handleAdmin(page = "overview") {
   });
 }
 
-function renderAdminPage(page) {
+function renderAdminPage(page, adminBasePath = "/admin") {
   const activeSections = new Set(page === "manage" ? ["subs", "apis", "sourceStatus"] : [page]);
   let html = adminHTML
     .replaceAll("__ADMIN_ASSET_VERSION__", ADMIN_ASSET_VERSION)
+    .replaceAll("__ADMIN_BASE_PATH__", adminBasePath)
     .replace('data-page="__PAGE__"', `data-page="${page}"`);
   html = html.replace(/<!-- ADMIN_SECTION:([A-Za-z0-9_-]+):START -->[\s\S]*?<!-- ADMIN_SECTION:\1:END -->/g, (block, section) => {
     if (section === "customApiDialog") return activeSections.has("customApis") ? block : "";
     return activeSections.has(section) ? block : "";
   });
   return html;
+}
+
+function resolveAdminPage(path, settings) {
+  if (settings.enabled) {
+    if (!settings.accessPath) return null;
+    const base = `/${settings.accessPath}`;
+    if (path === base) return { page: "overview", basePath: base };
+    const pages = {
+      "/subs": "subs",
+      "/apis": "apis",
+      "/manage": "manage",
+      "/custom-apis": "customApis",
+      "/settings": "settings",
+    };
+    const suffix = path.startsWith(`${base}/`) ? path.slice(base.length) : "";
+    if (pages[suffix]) return { page: pages[suffix], basePath: base };
+    return null;
+  }
+  const pages = {
+    "/": "overview",
+    "/admin": "overview",
+    "/admin/subs": "subs",
+    "/admin/apis": "apis",
+    "/admin/manage": "manage",
+    "/admin/custom-apis": "customApis",
+    "/admin/settings": "settings",
+  };
+  return pages[path] ? { page: pages[path], basePath: "/admin" } : null;
+}
+
+function shouldCamouflageRedirect(path, method, settings) {
+  if (!settings.enabled) return false;
+  if (method !== "GET" && method !== "HEAD") return false;
+  if (path.startsWith("/api/") || path === "/login" || path === "/logout" || path === "/admin.css" || path === "/admin-client.js") return false;
+  return resolveAdminPage(path, settings) === null;
 }
 
 function assetResponse(content, contentType, cacheControl = "public, max-age=300, must-revalidate") {
@@ -530,11 +585,16 @@ export default {
       return pagesTextResponse(config.error, 503, { "cache-control": "no-store" });
     }
 
+    const settings = normalizeSettings(await env.KV.get(KV_KEY_SETTINGS, "json"));
+    const adminRoute = resolveAdminPage(path, settings);
     const validPwdHash = await auth.sha256Hex(config.password);
 
     // ========== 免认证接口 ==========
     if (path === "/login" && method === "POST") {
       return await auth.handleLogin(request, validPwdHash, loginPage);
+    }
+    if (settings.enabled && adminRoute && method === "POST") {
+      return await auth.handleLogin(request, validPwdHash, (message) => loginPage(message, path), path);
     }
     if (path === "/logout" && method === "POST") {
       return auth.handleLogout(request);
@@ -542,14 +602,19 @@ export default {
     if (path === "/login" || path === "/logout") {
       return pagesMethodNotAllowed("POST");
     }
-    if (method === "GET") {
+    if (method === "GET" && !adminRoute) {
       const customApiResponse = await handleCustomApiPath(path, env);
       if (customApiResponse) return customApiResponse;
     }
 
+    if (shouldCamouflageRedirect(path, method, settings)) {
+      return redirectResponse(request, settings.redirectUrl, { "cache-control": "no-store" });
+    }
+
     // ========== 未认证统一返回登录页 ==========
     if (!auth.isAuthenticated(request, validPwdHash)) {
-      return new Response(await loginPage(), {
+      const loginAction = settings.enabled && adminRoute ? path : "/login";
+      return new Response(await loginPage("", loginAction), {
         headers: pagesSecurityHeaders({
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
@@ -559,6 +624,10 @@ export default {
 
     // ========== 已认证路由分发 ==========
     try {
+      if (adminRoute) {
+        if (method !== "GET") return pagesMethodNotAllowed("GET");
+        return handleAdmin(adminRoute.page, adminRoute.basePath);
+      }
       switch (path) {
         case "/api/subs":
           if (method === "GET") return await handleGetSubs(env);
@@ -591,29 +660,14 @@ export default {
           if (method === "GET") return await handleGetFilterRules(env);
           if (method === "POST") return await handlePostFilterRules(request, env);
           return pagesMethodNotAllowed("GET, POST");
+        case "/api/settings":
+          if (method === "GET") return await handleGetSettings(env);
+          if (method === "POST") return await handlePostSettings(request, env);
+          return pagesMethodNotAllowed("GET, POST");
         case "/api/custom-apis":
           if (method === "GET") return await handleGetCustomApis(env);
           if (method === "POST") return await handlePostCustomApis(request, env);
           return pagesMethodNotAllowed("GET, POST");
-        case "/":
-        case "/admin":
-          if (method !== "GET") return pagesMethodNotAllowed("GET");
-          return handleAdmin("overview");
-        case "/admin/subs":
-          if (method !== "GET") return pagesMethodNotAllowed("GET");
-          return handleAdmin("subs");
-        case "/admin/apis":
-          if (method !== "GET") return pagesMethodNotAllowed("GET");
-          return handleAdmin("apis");
-        case "/admin/manage":
-          if (method !== "GET") return pagesMethodNotAllowed("GET");
-          return handleAdmin("manage");
-        case "/admin/custom-apis":
-          if (method !== "GET") return pagesMethodNotAllowed("GET");
-          return handleAdmin("customApis");
-        case "/admin/settings":
-          if (method !== "GET") return pagesMethodNotAllowed("GET");
-          return handleAdmin("settings");
         default:
           return pagesTextResponse("Not Found", 404);
       }

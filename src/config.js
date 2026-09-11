@@ -4,6 +4,7 @@ export const KV_KEY_CUSTOM_APIS = "custom_apis";
 export const KV_KEY_BLACKLIST = "blacklist";
 export const KV_KEY_FILTER_RULES = "filter_rules";
 export const KV_KEY_SOURCE_STATUS = "source_status";
+export const KV_KEY_SETTINGS = "settings";
 export const MAX_CONFIG_ENTRIES = 200;
 export const MAX_CONFIG_KEY_LENGTH = 2048;
 export const MAX_BLACKLIST_ENTRIES = 200;
@@ -18,9 +19,15 @@ export const SOURCE_MODE_SELECTED = "selected";
 
 export const DEFAULT_BLACKLIST = [];
 export const DEFAULT_FILTER_RULES = [];
+export const DEFAULT_SETTINGS = {
+  enabled: false,
+  accessPath: "",
+  redirectUrl: "/",
+};
 
 const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);
+const SETTINGS_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 
 function validateApiText(value, maxLength, label) {
   if (value === undefined || value === null) return "";
@@ -130,6 +137,58 @@ export function validateBlacklistPayload(body) {
     }
   }
   return normalizeBlacklist(body);
+}
+
+function normalizeSettingsPath(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw new Error("管理入口路径必须是字符串");
+  const path = value.trim().replace(/^\/+|\/+$/g, "");
+  if (!path) return "";
+  if (!SETTINGS_PATH_REGEX.test(path) || RESERVED_API_PATHS.has(path.toLowerCase())) {
+    throw new Error("管理入口路径无效");
+  }
+  return path;
+}
+
+function normalizeRedirectUrl(value) {
+  if (value === undefined || value === null || value === "") return DEFAULT_SETTINGS.redirectUrl;
+  if (typeof value !== "string") throw new Error("跳转地址必须是字符串");
+  const redirectUrl = value.trim();
+  if (!redirectUrl || redirectUrl.length > 2048 || /[\u0000-\u001F\u007F]/u.test(redirectUrl)) {
+    throw new Error("跳转地址无效");
+  }
+  if (redirectUrl.startsWith("/")) {
+    if (redirectUrl.startsWith("//")) throw new Error("跳转地址无效");
+    return redirectUrl;
+  }
+  let parsed;
+  try { parsed = new URL(redirectUrl); } catch { throw new Error("跳转地址无效"); }
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("跳转地址无效");
+  return parsed.toString();
+}
+
+export function normalizeSettings(data) {
+  if (!isPlainObject(data)) return { ...DEFAULT_SETTINGS };
+  const source = isPlainObject(data.camouflage) ? data.camouflage : data;
+  try {
+    return {
+      enabled: source.enabled === true,
+      accessPath: normalizeSettingsPath(source.accessPath),
+      redirectUrl: normalizeRedirectUrl(source.redirectUrl),
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+export function validateSettingsPayload(body) {
+  if (!isPlainObject(body)) throw new Error("设置必须是 JSON 对象");
+  const source = isPlainObject(body.camouflage) ? body.camouflage : body;
+  return {
+    enabled: source.enabled === true,
+    accessPath: normalizeSettingsPath(source.accessPath),
+    redirectUrl: normalizeRedirectUrl(source.redirectUrl),
+  };
 }
 
 export function getRuntimeConfig(env) {

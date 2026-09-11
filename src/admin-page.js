@@ -16,7 +16,7 @@ export const adminHTML = `
 </script>
 <link rel="stylesheet" href="/admin.css?v=__ADMIN_ASSET_VERSION__" />
 </head>
-<body data-page="__PAGE__">
+<body data-page="__PAGE__" data-admin-base-path="__ADMIN_BASE_PATH__">
 
 <!-- Toast 提示容器 -->
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -34,10 +34,10 @@ export const adminHTML = `
 </div>
 
 <nav class="admin-nav" aria-label="管理导航">
-  <a href="/admin" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
-  <a href="/admin/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-label">优选 API</span></a>
-  <a href="/admin/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
-  <a href="/admin/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
+  <a href="__ADMIN_BASE_PATH__" data-nav-page="overview"><span class="nav-icon" aria-hidden="true">🌐</span><span class="nav-label">数据预览</span></a>
+  <a href="__ADMIN_BASE_PATH__/custom-apis" data-nav-page="customApis"><span class="nav-icon" aria-hidden="true">🚀</span><span class="nav-label">优选 API</span></a>
+  <a href="__ADMIN_BASE_PATH__/manage" data-nav-page="manage"><span class="nav-icon" aria-hidden="true">🧩</span><span class="nav-label">优选管理</span></a>
+  <a href="__ADMIN_BASE_PATH__/settings" data-nav-page="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label">设置</span></a>
 </nav>
 <div class="page-load-indicator" aria-hidden="true"></div>
 
@@ -396,6 +396,36 @@ export const adminHTML = `
     </div>
   </div>
   <div class="settings-list">
+    <div class="setting-block" id="camouflageSettings">
+      <div class="setting-block-heading">
+        <div class="setting-copy">
+          <h4>伪装首页</h4>
+          <p>启用后，只有通过管理入口路径才能打开管理面板；其他页面会跳转到指定地址。</p>
+        </div>
+        <span class="section-summary" id="camouflageSummary">未启用</span>
+      </div>
+      <div class="camouflage-settings-grid">
+        <label class="custom-api-switch camouflage-enable-field">
+          <input id="camouflageEnabled" type="checkbox" />
+          <span class="custom-api-switch-track" aria-hidden="true"></span>
+          <span class="custom-api-switch-text">启用伪装首页</span>
+        </label>
+        <label class="form-field">
+          <span>管理入口路径</span>
+          <input id="camouflageAccessPath" type="text" maxlength="128" placeholder="例如：secure-admin" autocomplete="off" />
+          <small>仅支持字母、数字、短横线和下划线。</small>
+        </label>
+        <label class="form-field">
+          <span>无入口时跳转地址</span>
+          <input id="camouflageRedirectUrl" type="url" maxlength="2048" placeholder="例如：https://example.com/" autocomplete="off" />
+          <small>支持 http(s) 地址或站内路径。</small>
+        </label>
+      </div>
+      <div class="settings-inline-footer">
+        <span class="save-status" id="camouflageSaveStatus">配置已保存</span>
+        <button class="btn-primary" id="saveCamouflageButton" type="button" onclick="saveCamouflageSettings()" disabled>💾 保存伪装设置</button>
+      </div>
+    </div>
     <div class="setting-block theme-settings" id="themeSettings">
       <div class="setting-block-heading">
         <div class="setting-copy">

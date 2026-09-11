@@ -4,12 +4,14 @@ import {
   getRuntimeConfig,
   normalizeBlacklist,
   normalizeFilterRules,
+  normalizeSettings,
   normalizeKvData,
   normalizeSourceKey,
   readJsonObject,
   validateApiPathPayload,
   validateConfigPayload,
   validateBlacklistPayload,
+  validateSettingsPayload,
 } from "../src/config.js";
 
 const kv = { get() {}, put() {} };
@@ -153,4 +155,23 @@ test("requires Pages runtime configuration", () => {
   assert.deepEqual(getRuntimeConfig({ KV: kv, LEGACY_PATH: "ignored", PASSWORD: "secret" }), {
     password: "secret",
   });
+});
+
+test("normalizes camouflage settings with a disabled default", () => {
+  assert.deepEqual(normalizeSettings(null), {
+    enabled: false,
+    accessPath: "",
+    redirectUrl: "/",
+  });
+  assert.deepEqual(validateSettingsPayload({
+    enabled: true,
+    accessPath: "/secure-admin/",
+    redirectUrl: "https://example.com/landing",
+  }), {
+    enabled: true,
+    accessPath: "secure-admin",
+    redirectUrl: "https://example.com/landing",
+  });
+  assert.throws(() => validateSettingsPayload({ enabled: true, accessPath: "bad/path" }), /管理入口路径无效/);
+  assert.throws(() => validateSettingsPayload({ redirectUrl: "javascript:alert(1)" }), /跳转地址无效/);
 });

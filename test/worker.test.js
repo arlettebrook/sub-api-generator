@@ -58,6 +58,49 @@ test("does not expose a default preview endpoint", async () => {
   assert.equal(response.status, 404);
 });
 
+test("keeps camouflage disabled by default and supports a private admin path", async () => {
+  const runtime = env({ KV: createKv({ subs: {}, apis: {} }) });
+  const defaultHome = await worker.fetch(new Request("https://example.test/"), runtime);
+  assert.equal(defaultHome.status, 200);
+  assert.match(await defaultHome.text(), /管理员密码/);
+
+  const hash = await sha256Hex("secret");
+  const settingsResponse = await worker.fetch(new Request("https://example.test/api/settings", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true, accessPath: "private-entry", redirectUrl: "https://example.com/landing" }),
+  }), runtime);
+  assert.equal(settingsResponse.status, 200);
+
+  const redirected = await worker.fetch(new Request("https://example.test/"), runtime);
+  assert.equal(redirected.status, 303);
+  assert.equal(redirected.headers.get("location"), "https://example.com/landing");
+
+  const privateEntry = await worker.fetch(new Request("https://example.test/private-entry", {
+  }), runtime);
+  assert.equal(privateEntry.status, 200);
+  assert.match(await privateEntry.text(), /action="\/private-entry"/);
+
+  const loginResponse = await worker.fetch(new Request("https://example.test/private-entry", {
+    method: "POST",
+    body: new URLSearchParams({ password: "secret" }),
+  }), runtime);
+  assert.equal(loginResponse.status, 303);
+  assert.equal(loginResponse.headers.get("location"), "https://example.test/private-entry");
+
+  const authenticatedEntry = await worker.fetch(new Request("https://example.test/private-entry", {
+    headers: { Cookie: `auth=${hash}` },
+  }), runtime);
+  assert.equal(authenticatedEntry.status, 200);
+  assert.match(await authenticatedEntry.text(), /data-admin-base-path="\/private-entry"/);
+
+  const standardAdmin = await worker.fetch(new Request("https://example.test/admin", {
+    headers: { Cookie: `auth=${hash}` },
+  }), runtime);
+  assert.equal(standardAdmin.status, 303);
+  assert.equal(standardAdmin.headers.get("location"), "https://example.com/landing");
+});
+
 test("serves separate responsive admin pages", async () => {
   const hash = await sha256Hex("secret");
   for (const [path, page] of [["/admin", "overview"], ["/admin/manage", "manage"], ["/admin/custom-apis", "customApis"], ["/admin/settings", "settings"], ["/admin/subs", "subs"], ["/admin/apis", "apis"]]) {

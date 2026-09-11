@@ -1,4 +1,4 @@
-export async function loginPage(message = "") {
+export async function loginPage(message = "", actionPath = "/login") {
   if (!globalThis._baseLoginHTML) {
     const css = `
       * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -121,23 +121,22 @@ export async function loginPage(message = "") {
     <h1>🔐 优选API•生成器•管理面板</h1>
     <p class="desc">请输入管理员密码以进入管理后台</p>
 
-    <form method="POST" action="/login" autocomplete="off">
+    <form method="POST" action="__LOGIN_ACTION_PATH__" autocomplete="off">
       <input type="password" name="password" placeholder="请输入管理员密码" required />
       <button type="submit">登 录</button>
       <!--MSG_PLACEHOLDER-->
     </form>
 
     <div class="footer">© 优选API生成器  • Designed with 💜 by
-      <a href="https://arlettebrook.github.io" target="_blank" rel="noopener noreferrer">Arlettebrook</a></div>
+      <a href="https://github.com/arlettebrook/sub-api-generator" target="_blank" rel="noopener noreferrer">Arlettebrook</a></div>
   </div>
 </body>
 </html>`;
   }
 
-  return globalThis._baseLoginHTML.replace(
-    "<!--MSG_PLACEHOLDER-->",
-    message ? `<div class="msg">${message}</div>` : "",
-  );
+  return globalThis._baseLoginHTML
+    .replace("__LOGIN_ACTION_PATH__", actionPath)
+    .replace("<!--MSG_PLACEHOLDER-->", message ? `<div class="msg">${message}</div>` : "");
 }
 
 // =========================

@@ -156,9 +156,22 @@ let subsSavePending = 0;
 let apisSavePending = 0;
 let subsDirty = false;
 let apisDirty = false;
+let camouflageSettings = { enabled: false, accessPath: '', redirectUrl: '/' };
+let savedCamouflageSettings = { ...camouflageSettings };
+let camouflageDirty = false;
+
+function getAdminBasePath() {
+  const value = document.body?.dataset.adminBasePath || '/admin';
+  return value.replace(/\\/+$/, '') || '/admin';
+}
+
+function adminUrl(suffix = '') {
+  const normalized = String(suffix || '');
+  return getAdminBasePath() + (normalized ? (normalized.startsWith('/') ? normalized : '/' + normalized) : '');
+}
 
 function hasUnsavedChanges() {
-  return customApisDirty || blacklistDirty || filterRulesDirty || subsDirty || apisDirty || subsSavePending > 0 || apisSavePending > 0;
+  return customApisDirty || blacklistDirty || filterRulesDirty || camouflageDirty || subsDirty || apisDirty || subsSavePending > 0 || apisSavePending > 0;
 }
 
 function responseError(label, response) {
@@ -874,7 +887,7 @@ async function fetchNodes(emptyRetry = 0) {
 function renderNodes(nodes) {
   if (nodes.length === 0) {
     const filtered = getPreviewDataNodes().length > 0;
-    nodesContainer.innerHTML = '<div class="nodes-empty"><strong>' + (filtered ? '暂无匹配节点' : '暂无节点数据') + '</strong><span>' + (filtered ? '可以清除筛选后查看全部节点。' : '请先添加数据源，然后重新加载。') + '</span>' + (filtered ? '<button type="button" class="btn-outline" onclick="nodesFilterResetEl?.click()">清除筛选</button>' : '<a class="btn-outline nodes-empty-link" href="/admin/manage">管理数据源</a>') + '<button type="button" class="btn-outline" onclick="fetchNodes()">重新加载</button></div>';
+    nodesContainer.innerHTML = '<div class="nodes-empty"><strong>' + (filtered ? '暂无匹配节点' : '暂无节点数据') + '</strong><span>' + (filtered ? '可以清除筛选后查看全部节点。' : '请先添加数据源，然后重新加载。') + '</span>' + (filtered ? '<button type="button" class="btn-outline" onclick="nodesFilterResetEl?.click()">清除筛选</button>' : '<a class="btn-outline nodes-empty-link" href="' + adminUrl('/manage') + '">管理数据源</a>') + '<button type="button" class="btn-outline" onclick="fetchNodes()">重新加载</button></div>';
     return;
   }
 
@@ -3496,6 +3509,102 @@ function initBlacklistForm() {
   });
 }
 
+function normalizeCamouflageSettingsClient(value) {
+  const source = value && typeof value === 'object' && value.camouflage && typeof value.camouflage === 'object' ? value.camouflage : value;
+  if (!source || typeof source !== 'object') return { enabled: false, accessPath: '', redirectUrl: '/' };
+  return {
+    enabled: source.enabled === true,
+    accessPath: typeof source.accessPath === 'string' ? source.accessPath.trim().replace(/^\\/+|\\/+$/g, '') : '',
+    redirectUrl: typeof source.redirectUrl === 'string' && source.redirectUrl.trim() ? source.redirectUrl.trim() : '/',
+  };
+}
+
+function sameCamouflageSettings(left, right) {
+  return left.enabled === right.enabled && left.accessPath === right.accessPath && left.redirectUrl === right.redirectUrl;
+}
+
+function updateCamouflageSummary() {
+  const summary = $('camouflageSummary');
+  if (summary) summary.textContent = camouflageSettings.enabled ? (camouflageSettings.accessPath ? '已启用' : '已启用，未设置入口') : '未启用';
+  const status = $('camouflageSaveStatus');
+  const button = $('saveCamouflageButton');
+  if (status) { status.textContent = camouflageDirty ? '有未保存的修改' : '配置已保存'; status.classList.toggle('dirty', camouflageDirty); }
+  if (button) button.disabled = !camouflageDirty;
+}
+
+function setCamouflageDirty(dirty = true) {
+  camouflageDirty = dirty;
+  updateCamouflageSummary();
+}
+
+function renderCamouflageSettings() {
+  const enabled = $('camouflageEnabled');
+  const accessPath = $('camouflageAccessPath');
+  const redirectUrl = $('camouflageRedirectUrl');
+  if (enabled) enabled.checked = camouflageSettings.enabled;
+  if (accessPath) accessPath.value = camouflageSettings.accessPath;
+  if (redirectUrl) redirectUrl.value = camouflageSettings.redirectUrl;
+  updateCamouflageSummary();
+}
+
+async function loadCamouflageSettings() {
+  try {
+    camouflageSettings = normalizeCamouflageSettingsClient(await readJsonResponse('/api/settings', '伪装首页设置'));
+    savedCamouflageSettings = { ...camouflageSettings };
+    setCamouflageDirty(false);
+    renderCamouflageSettings();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function readCamouflageSettingsForm() {
+  return normalizeCamouflageSettingsClient({
+    enabled: $('camouflageEnabled')?.checked,
+    accessPath: $('camouflageAccessPath')?.value || '',
+    redirectUrl: $('camouflageRedirectUrl')?.value || '/',
+  });
+}
+
+async function saveCamouflageSettings() {
+  const button = $('saveCamouflageButton');
+  const next = readCamouflageSettingsForm();
+  if (next.enabled && !next.accessPath) {
+    setInputError($('camouflageAccessPath'), '启用伪装首页时必须设置管理入口路径');
+    showToast('请先设置管理入口路径', 'error');
+    return;
+  }
+  clearInputError($('camouflageAccessPath'));
+  setButtonBusy(button, true);
+  try {
+    const response = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(next) });
+    if (!response.ok) throw responseError('伪装首页设置保存', response);
+    camouflageSettings = normalizeCamouflageSettingsClient(await response.json());
+    savedCamouflageSettings = { ...camouflageSettings };
+    setCamouflageDirty(false);
+    showToast('伪装首页设置已保存，重新打开入口后生效', 'success');
+  } catch (error) {
+    setCamouflageDirty(true);
+    showToast(error.message || '伪装首页设置保存失败', 'error', saveCamouflageSettings);
+  } finally {
+    setButtonBusy(button, false);
+    if (button) button.disabled = !camouflageDirty;
+  }
+}
+
+function initCamouflageSettings() {
+  const enabled = $('camouflageEnabled');
+  const accessPath = $('camouflageAccessPath');
+  const redirectUrl = $('camouflageRedirectUrl');
+  if (!enabled || enabled.dataset.bound === 'true') return;
+  [enabled, accessPath, redirectUrl].forEach((element) => element?.addEventListener('input', () => {
+    camouflageSettings = readCamouflageSettingsForm();
+    setCamouflageDirty(!sameCamouflageSettings(camouflageSettings, savedCamouflageSettings));
+    if (element !== accessPath) clearInputError(element);
+  }));
+  enabled.dataset.bound = 'true';
+}
+
 let filterRules = [];
 let savedFilterRules = [];
 let filterRulesSearchTerm = '';
@@ -3987,6 +4096,8 @@ function bindPageControls() {
 function loadActivePage(page) {
   if (page === 'settings') {
     initSettingsEnhancements();
+    initCamouflageSettings();
+    void loadCamouflageSettings();
     initBlacklistForm();
     void loadBlacklist();
     initFilterRulesForm();
@@ -4020,12 +4131,14 @@ function loadActivePage(page) {
 async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.location.href } = {}) {
   const target = new URL(url, window.location.href);
   const currentPage = document.body.dataset.page || 'overview';
-  const nextPage = target.pathname === '/admin' ? 'overview'
-    : target.pathname === '/admin/custom-apis' ? 'customApis'
-      : target.pathname === '/admin/manage' ? 'manage'
-        : target.pathname === '/admin/settings' ? 'settings'
-          : target.pathname === '/admin/subs' ? 'subs'
-            : target.pathname === '/admin/apis' ? 'apis' : '';
+  const basePath = getAdminBasePath();
+  const routePath = target.pathname === basePath ? '' : target.pathname.startsWith(basePath + '/') ? target.pathname.slice(basePath.length) : null;
+  const nextPage = routePath === '' ? 'overview'
+    : routePath === '/custom-apis' ? 'customApis'
+      : routePath === '/manage' ? 'manage'
+        : routePath === '/settings' ? 'settings'
+          : routePath === '/subs' ? 'subs'
+            : routePath === '/apis' ? 'apis' : '';
   if (!nextPage || (nextPage === currentPage && target.pathname === window.location.pathname)) return;
   if (hasUnsavedChanges() && !window.confirm('当前有未保存的修改，确定离开吗？')) {
     if (historyMode === 'none') window.history.pushState({}, '', restoreUrl);
@@ -4150,7 +4263,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   document.addEventListener('click', (event) => {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-    const link = event.target?.closest?.('a[href^="/admin"]');
+    const link = event.target?.closest?.('a[href^="' + getAdminBasePath() + '"]');
     if (!link || link.dataset.navPage) return;
     event.preventDefault();
     void navigateToPage(link.href);
