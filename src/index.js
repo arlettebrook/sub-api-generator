@@ -4,6 +4,7 @@ import {
   KV_KEY_BLACKLIST,
   KV_KEY_FILTER_RULES,
   KV_KEY_SETTINGS,
+  KV_KEY_WEBDAV_BACKUP,
   KV_KEY_SUBS,
   KV_KEY_SOURCE_STATUS,
   KV_KEY_PREFERRED_DOMAINS,
@@ -37,6 +38,21 @@ import { adminHTML } from "./admin-page.js";
 import { adminClientScript } from "./admin-client.js";
 import { adminStyle } from "./admin-style.js";
 import { loginPage } from "./login-page.js";
+import {
+  DEFAULT_WEBDAV_FILENAME,
+  isWebdavConfigured,
+  isValidBackupFilename,
+  normalizeWebdavConfig,
+  publicWebdavConfig,
+  sortBackupFilenames,
+  timestampedBackupFilename,
+  validateWebdavConfigPayload,
+  webdavDownload,
+  webdavListBackupEntries,
+  webdavListBackups,
+  webdavPruneBackups,
+  webdavUpload,
+} from "./webdav.js";
 
 function makeAssetVersion(...contents) {
   let hash = 2166136261;
@@ -695,7 +711,7 @@ function normalizeBackupSection(section, value) {
   }
 }
 
-async function handleBackup(env) {
+async function collectBackupData(env) {
   const [subs, apis, customApis, blacklist, filterRules, preferredDomains, settings] = await Promise.all([
     env.KV.get(KV_KEY_SUBS, "json"),
     env.KV.get(KV_KEY_APIS, "json"),
@@ -712,38 +728,170 @@ async function handleBackup(env) {
     const normalized = normalizeBackupSection(section, raw[section.key] ?? empty);
     data[section.key] = normalized ? normalized.data : empty;
   }
-  return pagesJsonResponse({
+  return data;
+}
+
+function buildBackupPayload(data) {
+  return {
     app: "sub-api-generator",
     version: 1,
     exportedAt: new Date().toISOString(),
     data,
+  };
+}
+
+async function handleBackup(env) {
+  return pagesJsonResponse(buildBackupPayload(await collectBackupData(env)));
+}
+
+async function handleWebdavBackupUpload(env) {
+  const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  if (!isWebdavConfigured(config)) return pagesTextResponse("请先配置并保存 WebDAV 地址", 400);
+  const baseFilename = config.filename || DEFAULT_WEBDAV_FILENAME;
+  const filename = timestampedBackupFilename(baseFilename);
+  const content = JSON.stringify(buildBackupPayload(await collectBackupData(env)), null, 2);
+  try {
+    await webdavUpload(config, filename, content);
+  } catch (error) {
+    return pagesTextResponse(error.message || "备份上传到 WebDAV 失败", 502);
+  }
+  // 云端最多保留 10 份备份；清理失败不影响本次备份结果。
+  let pruned = 0;
+  try {
+    pruned = (await webdavPruneBackups(config, baseFilename, [filename])).length;
+  } catch { /* ignore prune failures */ }
+  return pagesJsonResponse({ ok: true, filename, pruned });
+}
+
+async function handleWebdavBackupList(env) {
+  const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  if (!isWebdavConfigured(config)) return pagesTextResponse("请先配置并保存 WebDAV 地址", 400);
+  const baseFilename = config.filename || DEFAULT_WEBDAV_FILENAME;
+  try {
+    const entries = await webdavListBackupEntries(config, baseFilename);
+    return pagesJsonResponse({
+      ok: true,
+      items: entries.map((entry) => ({ filename: entry.name, size: entry.size, lastModified: entry.lastModified })),
+    });
+  } catch (error) {
+    return pagesTextResponse(error.message || "读取 WebDAV 备份列表失败", 502);
+  }
+}
+
+async function handleWebdavBackupRestore(request, env) {
+  const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  if (!isWebdavConfigured(config)) return pagesTextResponse("请先配置并保存 WebDAV 地址", 400);
+  const baseFilename = config.filename || DEFAULT_WEBDAV_FILENAME;
+  // 指定文件名时恢复该份备份；否则优先恢复最新一份（列表获取失败时回退到固定文件名，兼容旧备份）。
+  let requested = null;
+  try {
+    const body = await request.json();
+    if (typeof body?.filename === "string" && body.filename) requested = body.filename;
+  } catch { /* 无请求体：恢复最新一份 */ }
+  let filename;
+  if (requested) {
+    if (!isValidBackupFilename(baseFilename, requested)) return pagesTextResponse("备份文件名无效", 400);
+    filename = requested;
+  } else {
+    filename = baseFilename;
+    try {
+      const backups = await webdavListBackups(config, baseFilename);
+      if (backups.length) filename = sortBackupFilenames(backups)[0];
+    } catch { /* ignore listing failures, fall back to base filename */ }
+  }
+  let text;
+  try {
+    text = await webdavDownload(config, filename);
+  } catch (error) {
+    return pagesTextResponse(error.message || "从 WebDAV 读取备份失败", 502);
+  }
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { return pagesTextResponse("WebDAV 上的备份文件不是有效的 JSON", 400); }
+  if (!isPlainObject(parsed) || !isPlainObject(parsed.data)) return pagesTextResponse("备份文件格式无效", 400);
+  try {
+    const restored = await applyRestoreSections(env, parsed.data);
+    return pagesJsonResponse({ ok: true, restored, filename });
+  } catch (error) {
+    return pagesTextResponse(error.message, 400);
+  }
+}
+
+async function handleWebdavBackupDownload(request, env) {
+  const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  if (!isWebdavConfigured(config)) return pagesTextResponse("请先配置并保存 WebDAV 地址", 400);
+  const baseFilename = config.filename || DEFAULT_WEBDAV_FILENAME;
+  let filename = null;
+  try {
+    const body = await request.json();
+    if (typeof body?.filename === "string") filename = body.filename;
+  } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  if (!filename) return pagesTextResponse("备份文件名无效", 400);
+  if (!isValidBackupFilename(baseFilename, filename)) return pagesTextResponse("备份文件名无效", 400);
+  let text;
+  try {
+    text = await webdavDownload(config, filename);
+  } catch (error) {
+    return pagesTextResponse(error.message || "从 WebDAV 读取备份失败", 502);
+  }
+  return new Response(text, {
+    headers: pagesSecurityHeaders({
+      "content-type": "application/json; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}"`,
+      "cache-control": "no-store",
+    }),
   });
+}
+
+async function applyRestoreSections(env, data) {
+  if (!isPlainObject(data)) throw new Error("备份文件格式无效");
+  const restored = {};
+  const writes = [];
+  for (const section of BACKUP_SECTIONS) {
+    const value = section.aliases
+      .map((alias) => data[alias])
+      .find((aliasValue) => aliasValue !== undefined);
+    if (value === undefined) continue;
+    const normalized = normalizeBackupSection(section, value);
+    if (!normalized) throw new Error(`备份文件格式无效: ${section.key}`);
+    writes.push(env.KV.put(section.kvKey, JSON.stringify(normalized.data)));
+    restored[section.key] = section.key === "settings" ? true : Array.isArray(normalized.data) ? normalized.data.length : Object.keys(normalized.data).length;
+  }
+  if (!writes.length) throw new Error("备份文件中没有任何可恢复的配置");
+
+  // 恢复后旧的源状态缓存不再可信，直接清空。
+  writes.push(env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify({})));
+  await Promise.all(writes);
+  subscriptions.clearAggregateCache();
+  return restored;
 }
 
 async function handleRestore(request, env) {
   let body;
   try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
   if (!isPlainObject(body) || !isPlainObject(body.data)) return pagesTextResponse("备份文件格式无效", 400);
-
-  const restored = {};
-  const writes = [];
-  for (const section of BACKUP_SECTIONS) {
-    const value = section.aliases
-      .map((alias) => body.data[alias])
-      .find((aliasValue) => aliasValue !== undefined);
-    if (value === undefined) continue;
-    const normalized = normalizeBackupSection(section, value);
-    if (!normalized) return pagesTextResponse(`备份文件格式无效: ${section.key}`, 400);
-    writes.push(env.KV.put(section.kvKey, JSON.stringify(normalized.data)));
-    restored[section.key] = section.key === "settings" ? true : Array.isArray(normalized.data) ? normalized.data.length : Object.keys(normalized.data).length;
+  try {
+    const restored = await applyRestoreSections(env, body.data);
+    return pagesJsonResponse({ ok: true, restored });
+  } catch (error) {
+    return pagesTextResponse(error.message, 400);
   }
-  if (!writes.length) return pagesTextResponse("备份文件中没有任何可恢复的配置", 400);
+}
 
-  // 恢复后旧的源状态缓存不再可信，直接清空。
-  writes.push(env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify({})));
-  await Promise.all(writes);
-  subscriptions.clearAggregateCache();
-  return pagesJsonResponse({ ok: true, restored });
+async function handleGetWebdavBackupConfig(env) {
+  const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  return pagesJsonResponse(publicWebdavConfig(config));
+}
+
+async function handlePostWebdavBackupConfig(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  let payload;
+  try { payload = validateWebdavConfigPayload(body); } catch (error) { return pagesTextResponse(error.message, 400); }
+  const existing = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  // 密码留空表示沿用已保存的密码，不回显也不要求重新输入。
+  if (!payload.password && payload.url) payload.password = existing.password;
+  await env.KV.put(KV_KEY_WEBDAV_BACKUP, JSON.stringify(payload));
+  return pagesJsonResponse(publicWebdavConfig(payload));
 }
 
 async function handleGetCustomApis(env) {
@@ -973,6 +1121,22 @@ export default {
         case "/api/backup":
           if (method === "GET") return await handleBackup(env);
           return pagesMethodNotAllowed("GET");
+        case "/api/backup/webdav":
+          if (method === "GET") return await handleGetWebdavBackupConfig(env);
+          if (method === "POST") return await handlePostWebdavBackupConfig(request, env);
+          return pagesMethodNotAllowed("GET, POST");
+        case "/api/backup/webdav/list":
+          if (method === "GET") return await handleWebdavBackupList(env);
+          return pagesMethodNotAllowed("GET");
+        case "/api/backup/webdav/upload":
+          if (method === "POST") return await handleWebdavBackupUpload(env);
+          return pagesMethodNotAllowed("POST");
+        case "/api/backup/webdav/restore":
+          if (method === "POST") return await handleWebdavBackupRestore(request, env);
+          return pagesMethodNotAllowed("POST");
+        case "/api/backup/webdav/download":
+          if (method === "POST") return await handleWebdavBackupDownload(request, env);
+          return pagesMethodNotAllowed("POST");
         case "/api/restore":
           if (method === "POST") return await handleRestore(request, env);
           return pagesMethodNotAllowed("POST");

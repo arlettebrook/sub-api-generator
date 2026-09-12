@@ -433,6 +433,114 @@ export const adminStyle = `
     gap: 12px;
   }
 
+  .webdav-settings {
+    display: grid;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+  }
+
+  .webdav-settings-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .webdav-settings-head .setting-copy p {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .webdav-config-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 12px;
+  }
+
+  .webdav-footer {
+    justify-content: space-between;
+  }
+
+  .webdav-footer .backup-actions {
+    justify-content: flex-end;
+  }
+
+  .webdav-remote {
+    display: grid;
+    gap: 10px;
+  }
+
+  .webdav-remote-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .webdav-remote-head .setting-copy p {
+    margin: 2px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .webdav-remote-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .webdav-remote-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+  }
+
+  .webdav-remote-meta {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .webdav-remote-name {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .webdav-remote-time {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .webdav-remote-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 8px;
+  }
+
+  .webdav-remote-empty {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
   .camouflage-enable-field {
     min-height: 34px;
   }
@@ -4001,6 +4109,36 @@ export const adminStyle = `
     .camouflage-settings-grid {
       grid-template-columns: 1fr;
     }
+    .webdav-settings-head {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .webdav-config-grid {
+      grid-template-columns: 1fr;
+    }
+    .webdav-footer .backup-actions {
+      justify-content: stretch;
+    }
+    .webdav-footer .backup-actions button {
+      width: 100%;
+    }
+    .webdav-remote-head {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .webdav-remote-item {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .webdav-remote-actions {
+      justify-content: stretch;
+    }
+    .webdav-remote-actions button {
+      flex: 1;
+    }
     .setting-heading-actions {
       align-items: flex-end;
       flex-direction: column-reverse;
@@ -4716,7 +4854,11 @@ export const adminStyle = `
     #apisList .row .source-check-button,
     #apisList .row .source-view-button,
     #apisList .row .source-download-button,
-    #apisList .row .source-delete-button {
+    #apisList .row .source-delete-button,
+    #preferredDomainsList .row .source-check-button,
+    #preferredDomainsList .row .source-view-button,
+    #preferredDomainsList .row .source-download-button,
+    #preferredDomainsList .row .source-delete-button {
       order: 4;
       flex: 1 1 calc(50% - 4px);
       width: calc(50% - 4px);
@@ -4728,6 +4870,17 @@ export const adminStyle = `
     .preferred-domain-row {
       display: flex;
       gap: 10px;
+    }
+    /* 优选域名行移动端信息层级：备注 → 域名/最后解析 → 检测结果 → 操作按钮。
+       identity 未设 order 时默认为 0，会插到备注之前，必须显式归位。 */
+    .preferred-domain-row .preferred-domain-identity {
+      order: 2;
+    }
+    .preferred-domain-row .preferred-domain-identity .host-input {
+      order: 1;
+    }
+    .preferred-domain-row .preferred-domain-identity small {
+      order: 2;
     }
     .preferred-domain-row .preferred-domain-identity,
     .preferred-domain-row .preferred-domain-records {

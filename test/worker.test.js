@@ -643,6 +643,200 @@ test("backs up and restores all configuration data", async () => {
   assert.equal(emptyResponse.status, 400);
 });
 
+test("configures WebDAV and backs up and restores through it", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const authHeaders = { Cookie: `auth=${hash}` };
+  const jsonHeaders = { ...authHeaders, "content-type": "application/json" };
+
+  const defaultResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav", { headers: authHeaders }), runtime);
+  assert.equal(defaultResponse.status, 200);
+  assert.deepEqual(await defaultResponse.json(), { url: "", username: "", filename: "sub-api-backup.json", passwordSet: false });
+
+  const notConfigured = await worker.fetch(new Request("https://example.test/api/backup/webdav/upload", {
+    method: "POST", headers: authHeaders,
+  }), runtime);
+  assert.equal(notConfigured.status, 400);
+
+  const saveResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav", {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ url: "https://dav.example.com/backup/", username: "user", password: "pass", filename: "my-backup.json" }),
+  }), runtime);
+  assert.equal(saveResponse.status, 200);
+  const savedConfig = await saveResponse.json();
+  assert.equal(savedConfig.passwordSet, true);
+  assert.equal(savedConfig.password, undefined);
+  assert.equal(values.webdav_backup.password, "pass");
+
+  const keepPasswordResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav", {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ url: "https://dav.example.com/backup/", username: "user", password: "", filename: "my-backup.json" }),
+  }), runtime);
+  assert.equal(keepPasswordResponse.status, 200);
+  assert.equal(values.webdav_backup.password, "pass");
+
+  const invalidResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav", {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ url: "not-a-url" }),
+  }), runtime);
+  assert.equal(invalidResponse.status, 400);
+
+  await worker.fetch(new Request("https://example.test/api/blacklist", {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify(["foo"]),
+  }), runtime);
+
+  const webdavRequests = [];
+  let putAttempts = 0;
+  let getOverride = null;
+  const storedFiles = {};
+  const oldBackupNames = ["my-backup.json"];
+  for (let i = 1; i <= 11; i += 1) {
+    oldBackupNames.push(`my-backup_202501${String(i).padStart(2, "0")}_000001.json`);
+  }
+  const xmlListing = () => '<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">'
+    + [...oldBackupNames, ...Object.keys(storedFiles).map((url) => url.split("/").pop())]
+      .map((name, index) => `<D:response><D:href>/backup/${name}</D:href><D:propstat><D:prop><D:getcontentlength>${1024 * (index + 1)}</D:getcontentlength><D:getlastmodified>Mon, 01 Sep 2025 00:00:00 GMT</D:getlastmodified></D:prop></D:propstat></D:response>`)
+      .join("")
+    + "</D:multistatus>";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource, init = {}) => {
+    const url = String(resource);
+    const method = init.method || "GET";
+    webdavRequests.push({ url, method, headers: init.headers, body: init.body });
+    if (method === "PUT") {
+      putAttempts += 1;
+      // 第一次 PUT 因目录不存在返回 409，触发 MKCOL 后重试成功。
+      if (putAttempts === 1) return new Response(null, { status: 409 });
+      storedFiles[url] = init.body;
+      return new Response(null, { status: 201 });
+    }
+    if (method === "PROPFIND") return new Response(xmlListing(), { status: 207 });
+    if (method === "GET") {
+      if (getOverride) return getOverride(url);
+      if (storedFiles[url] !== undefined) return new Response(storedFiles[url], { status: 200 });
+      return new Response(null, { status: 404 });
+    }
+    if (method === "DELETE") return new Response(null, { status: 204 });
+    return new Response(null, { status: 405 });
+  };
+  try {
+    const uploadResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/upload", {
+      method: "POST", headers: authHeaders,
+    }), runtime);
+    assert.equal(uploadResponse.status, 200);
+    const uploadJson = await uploadResponse.json();
+    assert.match(uploadJson.filename, /^my-backup_\d{8}_\d{6}\.json$/);
+    assert.equal(putAttempts, 2);
+    assert.ok(webdavRequests.some((request) => request.method === "MKCOL" && request.url === "https://dav.example.com/backup/"));
+    const put = webdavRequests.find((request) => request.method === "PUT");
+    assert.match(put.url, /^https:\/\/dav\.example\.com\/backup\/my-backup_\d{8}_\d{6}\.json$/);
+    assert.equal(put.headers.Authorization, "Basic " + btoa("user:pass"));
+    const uploaded = JSON.parse(put.body);
+    assert.equal(uploaded.version, 1);
+    assert.deepEqual(uploaded.data.blacklist, ["foo"]);
+    // 云端最多保留 10 份：13 份中删除最旧的 3 份（无时间戳旧文件和最早的两份）。
+    assert.equal(uploadJson.pruned, 3);
+    const deletes = webdavRequests.filter((request) => request.method === "DELETE").map((request) => request.url);
+    assert.equal(deletes.length, 3);
+    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup.json"));
+    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup_20250101_000001.json"));
+    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup_20250102_000001.json"));
+
+    const restoreValues = {};
+    restoreValues.webdav_backup = values.webdav_backup;
+    const restoreRuntime = env({ KV: createKv(restoreValues) });
+    const restoreResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/restore", {
+      method: "POST", headers: authHeaders,
+    }), restoreRuntime);
+    assert.equal(restoreResponse.status, 200);
+    const restoreJson = await restoreResponse.json();
+    assert.equal(restoreJson.filename, uploadJson.filename);
+    assert.deepEqual(restoreJson.restored, {
+      subs: 0,
+      apis: 0,
+      customApis: 0,
+      blacklist: 1,
+      filterRules: 0,
+      preferredDomains: 0,
+      settings: true,
+    });
+    assert.deepEqual(restoreValues.blacklist, ["foo"]);
+    assert.deepEqual(restoreValues.source_status, {});
+
+    // 云端备份列表：按时间从新到旧，包含文件名、大小和修改时间。
+    const listResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/list", { headers: authHeaders }), restoreRuntime);
+    assert.equal(listResponse.status, 200);
+    const listJson = await listResponse.json();
+    assert.equal(listJson.ok, true);
+    assert.equal(listJson.items[0].filename, uploadJson.filename);
+    assert.equal(typeof listJson.items[0].size, "number");
+    assert.equal(listJson.items[0].lastModified, Date.parse("Mon, 01 Sep 2025 00:00:00 GMT"));
+    assert.ok(listJson.items.length >= 10);
+
+    // 手动选择指定备份恢复：恢复更旧的一份。
+    const olderFilename = "my-backup_20250103_000001.json";
+    storedFiles[`https://dav.example.com/backup/${olderFilename}`] = JSON.stringify({
+      app: "sub-api-generator",
+      version: 1,
+      exportedAt: "2025-01-03T00:00:00.000Z",
+      data: { blacklist: ["old-thing"] },
+    });
+    const restoreValues2 = {};
+    restoreValues2.webdav_backup = values.webdav_backup;
+    const restoreRuntime2 = env({ KV: createKv(restoreValues2) });
+    const pickRestoreResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/restore", {
+      method: "POST",
+      headers: { ...authHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ filename: olderFilename }),
+    }), restoreRuntime2);
+    assert.equal(pickRestoreResponse.status, 200);
+    const pickRestoreJson = await pickRestoreResponse.json();
+    assert.equal(pickRestoreJson.filename, olderFilename);
+    assert.deepEqual(pickRestoreJson.restored.blacklist, 1);
+    assert.deepEqual(restoreValues2.blacklist, ["old-thing"]);
+
+    const invalidPickResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/restore", {
+      method: "POST",
+      headers: { ...authHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ filename: "evil.json" }),
+    }), restoreRuntime2);
+    assert.equal(invalidPickResponse.status, 400);
+
+    // 手动下载指定备份。
+    const downloadResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/download", {
+      method: "POST",
+      headers: { ...authHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ filename: uploadJson.filename }),
+    }), restoreRuntime2);
+    assert.equal(downloadResponse.status, 200);
+    assert.match(downloadResponse.headers.get("content-disposition"), new RegExp(uploadJson.filename));
+    assert.deepEqual(await downloadResponse.json(), uploaded);
+
+    const invalidDownloadResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/download", {
+      method: "POST",
+      headers: { ...authHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ filename: "evil.json" }),
+    }), restoreRuntime2);
+    assert.equal(invalidDownloadResponse.status, 400);
+
+    getOverride = () => new Response("not-json", { status: 200 });
+    const brokenResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/restore", {
+      method: "POST", headers: authHeaders,
+    }), restoreRuntime);
+    assert.equal(brokenResponse.status, 400);
+
+    getOverride = () => new Response(null, { status: 404 });
+    const missingResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/restore", {
+      method: "POST", headers: authHeaders,
+    }), restoreRuntime);
+    assert.equal(missingResponse.status, 502);
+    assert.match(await missingResponse.text(), /没有找到备份文件/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("manages preferred domains and resolves A, AAAA, and CNAME records", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

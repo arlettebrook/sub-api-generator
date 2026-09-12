@@ -4598,10 +4598,10 @@ const BACKUP_SECTION_LABELS = {  subs: '订阅源',
   settings: '伪装设置',
 };
 
+// 备份文件名统一使用北京时间（UTC+8），与服务端 WebDAV 备份保持一致。
 function backupFileName() {
-  const now = new Date();
-  const pad = (value) => String(value).padStart(2, '0');
-  return 'sub-api-backup_' + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()) + '.json';
+  const stamp = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, '');
+  return 'sub-api-backup_' + stamp.slice(0, 8) + '_' + stamp.slice(8) + '.json';
 }
 
 async function exportBackup(button) {
@@ -4644,22 +4644,28 @@ function restoreBackup(event) {
       showToast('恢复失败：备份文件中没有任何配置', 'error');
       return;
     }
-    openRestoreConfirm(summary, data);
+    openRestoreConfirm(restoreStatsHtml(data), () => applyRestore(data));
   }, '备份');
 }
 
-function openRestoreConfirm(summary, data) {
+function openRestoreConfirm(statsHtml, apply) {
   const dialog = $('restoreConfirmDialog');
   if (!dialog || typeof dialog.showModal !== 'function') {
-    if (settingConfirm('恢复将覆盖：' + summary + '。确定恢复吗？')) void applyRestore(data);
+    if (settingConfirm('恢复将覆盖当前对应配置。确定恢复吗？')) void apply();
     return;
   }
-  $('restoreConfirmStats').innerHTML = summary
+  $('restoreConfirmStats').innerHTML = statsHtml;
+  dialog._restoreApply = apply;
+  dialog.showModal();
+}
+
+function restoreStatsHtml(data) {
+  const summary = describeRestoreSections(data);
+  if (!summary) return '';
+  return summary
     .split('、')
     .map((part) => '<span><strong>' + part.replace(/\s\d+ 项$/, '') + '</strong>' + (/\d+ 项$/.test(part) ? part.match(/\d+ 项$/)[0] : '') + '</span>')
     .join('');
-  dialog._restoreData = data;
-  dialog.showModal();
 }
 
 async function applyRestore(data) {
@@ -4690,11 +4696,250 @@ function initBackupRestore() {
   dialog.dataset.bound = 'true';
   $('cancelRestoreButton')?.addEventListener('click', () => dialog.close());
   $('confirmRestoreButton')?.addEventListener('click', () => {
-    const data = dialog._restoreData;
-    dialog._restoreData = null;
+    const apply = dialog._restoreApply;
+    dialog._restoreApply = null;
     dialog.close();
-    if (data) void applyRestore(data);
+    if (apply) void apply();
   });
+}
+
+// ======================== WebDAV 云备份 ========================
+let webdavBackupConfig = { url: '', username: '', filename: 'sub-api-backup.json', passwordSet: false };
+
+function readWebdavConfigForm() {
+  return {
+    url: ($('webdavUrl')?.value || '').trim(),
+    username: ($('webdavUsername')?.value || '').trim(),
+    password: $('webdavPassword')?.value || '',
+    filename: ($('webdavFilename')?.value || '').trim(),
+  };
+}
+
+function isWebdavConfiguredClient() {
+  return Boolean(webdavBackupConfig.url);
+}
+
+function updateWebdavBackupUi(dirty) {
+  const status = $('webdavSaveStatus');
+  const summary = $('webdavSummary');
+  if (status) {
+    status.textContent = dirty ? '有未保存的修改' : (isWebdavConfiguredClient() ? '配置已保存' : '未配置');
+    status.classList.toggle('dirty', Boolean(dirty));
+  }
+  if (summary) summary.textContent = isWebdavConfiguredClient() ? '已配置' : '未配置';
+  const upload = $('webdavUploadButton');
+  const restoreRemote = $('webdavRestoreRemoteButton');
+  if (upload) upload.disabled = !isWebdavConfiguredClient();
+  if (restoreRemote) restoreRemote.disabled = !isWebdavConfiguredClient();
+  const remoteSection = $('webdavRemoteSection');
+  if (remoteSection) remoteSection.hidden = !isWebdavConfiguredClient();
+}
+
+async function loadWebdavBackupConfig() {
+  try {
+    webdavBackupConfig = await readJsonResponse('/api/backup/webdav', 'WebDAV 配置');
+    if ($('webdavUrl')) $('webdavUrl').value = webdavBackupConfig.url || '';
+    if ($('webdavUsername')) $('webdavUsername').value = webdavBackupConfig.username || '';
+    if ($('webdavPassword')) $('webdavPassword').value = '';
+    if ($('webdavFilename')) $('webdavFilename').value = webdavBackupConfig.filename || 'sub-api-backup.json';
+    updateWebdavBackupUi(false);
+    if (isWebdavConfiguredClient()) void refreshWebdavRemoteList();
+  } catch (error) {
+    updateWebdavBackupUi(false);
+    showToast(error.message, 'error');
+  }
+}
+
+function initWebdavBackupSettings() {
+  const inputs = [$('webdavUrl'), $('webdavUsername'), $('webdavPassword'), $('webdavFilename')];
+  if (inputs.every((element) => !element)) return;
+  inputs.forEach((element) => {
+    if (!element || element.dataset.webdavBound === 'true') return;
+    element.dataset.webdavBound = 'true';
+    element.addEventListener('input', () => updateWebdavBackupUi(true));
+  });
+}
+
+async function saveWebdavConfig() {
+  const button = $('saveWebdavConfigButton');
+  const form = readWebdavConfigForm();
+  if (!form.url) {
+    showToast('请先填写 WebDAV 地址', 'error');
+    return;
+  }
+  setButtonBusy(button, true);
+  try {
+    webdavBackupConfig = await readJsonResponse('/api/backup/webdav', 'WebDAV 配置保存', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(form),
+    });
+    if ($('webdavPassword')) $('webdavPassword').value = '';
+    updateWebdavBackupUi(false);
+    void refreshWebdavRemoteList();
+    showToast('WebDAV 配置已保存', 'success');
+  } catch (error) {
+    updateWebdavBackupUi(true);
+    showToast(error.message || 'WebDAV 配置保存失败', 'error', saveWebdavConfig);
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function webdavAction(url, label, payload) {
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    ...(payload ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) } : {}),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    let detail = text;
+    try { detail = JSON.parse(text).error || text; } catch { /* text/plain 错误消息 */ }
+    throw new Error(detail || label + '失败（HTTP ' + response.status + '）');
+  }
+  return response.json();
+}
+
+async function uploadWebdavBackup(button) {
+  setButtonBusy(button, true, '上传中…');
+  try {
+    const result = await webdavAction('/api/backup/webdav/upload', 'WebDAV 备份');
+    showToast('备份已上传：' + (result.filename || '') + (result.pruned ? '，已清理 ' + result.pruned + ' 份旧备份' : ''), 'success');
+    void refreshWebdavRemoteList();
+  } catch (error) {
+    showToast(error.message || 'WebDAV 备份失败', 'error', () => uploadWebdavBackup(button));
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function applyWebdavRestore(filename) {
+  const button = $('webdavRestoreRemoteButton');
+  setButtonBusy(button, true, '恢复中…');
+  try {
+    const result = await webdavAction('/api/backup/webdav/restore', 'WebDAV 恢复', filename ? { filename } : undefined);
+    showToast('已从 WebDAV 恢复备份：' + (result.filename || filename || ''), 'success');
+    void loadCamouflageSettings();
+    void loadBlacklist();
+    void loadFilterRules();
+  } catch (error) {
+    showToast(error.message || 'WebDAV 恢复失败', 'error', () => applyWebdavRestore(filename));
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function restoreWebdavBackup(filename) {
+  if (!isWebdavConfiguredClient()) {
+    showToast('请先配置并保存 WebDAV 地址', 'error');
+    return;
+  }
+  if (filename) {
+    openRestoreConfirm('<span><strong>WebDAV</strong>' + filename + '</span>', () => applyWebdavRestore(filename));
+    return;
+  }
+  openRestoreConfirm('<span><strong>WebDAV</strong>最近一份备份</span>', () => applyWebdavRestore());
+}
+
+// ======================== WebDAV 云端备份列表 ========================
+function formatBackupFilenameTime(filename) {
+  const match = String(filename || '').match(/_(\d{8})_(\d{6})\.json$/i);
+  if (!match) return '';
+  const date = match[1];
+  const time = match[2];
+  return date.slice(0, 4) + '-' + date.slice(4, 6) + '-' + date.slice(6, 8) + ' ' + time.slice(0, 2) + ':' + time.slice(2, 4) + ':' + time.slice(4, 6) + '（北京时间）';
+}
+
+function formatBackupSize(size) {
+  const bytes = Number(size);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  if (bytes >= 1024 * 1024) return ' ' + (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  if (bytes >= 1024) return ' ' + (bytes / 1024).toFixed(1) + ' KB';
+  return ' ' + bytes + ' B';
+}
+
+function renderWebdavRemoteList(items) {
+  const container = $('webdavRemoteList');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!Array.isArray(items) || !items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'webdav-remote-empty';
+    empty.textContent = '云端暂无备份文件。';
+    container.appendChild(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'webdav-remote-item';
+    const meta = document.createElement('div');
+    meta.className = 'webdav-remote-meta';
+    const name = document.createElement('span');
+    name.className = 'webdav-remote-name';
+    name.textContent = item.filename || '';
+    name.title = item.filename || '';
+    const time = document.createElement('span');
+    time.className = 'webdav-remote-time';
+    time.textContent = formatBackupFilenameTime(item.filename)
+      || (item.lastModified ? new Date(item.lastModified).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '未知时间')
+      + formatBackupSize(item.size);
+    meta.append(name, time);
+    const actions = document.createElement('div');
+    actions.className = 'webdav-remote-actions';
+    const restoreButton = document.createElement('button');
+    restoreButton.type = 'button';
+    restoreButton.className = 'btn-subtle';
+    restoreButton.textContent = '↩ 恢复';
+    restoreButton.onclick = () => restoreWebdavBackup(item.filename);
+    const downloadButton = document.createElement('button');
+    downloadButton.type = 'button';
+    downloadButton.className = 'btn-subtle';
+    downloadButton.textContent = '⬇ 下载';
+    downloadButton.onclick = () => downloadWebdavBackup(item.filename);
+    actions.append(restoreButton, downloadButton);
+    row.append(meta, actions);
+    fragment.appendChild(row);
+  }
+  container.appendChild(fragment);
+}
+
+async function refreshWebdavRemoteList() {
+  const container = $('webdavRemoteList');
+  if (!container) return;
+  container.innerHTML = '<div class="webdav-remote-empty">正在获取云端备份列表…</div>';
+  try {
+    const result = await readJsonResponse('/api/backup/webdav/list', '获取云端备份列表');
+    renderWebdavRemoteList(result.items);
+  } catch (error) {
+    container.innerHTML = '<div class="webdav-remote-empty"></div>';
+    const empty = container.firstElementChild;
+    empty.textContent = error.message || '获取云端备份列表失败';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn-subtle';
+    retry.textContent = '重试';
+    retry.onclick = () => refreshWebdavRemoteList();
+    empty.appendChild(retry);
+  }
+}
+
+async function downloadWebdavBackup(filename) {
+  try {
+    const response = await fetch('/api/backup/webdav/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ filename }),
+    });
+    if (!response.ok) throw responseError('下载云端备份', response);
+    downloadJsonFile(await response.json(), filename);
+    showToast('云端备份已下载：' + filename, 'success');
+  } catch (error) {
+    showToast(error.message || '下载云端备份失败', 'error', () => downloadWebdavBackup(filename));
+  }
 }
 
 function loadActivePage(page) {
@@ -4707,6 +4952,8 @@ function loadActivePage(page) {
     initFilterRulesForm();
     void loadFilterRules();
     initBackupRestore();
+    initWebdavBackupSettings();
+    void loadWebdavBackupConfig();
   }
   if (page === 'customApis') {
     initCustomApiForm();

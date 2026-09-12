@@ -597,7 +597,7 @@ export const adminHTML = `
       <div class="setting-block-heading">
         <div class="setting-copy">
           <h4>备份与恢复</h4>
-          <p>一键备份全部配置数据（订阅源、API 源、优选域名、优选 API、黑名单、过滤规则和伪装设置）为 JSON 文件；恢复时会覆盖文件中包含的对应配置。</p>
+          <p>一键备份全部配置数据（订阅源、API 源、优选域名、优选 API、黑名单、过滤规则和伪装设置）为 JSON 文件，文件名带有备份时刻的北京时间；恢复时会覆盖文件中包含的对应配置。</p>
         </div>
         <span class="section-summary" id="backupSummary"></span>
       </div>
@@ -605,6 +605,50 @@ export const adminHTML = `
         <button class="btn-outline settings-edit-button" id="exportBackupButton" type="button" onclick="exportBackup(this)">📤 一键备份</button>
         <button class="btn-outline settings-edit-button" id="restoreBackupButton" type="button" onclick="document.getElementById('restoreBackupFile').click()">📥 一键恢复</button>
         <input type="file" id="restoreBackupFile" accept=".json,application/json" style="display:none" onchange="restoreBackup(event)" />
+      </div>
+      <div class="webdav-settings" id="webdavBackupSettings">
+        <div class="webdav-settings-head">
+          <div class="setting-copy">
+            <strong>WebDAV 云备份</strong>
+            <p>配置 WebDAV 网盘后可将备份上传到云端，或从云端恢复；密码保存在服务端，不会回显。</p>
+          </div>
+          <span class="section-summary" id="webdavSummary">未配置</span>
+        </div>
+        <div class="webdav-config-grid">
+          <label class="form-field">
+            <span>WebDAV 地址</span>
+            <input id="webdavUrl" type="url" maxlength="2048" placeholder="例如：https://dav.example.com/backup/" autocomplete="off" />
+            <small>备份文件的目录地址，目录不存在时会自动尝试创建。</small>
+          </label>
+          <label class="form-field">
+            <span>用户名</span>
+            <input id="webdavUsername" type="text" maxlength="200" placeholder="无鉴权时可留空" autocomplete="off" />
+          </label>
+          <label class="form-field">
+            <span>密码</span>
+            <input id="webdavPassword" type="password" maxlength="200" placeholder="留空表示保持已保存的密码" autocomplete="new-password" />
+          </label>
+          <label class="form-field">
+            <span>备份文件名</span>
+            <input id="webdavFilename" type="text" maxlength="128" placeholder="sub-api-backup.json" autocomplete="off" />
+            <small>每次上传生成带北京时间戳的新文件，云端自动保留最近 10 份，更早的自动删除。</small>
+          </label>
+        </div>
+        <div class="settings-inline-footer webdav-footer">
+          <span class="save-status" id="webdavSaveStatus">配置已保存</span>
+          <div class="backup-actions">
+            <button class="btn-outline" id="saveWebdavConfigButton" type="button" onclick="saveWebdavConfig()">💾 保存 WebDAV 配置</button>
+            <button class="btn-outline" id="webdavUploadButton" type="button" onclick="uploadWebdavBackup(this)" disabled>☁️ 备份到 WebDAV</button>
+            <button class="btn-outline" id="webdavRestoreRemoteButton" type="button" onclick="restoreWebdavBackup()" disabled>☁️ 从 WebDAV 恢复</button>
+          </div>
+        </div>
+        <div class="webdav-remote" id="webdavRemoteSection" hidden>
+          <div class="webdav-remote-head">
+            <div class="setting-copy"><strong>云端备份列表</strong><p>最多保留最近 10 份，可选择任意一份恢复或下载。</p></div>
+            <button class="btn-subtle" id="webdavRefreshListButton" type="button" onclick="refreshWebdavRemoteList()">🔄 刷新列表</button>
+          </div>
+          <div id="webdavRemoteList" class="webdav-remote-list"></div>
+        </div>
       </div>
       <dialog class="confirm-dialog" id="restoreConfirmDialog" aria-labelledby="restoreConfirmTitle" aria-describedby="restoreConfirmMessage">
         <div class="confirm-dialog-icon" aria-hidden="true">↓</div>
