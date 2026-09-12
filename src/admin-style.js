@@ -3372,13 +3372,24 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
+  /* 已禁用的优选域名整行置灰，按钮与“已禁用”标识提示可通过“启用”恢复。 */
+  .preferred-domain-row.preferred-domain-disabled {
+    opacity: 0.55;
+  }
+
+  .preferred-domain-row.preferred-domain-disabled .host-input,
+  .preferred-domain-row.preferred-domain-disabled .remark-input {
+    text-decoration: line-through;
+    color: var(--text-tertiary);
+  }
+
   /* 网格对齐仅在容器足够宽时启用：列的最小宽度之和必须小于卡片内容宽度，
      否则网格无法收缩、整行会溢出卡片边缘。 */
   @media screen and (min-width: 1001px) {
     .preferred-domain-row {
-      /* 固定网格列：复选框 | 备注 | 域名 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
+      /* 固定网格列：复选框 | 备注 | 域名 | 启用/禁用 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
       display: grid;
-      grid-template-columns: auto minmax(90px, 140px) minmax(120px, 1.2fr) 32px minmax(160px, 1.4fr) auto auto auto auto;
+      grid-template-columns: auto minmax(90px, 140px) minmax(120px, 1.2fr) auto 32px minmax(160px, 1.4fr) auto auto auto auto;
       align-items: center;
       gap: 12px;
     }

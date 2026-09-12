@@ -727,7 +727,10 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           throw failure;
         }
       }));
-    selectedEntries(domainsConfig, "domains").forEach(([domain, entry]) => sourceTasks.push(async () => {
+    // 禁用的优选域名不参与任何输出，无论是全部数据源还是手动选择模式。
+    selectedEntries(domainsConfig, "domains")
+      .filter(([, entry]) => !(isPlainObject(entry) && entry.enabled === false))
+      .forEach(([domain, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchPreferredDomain(domain, options.forceDns === true);

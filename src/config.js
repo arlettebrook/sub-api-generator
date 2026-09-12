@@ -58,6 +58,7 @@ export function normalizeKvData(data, sourceType) {
         remark: typeof value.remark === "string" ? value.remark : "",
       };
       if (sourceType === "domains") {
+        if (typeof value.enabled === "boolean") normalizedEntry.enabled = value.enabled;
         if (isPlainObject(value.records)) {
           normalizedEntry.records = Object.fromEntries(["A", "AAAA", "CNAME"].map((type) => [
             type,

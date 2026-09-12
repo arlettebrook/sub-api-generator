@@ -1001,6 +1001,81 @@ test("updates remark without re-resolving DNS records", async () => {
   }
 });
 
+test("disabling a preferred domain hides it from custom API output", async () => {
+  // 预览接口对同一路径有冷却限制，三个阶段各用一个路径避免被限流。
+  const paths = ["all_api_a", "all_api_b", "all_api_c"];
+  const values = {
+    subs: {},
+    apis: {},
+    preferred_domains: {},
+    custom_apis: Object.fromEntries(paths.map((path) => [path, { enabled: true, remark: "", sourceMode: "all", sources: [] }])),
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    if (url.hostname === "cloudflare-dns.com") {
+      const type = url.searchParams.get("type");
+      const payloads = {
+        A: { Status: 0, Answer: [{ type: 1, data: "1.2.3.4" }] },
+        AAAA: { Status: 0, Answer: [{ type: 28, data: "2001:db8::1" }] },
+        CNAME: { Status: 0, Answer: [{ type: 5, data: "edge.example.net." }] },
+      };
+      return new Response(JSON.stringify(payloads[type]), { status: 200 });
+    }
+    return originalFetch(resource);
+  };
+  const postDomain = (body) => worker.fetch(new Request("https://example.test/api/preferred-domains", {
+    method: "POST", headers, body: JSON.stringify(body),
+  }), runtime);
+  const preview = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST", headers, body: JSON.stringify({ path }),
+  }), runtime);
+  const previewNodes = async (path) => (await (await preview(path)).json()).nodes || [];
+  try {
+    const added = await postDomain({ domain: "toggle.example.com" });
+    assert.equal(added.status, 200);
+    const addedEntry = await added.json();
+    assert.equal(addedEntry.enabled, true);
+
+    assert.ok((await previewNodes(paths[0])).length > 0);
+
+    // 管理端脚本提供启用/禁用开关，并在优选 API 源选择中过滤禁用域名。
+    assert.match(adminClientScript, /setPreferredDomainEnabled/);
+    assert.match(adminClientScript, /preferred-domain-disabled/);
+
+    // 禁用时 resolve:false 保留解析结果，仅切换状态。
+    const disabled = await postDomain({ domain: "toggle.example.com", remark: "备注", resolve: false, enabled: false });
+    assert.equal(disabled.status, 200);
+    const disabledEntry = await disabled.json();
+    assert.equal(disabledEntry.enabled, false);
+    assert.deepEqual(disabledEntry.records.A, ["1.2.3.4"]);
+    assert.equal(values.preferred_domains["toggle.example.com"].enabled, false);
+
+    // 仅更新备注时保留禁用状态。
+    const remarkOnly = await postDomain({ domain: "toggle.example.com", remark: "新备注", resolve: false });
+    assert.equal((await remarkOnly.json()).enabled, false);
+
+    assert.deepEqual(await previewNodes(paths[1]), []);
+
+    const backup = await worker.fetch(new Request("https://example.test/api/backup", { headers }), runtime);
+    const backupData = await backup.json();
+    assert.equal(backupData.data.preferredDomains["toggle.example.com"].enabled, false);
+
+    const enabled = await postDomain({ domain: "toggle.example.com", resolve: false, enabled: true });
+    assert.equal((await enabled.json()).enabled, true);
+    assert.ok((await previewNodes(paths[2])).length > 0);
+
+    const invalid = await postDomain({ domain: "toggle.example.com", resolve: false, enabled: "yes" });
+    assert.equal(invalid.status, 400);
+    assert.match(await invalid.text(), /启用状态必须是布尔值/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("deletes preferred domains in one batch request", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

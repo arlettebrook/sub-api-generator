@@ -1579,7 +1579,8 @@ function sourceEntries() {
   return [
     ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
     ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
-    ...Object.entries(preferredDomains).map(([key, value]) => ({ type: 'domains', key, label: value.remark || key })),
+    // 已禁用的优选域名不作为可选数据源展示，也不参与输出。
+    ...Object.entries(preferredDomains).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'domains', key, label: value.remark || key })),
   ];
 }
 
@@ -1629,8 +1630,9 @@ function renderPreferredDomains() {
   }
   const fragment = document.createDocumentFragment();
   entries.forEach(([domain, entry]) => {
+    const disabled = entry?.enabled === false;
     const row = document.createElement('div');
-    row.className = 'row preferred-domain-row';
+    row.className = 'row preferred-domain-row' + (disabled ? ' preferred-domain-disabled' : '');
     row.dataset.sourceKey = domain;
     const select = document.createElement('input');
     select.type = 'checkbox';
@@ -1663,8 +1665,16 @@ function renderPreferredDomains() {
     };
     const checked = document.createElement('small');
     const domainStatus = getPreferredDomainStatus(domain, entry);
-    checked.textContent = '最后解析：' + formatPreferredDomainTime(domainStatus.lastAttemptAt || entry?.checkedAt);
+    checked.textContent = (disabled ? '已禁用 · ' : '') + '最后解析：' + formatPreferredDomainTime(domainStatus.lastAttemptAt || entry?.checkedAt);
     identity.append(domainInput, checked);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'btn-outline icon-action source-toggle-button';
+    toggleBtn.textContent = disabled ? '▶ 启用' : '⏸ 禁用';
+    toggleBtn.setAttribute('aria-label', (disabled ? '启用优选域名 ' : '禁用优选域名 ') + domain);
+    toggleBtn.setAttribute('aria-pressed', String(disabled));
+    toggleBtn.onclick = () => setPreferredDomainEnabled(domain, disabled, toggleBtn);
 
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
@@ -1702,7 +1712,7 @@ function renderPreferredDomains() {
         } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
       }
     });
-    row.append(select, remarkInput, identity, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
+    row.append(select, remarkInput, identity, toggleBtn, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
     fragment.appendChild(row);
   });
   container.appendChild(fragment);
@@ -1712,7 +1722,8 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
   try {
     // 仅改备注/同域名保存时跳过 DNS 解析；改域名为新域名时才需要重新解析。
     const resolve = Boolean(previousDomain && previousDomain !== domain);
-    const entry = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark, resolve }) });
+    const current = preferredDomains[domain] || preferredDomains[previousDomain] || {};
+    const entry = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark, resolve, enabled: current.enabled !== false }) });
     if (previousDomain && previousDomain !== entry.domain) {
       await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(previousDomain), '旧域名删除', { method: 'DELETE' });
       delete preferredDomains[previousDomain];
@@ -1728,6 +1739,22 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
     showToast(error.message, 'error');
     renderPreferredDomains();
     return false;
+  }
+}
+
+async function setPreferredDomainEnabled(domain, enabled, trigger = null) {
+  const entry = preferredDomains[domain] || {};
+  if (trigger) setButtonBusy(trigger, true, enabled ? '启用中…' : '禁用中…');
+  try {
+    // 禁用/启用只改状态：resolve=false 保留已有解析结果，enabled 未传时后端保留原状态。
+    const updated = await readJsonResponse('/api/preferred-domains', '优选域名状态更新', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark: entry.remark || '', resolve: false, enabled }) });
+    preferredDomains[updated.domain] = updated;
+    renderPreferredDomains();
+    showToast(enabled ? '优选域名已启用' : '优选域名已禁用，将不再参与优选 API 输出', 'success');
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    if (trigger) setButtonBusy(trigger, false);
   }
 }
 

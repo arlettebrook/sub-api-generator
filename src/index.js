@@ -328,12 +328,18 @@ async function handlePostPreferredDomain(request, env) {
     return pagesTextResponse(`优选域名不能超过 ${MAX_CONFIG_ENTRIES} 个`, 400);
   }
   const previous = isPlainObject(configured[domain]) ? configured[domain] : null;
+  if (body?.enabled !== undefined && typeof body.enabled !== "boolean") {
+    return pagesTextResponse("启用状态必须是布尔值", 400);
+  }
+  // 未显式传 enabled 时沿用原有状态；新域名默认启用。
+  const enabled = body?.enabled === undefined ? (previous ? previous.enabled !== false : true) : body.enabled;
   const remark = typeof body?.remark === "string" ? body.remark.trim().slice(0, 200) : (previous ? previous.remark || "" : "");
   let entry;
   if (body?.resolve === false) {
     // 仅更新备注：保留已有解析结果，不触发 DNS 查询。
     entry = {
       domain,
+      enabled,
       remark,
       ...(previous ? {
         records: isPlainObject(previous.records) ? previous.records : { A: [], AAAA: [], CNAME: [] },
@@ -350,6 +356,7 @@ async function handlePostPreferredDomain(request, env) {
     const errors = Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.message || "DNS 查询失败"]));
     entry = {
       domain,
+      enabled,
       remark,
       records: result.records,
       errors,
