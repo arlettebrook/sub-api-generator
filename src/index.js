@@ -408,6 +408,9 @@ async function handleSourceRaw(request, env) {
     const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const rawSources = resultOptions.rawSources || [];
     const unfilteredNodes = rawSources.flatMap((source) => source.nodes || []);
+    const records = type === "domains"
+      ? rawSources.find((source) => source.type === "domains")?.records || {}
+      : null;
     const filterStats = rawSources.reduce((total, source) => {
       for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
       return total;
@@ -416,6 +419,7 @@ async function handleSourceRaw(request, env) {
       nodes,
       rawSources,
       unfilteredNodes,
+      ...(type === "domains" ? { records } : {}),
       status: { ...(snapshot[type]?.[key] || {}), filterStats },
     }, response.ok ? 200 : response.status);
   } catch (error) {

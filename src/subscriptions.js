@@ -603,7 +603,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
             lastAttemptAt: timestamp,
             ...(values.length > 0 ? { lastSuccessAt: timestamp, lastSuccessNodeCount: values.length, lastSuccessRawNodeCount: rawValues.length } : {}),
           });
-          return { type: "domains", key: domain, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "domains", key: domain, remark: isPlainObject(entry) ? entry.remark || "" : "", values, records: rawValues.records || {}, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "domains";
@@ -681,7 +681,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     if (options.includeRaw) {
       options.rawSources = sourceResults
         .filter((result) => result.status === "fulfilled")
-        .map((result) => ({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.unfilteredNodes || [], filterStats: result.value.filterStats || null }));
+        .map((result) => ({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.unfilteredNodes || [], ...(result.value.type === "domains" ? { records: result.value.records || {} } : {}), filterStats: result.value.filterStats || null }));
       options.nodeSources = nodeSources;
     }
     return new Response(output, {

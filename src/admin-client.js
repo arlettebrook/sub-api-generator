@@ -1121,6 +1121,7 @@ let sourceRawRequest = null;
 let sourceRawSelection = null;
 let sourceRawNodes = [];
 let sourceRawRawContent = '';
+let sourceRawRecords = {};
 let sourceRawUnfilteredNodes = [];
 let sourceRawUnfilteredSourceNodes = new Map();
 const sourceRawCache = new Map();
@@ -1348,6 +1349,7 @@ function normalizeSourceRawCache(saved) {
   const normalizeSourceNodes = (entries) => (Array.isArray(entries) ? entries : []).map(([id, nodes]) => [normalizeId(id), nodes]);
   return {
     ...saved,
+    records: saved.records && typeof saved.records === 'object' ? saved.records : {},
     sourceMeta: [...sourceMeta],
     sourceStats: normalizeSourceNodes(saved.sourceStats),
     sourceErrors: (Array.isArray(saved.sourceErrors) ? saved.sourceErrors : []).map(([id, error]) => [normalizeId(id), error]),
@@ -1545,21 +1547,6 @@ function renderPreferredDomains() {
     checked.textContent = '最后解析：' + formatPreferredDomainTime(entry?.checkedAt);
     identity.append(domainInput, checked);
 
-    const records = document.createElement('div');
-    records.className = 'preferred-domain-records';
-    ['A', 'AAAA', 'CNAME'].forEach((type) => {
-      const group = document.createElement('div');
-      group.className = 'preferred-domain-record';
-      const label = document.createElement('b');
-      label.textContent = type;
-      const values = Array.isArray(entry?.records?.[type]) ? entry.records[type] : [];
-      const value = document.createElement('span');
-      value.textContent = values.length ? values.join('、') : (entry?.errors?.[type] || '无记录');
-      value.title = value.textContent;
-      group.append(label, value);
-      records.appendChild(group);
-    });
-
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'btn-outline icon-action source-view-button';
@@ -1591,7 +1578,7 @@ function renderPreferredDomains() {
         showToast('已删除优选域名', 'success');
       } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
     };
-    row.append(select, remarkInput, identity, records, createCopyButton(domain, '域名'), healthForPreferredDomain(domain), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
+    row.append(select, remarkInput, identity, createCopyButton(domain, '域名'), healthForPreferredDomain(domain), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
     fragment.appendChild(row);
   });
   container.appendChild(fragment);
@@ -2850,6 +2837,7 @@ function closeSourceRawDialog() {
   sourceRawSelection = null;
   sourceRawNodes = [];
   sourceRawRawContent = '';
+  sourceRawRecords = {};
   sourceRawUnfilteredNodes = [];
   sourceRawUnfilteredSourceNodes = new Map();
   sourceRawNodeSources = new Map();
@@ -2932,7 +2920,50 @@ function renderSourceRawProcess(stats = {}) {
   el.innerHTML = items.map(([label, value]) => '<span><b>' + value + '</b>' + label + '</span>').join('');
 }
 
+function renderPreferredDomainRecords(records = {}) {
+  const content = $('sourceRawRawContent');
+  const count = $('sourceRawResultCount');
+  if (!content) return;
+  content.replaceChildren();
+  const fragment = document.createDocumentFragment();
+  let total = 0;
+  ['A', 'AAAA', 'CNAME'].forEach((type) => {
+    const section = document.createElement('section');
+    section.className = 'source-raw-dns-record-group';
+    const heading = document.createElement('h4');
+    heading.textContent = type;
+    section.appendChild(heading);
+    const values = Array.isArray(records?.[type]) ? records[type].filter((value) => typeof value === 'string' && value.trim()) : [];
+    total += values.length;
+    if (!values.length) {
+      const empty = document.createElement('div');
+      empty.className = 'source-raw-dns-record-empty';
+      empty.textContent = '无记录';
+      section.appendChild(empty);
+    } else {
+      values.forEach((value) => {
+        const line = document.createElement('div');
+        line.className = 'source-raw-node-line';
+        const text = document.createElement('span');
+        text.className = 'source-raw-node-value';
+        text.textContent = value;
+        text.title = value;
+        line.appendChild(text);
+        section.appendChild(line);
+      });
+    }
+    fragment.appendChild(section);
+  });
+  content.appendChild(fragment);
+  if (count) count.textContent = total + ' 条 DNS 记录';
+  sourceRawLastRawVisible = ['A', 'AAAA', 'CNAME'].flatMap((type) => Array.isArray(records?.[type]) ? records[type] : []);
+}
+
 function renderSourceRawResults(rawMode = false) {
+  if (rawMode && sourceRawSelection?.type === 'domains') {
+    renderPreferredDomainRecords(sourceRawRecords);
+    return;
+  }
   const content = $(rawMode ? 'sourceRawRawContent' : 'sourceRawContent');
   const count = $('sourceRawResultCount');
   if (!content) return;
@@ -3141,13 +3172,20 @@ function setSourceRawTab(tab) {
     const active = button.dataset.sourceRawTab === sourceRawTab;
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', active ? 'true' : 'false');
+    if (button.dataset.sourceRawTab === 'raw') {
+      button.textContent = sourceRawSelection?.type === 'domains' ? 'DNS 记录' : '未过滤节点';
+    }
   });
   const nodes = $('sourceRawContent');
   const raw = $('sourceRawRawContent');
   const toolbar = document.querySelector('.source-raw-toolbar');
+  const isDomain = sourceRawSelection?.type === 'domains';
   if (nodes) nodes.hidden = sourceRawTab !== 'nodes';
   if (raw) raw.hidden = sourceRawTab !== 'raw';
-  if (toolbar) toolbar.hidden = false;
+  if (raw) raw.setAttribute('aria-label', isDomain ? 'DNS 记录' : '未过滤节点');
+  if (toolbar) toolbar.hidden = isDomain;
+  const process = $('sourceRawProcess');
+  if (process) process.hidden = isDomain;
   renderSourceRawResults(sourceRawTab === 'raw');
   saveSourceRawViewState();
 }
@@ -3166,6 +3204,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   sourceRawSelection = { type, key };
   sourceRawNodes = [];
   sourceRawRawContent = '';
+  sourceRawRecords = {};
   const title = $('sourceRawDialogSource');
   const content = $('sourceRawContent');
   const rawContent = $('sourceRawRawContent');
@@ -3175,6 +3214,8 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   const search = $('sourceRawSearch');
   const autoRefresh = $('sourceRawAutoRefresh');
   const refreshInterval = $('sourceRawRefreshInterval');
+  const historyPanel = $('sourceRawHistoryPanel');
+  if (historyPanel) historyPanel.hidden = type === 'domains';
   if (!preserveState) {
     const viewState = type === 'customApis' ? loadSourceRawViewState(type, key) : null;
     // 折叠状态只作用于当前查看会话；重新打开时始终展开来源分组。
@@ -3198,6 +3239,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (cachedResult) {
     sourceRawNodes = cachedResult.nodes.slice();
     sourceRawRawContent = cachedResult.rawContent;
+    sourceRawRecords = cachedResult.records && typeof cachedResult.records === 'object' ? cachedResult.records : {};
     sourceRawUnfilteredNodes = Array.isArray(cachedResult.unfilteredNodes) ? cachedResult.unfilteredNodes.slice() : [];
     sourceRawUnfilteredSourceNodes = new Map(Array.isArray(cachedResult.unfilteredSourceNodes) ? cachedResult.unfilteredSourceNodes : []);
     sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
@@ -3308,6 +3350,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
     sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawUnfilteredNodes = Array.isArray(result.unfilteredNodes) ? result.unfilteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+    sourceRawRecords = result.records && typeof result.records === 'object' ? result.records : {};
     sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
     sourceRawUnfilteredSourceNodes = new Map();
     sourceRawNodeSources = new Map();
@@ -3340,7 +3383,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     }
     updateSourceRawGroupControls();
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
-    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
+    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), records: sourceRawRecords, unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     renderSourceRawSummary(nextStatus);
     renderSourceRawCacheStatus('本次检测完成：' + formatSourceRawTime(Date.now()), sourceRawSourceErrors.size ? 'warning' : '');

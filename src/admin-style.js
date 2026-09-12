@@ -2653,6 +2653,30 @@ export const adminStyle = `
     white-space: normal;
   }
 
+  .source-raw-dns-record-group {
+    margin-bottom: 14px;
+    padding: 10px 12px 4px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-tertiary) 78%, transparent);
+  }
+
+  .source-raw-dns-record-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .source-raw-dns-record-group h4 {
+    margin: 0 0 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .source-raw-dns-record-empty {
+    padding: 6px 0;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
   .source-raw-node-line {
     display: grid;
     align-content: center;

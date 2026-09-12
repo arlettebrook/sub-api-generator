@@ -607,6 +607,20 @@ test("manages preferred domains and resolves A, AAAA, and CNAME records", async 
     });
     assert.deepEqual(values.preferred_domains["example.com"].records, entry.records);
 
+    const raw = await worker.fetch(new Request("https://example.test/api/source-raw", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ type: "domains", key: "example.com" }),
+    }), runtime);
+    assert.equal(raw.status, 200);
+    const rawResult = await raw.json();
+    assert.deepEqual(rawResult.records, {
+      A: ["1.2.3.4"],
+      AAAA: ["2001:db8::1"],
+      CNAME: ["edge.example.net"],
+    });
+    assert.equal(rawResult.rawSources[0].records.CNAME[0], "edge.example.net");
+
     const deleted = await worker.fetch(new Request("https://example.test/api/preferred-domains?domain=example.com", {
       method: "DELETE", headers,
     }), runtime);
