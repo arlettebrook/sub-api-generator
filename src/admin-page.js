@@ -396,6 +396,20 @@ export const adminHTML = `
     </div>
   </div>
   <div class="settings-list">
+    <div class="setting-block theme-settings" id="themeSettings">
+      <div class="setting-block-heading">
+        <div class="setting-copy">
+          <h4>主题模式</h4>
+          <p>选择亮色、暗色，或跟随操作系统的主题设置。</p>
+        </div>
+        <span class="section-summary" id="themeModeSummary">跟随系统</span>
+      </div>
+      <div class="theme-mode-options" role="radiogroup" aria-label="主题模式">
+        <label><input type="radio" name="themeModeSetting" value="light" /> <span>☀️ 亮色</span></label>
+        <label><input type="radio" name="themeModeSetting" value="dark" /> <span>🌙 暗色</span></label>
+        <label><input type="radio" name="themeModeSetting" value="system" /> <span>◐ 跟随系统</span></label>
+      </div>
+    </div>
     <div class="setting-block" id="camouflageSettings">
       <div class="setting-block-heading">
         <div class="setting-copy">
@@ -426,20 +440,6 @@ export const adminHTML = `
       <div class="settings-inline-footer">
         <span class="save-status" id="camouflageSaveStatus">配置已保存</span>
         <button class="btn-primary" id="saveCamouflageButton" type="button" onclick="saveCamouflageSettings()" disabled>💾 保存伪装设置</button>
-      </div>
-    </div>
-    <div class="setting-block theme-settings" id="themeSettings">
-      <div class="setting-block-heading">
-        <div class="setting-copy">
-          <h4>主题模式</h4>
-          <p>选择亮色、暗色，或跟随操作系统的主题设置。</p>
-        </div>
-        <span class="section-summary" id="themeModeSummary">跟随系统</span>
-      </div>
-      <div class="theme-mode-options" role="radiogroup" aria-label="主题模式">
-        <label><input type="radio" name="themeModeSetting" value="light" /> <span>☀️ 亮色</span></label>
-        <label><input type="radio" name="themeModeSetting" value="dark" /> <span>🌙 暗色</span></label>
-        <label><input type="radio" name="themeModeSetting" value="system" /> <span>◐ 跟随系统</span></label>
       </div>
     </div>
     <div class="setting-block" id="blacklistSettings">

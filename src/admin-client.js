@@ -586,6 +586,19 @@ let activeNodeRequest = null;
 let nodeLoadSequence = 0;
 const emptyNodeRetryDelays = [500, 1200];
 const PREVIEW_MODE_STORAGE_KEY = 'preview-data-mode';
+const PREVIEW_API_STORAGE_KEY = 'preview-api-path';
+
+function loadPreviewApiPath() {
+  try { return localStorage.getItem(PREVIEW_API_STORAGE_KEY) || ''; }
+  catch { return ''; }
+}
+
+function savePreviewApiPath(path) {
+  try {
+    if (path) localStorage.setItem(PREVIEW_API_STORAGE_KEY, path);
+    else localStorage.removeItem(PREVIEW_API_STORAGE_KEY);
+  } catch { /* ignore unavailable storage */ }
+}
 
 function getPreviewDataNodes() {
   return currentNodes;
@@ -1801,6 +1814,7 @@ function renderCustomApiSelect() {
   const select = $('previewApiSelect');
   if (!select) return;
   const current = select.value;
+  const saved = loadPreviewApiPath();
   select.innerHTML = '';
   Object.entries(customApis).forEach(([path, entry]) => {
     if (!entry.enabled) return;
@@ -1810,7 +1824,11 @@ function renderCustomApiSelect() {
     select.appendChild(option);
   });
   select.hidden = select.options.length === 0;
-  if ([...select.options].some((option) => option.value === current)) select.value = current;
+  const validValues = new Set([...select.options].map((option) => option.value));
+  const preferred = [current, saved].find((value) => value && validValues.has(value));
+  if (preferred) select.value = preferred;
+  else if (select.options.length) select.selectedIndex = 0;
+  if (select.value) savePreviewApiPath(select.value);
 }
 
 let editingCustomApiPath = '';
@@ -4037,6 +4055,11 @@ function bindPageControls() {
     button.dataset.bound = 'true';
     button.addEventListener('click', () => setPreviewDataMode(button.dataset.previewMode));
   });
+  const previewApiSelect = $('previewApiSelect');
+  if (previewApiSelect && previewApiSelect.dataset.bound !== 'true') {
+    previewApiSelect.dataset.bound = 'true';
+    previewApiSelect.addEventListener('change', () => savePreviewApiPath(previewApiSelect.value));
+  }
   const customApiSearch = $('customApiSearch');
   if (customApiSearch && customApiSearch.dataset.bound !== 'true') {
     customApiSearch.dataset.bound = 'true';
