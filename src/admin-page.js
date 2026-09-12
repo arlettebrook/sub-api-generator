@@ -593,6 +593,30 @@ export const adminHTML = `
         </div>
       </dialog>
     </div>
+    <div class="setting-block" id="backupSettings">
+      <div class="setting-block-heading">
+        <div class="setting-copy">
+          <h4>备份与恢复</h4>
+          <p>一键备份全部配置数据（订阅源、API 源、优选域名、优选 API、黑名单、过滤规则和伪装设置）为 JSON 文件；恢复时会覆盖文件中包含的对应配置。</p>
+        </div>
+        <span class="section-summary" id="backupSummary"></span>
+      </div>
+      <div class="backup-actions">
+        <button class="btn-outline settings-edit-button" id="exportBackupButton" type="button" onclick="exportBackup(this)">📤 一键备份</button>
+        <button class="btn-outline settings-edit-button" id="restoreBackupButton" type="button" onclick="document.getElementById('restoreBackupFile').click()">📥 一键恢复</button>
+        <input type="file" id="restoreBackupFile" accept=".json,application/json" style="display:none" onchange="restoreBackup(event)" />
+      </div>
+      <dialog class="confirm-dialog" id="restoreConfirmDialog" aria-labelledby="restoreConfirmTitle" aria-describedby="restoreConfirmMessage">
+        <div class="confirm-dialog-icon" aria-hidden="true">↓</div>
+        <h3 id="restoreConfirmTitle">恢复备份</h3>
+        <p id="restoreConfirmMessage">确认后将覆盖备份文件中包含的配置，未保存的修改会丢失。</p>
+        <div class="import-preview-stats" id="restoreConfirmStats"></div>
+        <div class="confirm-dialog-actions">
+          <button class="btn-outline" type="button" id="cancelRestoreButton">取消</button>
+          <button class="btn-primary" type="button" id="confirmRestoreButton">确认恢复</button>
+        </div>
+      </dialog>
+    </div>
   </div>
   <dialog class="confirm-dialog rule-import-dialog" id="ruleImportPreviewDialog" aria-labelledby="ruleImportPreviewTitle" aria-describedby="ruleImportPreviewMessage">
     <div class="confirm-dialog-icon" aria-hidden="true">↓</div>

@@ -644,6 +644,108 @@ async function handlePostSettings(request, env) {
   return pagesJsonResponse(body);
 }
 
+function normalizePreferredDomainBackup(data) {
+  if (!isPlainObject(data)) return {};
+  const normalized = {};
+  for (const [rawDomain, rawEntry] of Object.entries(data)) {
+    let domain;
+    try { domain = normalizePreferredDomain(rawDomain); } catch { continue; }
+    const entry = normalizeKvData({ [domain]: isPlainObject(rawEntry) ? rawEntry : { remark: "" } }, "domains")[domain];
+    if (entry) normalized[domain] = { domain, ...entry };
+  }
+  return normalized;
+}
+
+const BACKUP_SECTIONS = [
+  { key: "subs", aliases: ["subs"], sourceType: "subs", kvKey: KV_KEY_SUBS },
+  { key: "apis", aliases: ["apis"], sourceType: "apis", kvKey: KV_KEY_APIS },
+  { key: "customApis", aliases: ["customApis", "custom_apis"], kvKey: KV_KEY_CUSTOM_APIS },
+  { key: "blacklist", aliases: ["blacklist"], kvKey: KV_KEY_BLACKLIST },
+  { key: "filterRules", aliases: ["filterRules", "filter_rules"], kvKey: KV_KEY_FILTER_RULES },
+  { key: "preferredDomains", aliases: ["preferredDomains", "preferred_domains"], kvKey: KV_KEY_PREFERRED_DOMAINS },
+  { key: "settings", aliases: ["settings"], kvKey: KV_KEY_SETTINGS },
+];
+
+function normalizeBackupSection(section, value) {
+  switch (section.key) {
+    case "subs":
+    case "apis":
+      if (!isPlainObject(value)) return null;
+      if (Object.keys(value).length > MAX_CONFIG_ENTRIES) return null;
+      return { data: normalizeKvData(value, section.sourceType) };
+    case "customApis":
+      if (!isPlainObject(value)) return null;
+      if (Object.keys(value).length > MAX_CONFIG_ENTRIES) return null;
+      return { data: normalizeCustomApiData(value) };
+    case "blacklist":
+      if (!Array.isArray(value)) return null;
+      return { data: normalizeBlacklist(value) };
+    case "filterRules":
+      if (!Array.isArray(value)) return null;
+      return { data: normalizeFilterRules(value) };
+    case "preferredDomains":
+      if (!isPlainObject(value)) return null;
+      if (Object.keys(value).length > MAX_CONFIG_ENTRIES) return null;
+      return { data: normalizePreferredDomainBackup(value) };
+    case "settings":
+      if (!isPlainObject(value)) return null;
+      return { data: normalizeSettings(value) };
+    default:
+      return null;
+  }
+}
+
+async function handleBackup(env) {
+  const [subs, apis, customApis, blacklist, filterRules, preferredDomains, settings] = await Promise.all([
+    env.KV.get(KV_KEY_SUBS, "json"),
+    env.KV.get(KV_KEY_APIS, "json"),
+    env.KV.get(KV_KEY_CUSTOM_APIS, "json"),
+    env.KV.get(KV_KEY_BLACKLIST, "json"),
+    env.KV.get(KV_KEY_FILTER_RULES, "json"),
+    env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
+    env.KV.get(KV_KEY_SETTINGS, "json"),
+  ]);
+  const raw = { subs, apis, customApis, blacklist, filterRules, preferredDomains, settings };
+  const data = {};
+  for (const section of BACKUP_SECTIONS) {
+    const empty = section.key === "blacklist" || section.key === "filterRules" ? [] : {};
+    const normalized = normalizeBackupSection(section, raw[section.key] ?? empty);
+    data[section.key] = normalized ? normalized.data : empty;
+  }
+  return pagesJsonResponse({
+    app: "sub-api-generator",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data,
+  });
+}
+
+async function handleRestore(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  if (!isPlainObject(body) || !isPlainObject(body.data)) return pagesTextResponse("备份文件格式无效", 400);
+
+  const restored = {};
+  const writes = [];
+  for (const section of BACKUP_SECTIONS) {
+    const value = section.aliases
+      .map((alias) => body.data[alias])
+      .find((aliasValue) => aliasValue !== undefined);
+    if (value === undefined) continue;
+    const normalized = normalizeBackupSection(section, value);
+    if (!normalized) return pagesTextResponse(`备份文件格式无效: ${section.key}`, 400);
+    writes.push(env.KV.put(section.kvKey, JSON.stringify(normalized.data)));
+    restored[section.key] = section.key === "settings" ? true : Array.isArray(normalized.data) ? normalized.data.length : Object.keys(normalized.data).length;
+  }
+  if (!writes.length) return pagesTextResponse("备份文件中没有任何可恢复的配置", 400);
+
+  // 恢复后旧的源状态缓存不再可信，直接清空。
+  writes.push(env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify({})));
+  await Promise.all(writes);
+  subscriptions.clearAggregateCache();
+  return pagesJsonResponse({ ok: true, restored });
+}
+
 async function handleGetCustomApis(env) {
   const data = await env.KV.get(KV_KEY_CUSTOM_APIS, "json");
   return pagesJsonResponse(normalizeCustomApiData(data));
@@ -868,6 +970,12 @@ export default {
           if (method === "GET") return await handleGetCustomApis(env);
           if (method === "POST") return await handlePostCustomApis(request, env);
           return pagesMethodNotAllowed("GET, POST");
+        case "/api/backup":
+          if (method === "GET") return await handleBackup(env);
+          return pagesMethodNotAllowed("GET");
+        case "/api/restore":
+          if (method === "POST") return await handleRestore(request, env);
+          return pagesMethodNotAllowed("POST");
         default:
           return pagesTextResponse("Not Found", 404);
       }

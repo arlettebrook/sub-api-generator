@@ -4588,6 +4588,115 @@ function bindPageControls() {
   }
 }
 
+// ======================== 备份与恢复 ========================
+const BACKUP_SECTION_LABELS = {  subs: '订阅源',
+  apis: 'API 源',
+  customApis: '优选 API',
+  blacklist: '黑名单',
+  filterRules: '过滤规则',
+  preferredDomains: '优选域名',
+  settings: '伪装设置',
+};
+
+function backupFileName() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return 'sub-api-backup_' + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()) + '.json';
+}
+
+async function exportBackup(button) {
+  setButtonBusy(button, true, '备份中…');
+  try {
+    const data = await readJsonResponse('/api/backup', '备份');
+    downloadJsonFile(data, backupFileName());
+    showToast('备份已导出', 'success');
+  } catch (error) {
+    showToast(error.message || '备份失败', 'error', () => exportBackup(button));
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function describeRestoreSections(data) {
+  if (!data || typeof data !== 'object') return '';
+  const parts = [];
+  for (const [key, label] of Object.entries(BACKUP_SECTION_LABELS)) {
+    if (!(key in data)) continue;
+    const value = data[key];
+    if (Array.isArray(value)) parts.push(label + ' ' + value.length + ' 项');
+    else if (value && typeof value === 'object') parts.push(label + ' ' + Object.keys(value).length + ' 项');
+    else parts.push(label);
+  }
+  return parts.join('、');
+}
+
+function restoreBackup(event) {
+  readJsonFile(event, (parsed) => {
+    const data = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data)
+      ? parsed.data
+      : null;
+    if (!data) {
+      showToast('恢复失败：备份文件格式无效', 'error');
+      return;
+    }
+    const summary = describeRestoreSections(data);
+    if (!summary) {
+      showToast('恢复失败：备份文件中没有任何配置', 'error');
+      return;
+    }
+    openRestoreConfirm(summary, data);
+  }, '备份');
+}
+
+function openRestoreConfirm(summary, data) {
+  const dialog = $('restoreConfirmDialog');
+  if (!dialog || typeof dialog.showModal !== 'function') {
+    if (settingConfirm('恢复将覆盖：' + summary + '。确定恢复吗？')) void applyRestore(data);
+    return;
+  }
+  $('restoreConfirmStats').innerHTML = summary
+    .split('、')
+    .map((part) => '<span><strong>' + part.replace(/\s\d+ 项$/, '') + '</strong>' + (/\d+ 项$/.test(part) ? part.match(/\d+ 项$/)[0] : '') + '</span>')
+    .join('');
+  dialog._restoreData = data;
+  dialog.showModal();
+}
+
+async function applyRestore(data) {
+  const button = $('restoreBackupButton');
+  setButtonBusy(button, true, '恢复中…');
+  try {
+    const response = await fetch('/api/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ version: 1, data }),
+    });
+    if (!response.ok) throw responseError('恢复备份', response);
+    showToast('备份恢复成功：' + (describeRestoreSections(data) || '已完成'), 'success');
+    void loadCamouflageSettings();
+    void loadBlacklist();
+    void loadFilterRules();
+  } catch (error) {
+    showToast(error.message || '恢复失败', 'error', () => applyRestore(data));
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function initBackupRestore() {
+  const dialog = $('restoreConfirmDialog');
+  if (!dialog || dialog.dataset.bound === 'true') return;
+  dialog.dataset.bound = 'true';
+  $('cancelRestoreButton')?.addEventListener('click', () => dialog.close());
+  $('confirmRestoreButton')?.addEventListener('click', () => {
+    const data = dialog._restoreData;
+    dialog._restoreData = null;
+    dialog.close();
+    if (data) void applyRestore(data);
+  });
+}
+
 function loadActivePage(page) {
   if (page === 'settings') {
     initSettingsEnhancements();
@@ -4597,6 +4706,7 @@ function loadActivePage(page) {
     void loadBlacklist();
     initFilterRulesForm();
     void loadFilterRules();
+    initBackupRestore();
   }
   if (page === 'customApis') {
     initCustomApiForm();

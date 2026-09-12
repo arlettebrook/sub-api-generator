@@ -575,6 +575,74 @@ test("reads and updates remark filter rules", async () => {
   assert.deepEqual(await savedResponse.json(), ["-VIP", "🐲"]);
 });
 
+test("backs up and restores all configuration data", async () => {
+  const values = {
+    subs: { "https://Sub.Example/a/": { remark: "sub" } },
+    apis: { "https://API.Example/v1": true },
+    custom_apis: { "my-api": { enabled: true, remark: "x", sourceMode: "selected", sources: [{ type: "subs", key: "https://Sub.Example/a/" }] } },
+    blacklist: [" foo ", "bar"],
+    filter_rules: ["|"],
+    preferred_domains: { "Example.COM.": { remark: "d", records: { A: ["1.2.3.4"] } } },
+    settings: { enabled: false, accessPath: "old-entry", redirectUrl: "/" },
+    source_status: { subs: { "https://sub.example/a/": { state: "success" } } },
+  };
+  const hash = await sha256Hex("secret");
+  const authHeaders = { Cookie: `auth=${hash}` };
+
+  const unauthenticated = await worker.fetch(new Request("https://example.test/api/backup"), env({ KV: createKv(values) }));
+  assert.equal(unauthenticated.status, 200);
+  assert.match(await unauthenticated.text(), /管理员密码/);
+
+  const runtime = env({ KV: createKv(values) });
+  const backupResponse = await worker.fetch(new Request("https://example.test/api/backup", { headers: authHeaders }), runtime);
+  assert.equal(backupResponse.status, 200);
+  const backup = await backupResponse.json();
+  assert.equal(backup.app, "sub-api-generator");
+  assert.equal(backup.version, 1);
+  assert.ok(!Number.isNaN(Date.parse(backup.exportedAt)));
+  assert.deepEqual(backup.data.subs, { "sub.example/a": { remark: "sub" } });
+  assert.deepEqual(backup.data.apis, { "https://api.example/v1": { remark: "" } });
+  assert.equal(backup.data.customApis["my-api"].enabled, true);
+  assert.deepEqual(backup.data.customApis["my-api"].sources, [{ type: "subs", key: "sub.example/a" }]);
+  assert.deepEqual(backup.data.blacklist, ["foo", "bar"]);
+  assert.deepEqual(backup.data.filterRules, ["|"]);
+  assert.deepEqual(backup.data.preferredDomains["example.com"].records.A, ["1.2.3.4"]);
+  assert.equal(backup.data.settings.accessPath, "old-entry");
+
+  const restoredKv = {};
+  const restoreRuntime = env({ KV: createKv(restoredKv) });
+  const restoreResponse = await worker.fetch(new Request("https://example.test/api/restore", {
+    method: "POST",
+    headers: { ...authHeaders, "content-type": "application/json" },
+    body: JSON.stringify(backup),
+  }), restoreRuntime);
+  assert.equal(restoreResponse.status, 200);
+  const restoreResult = await restoreResponse.json();
+  assert.equal(restoreResult.ok, true);
+  assert.equal(restoreResult.restored.subs, 1);
+  assert.equal(restoreResult.restored.settings, true);
+
+  assert.deepEqual(restoredKv.source_status, {});
+  const subsResponse = await worker.fetch(new Request("https://example.test/api/subs", { headers: authHeaders }), restoreRuntime);
+  assert.deepEqual(await subsResponse.json(), { "sub.example/a": { remark: "sub" } });
+  const settingsResponse = await worker.fetch(new Request("https://example.test/api/settings", { headers: authHeaders }), restoreRuntime);
+  assert.deepEqual(await settingsResponse.json(), { enabled: false, accessPath: "old-entry", redirectUrl: "/" });
+
+  const invalidResponse = await worker.fetch(new Request("https://example.test/api/restore", {
+    method: "POST",
+    headers: { ...authHeaders, "content-type": "application/json" },
+    body: JSON.stringify({ version: 1, data: { subs: "nope" } }),
+  }), restoreRuntime);
+  assert.equal(invalidResponse.status, 400);
+
+  const emptyResponse = await worker.fetch(new Request("https://example.test/api/restore", {
+    method: "POST",
+    headers: { ...authHeaders, "content-type": "application/json" },
+    body: JSON.stringify({ version: 1, data: {} }),
+  }), restoreRuntime);
+  assert.equal(emptyResponse.status, 400);
+});
+
 test("manages preferred domains and resolves A, AAAA, and CNAME records", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

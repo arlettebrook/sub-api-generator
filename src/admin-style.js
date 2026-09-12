@@ -387,6 +387,12 @@ export const adminStyle = `
     background: var(--bg-tertiary);
   }
 
+  .backup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
   .setting-block-heading {
     position: relative;
     display: flex;
