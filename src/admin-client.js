@@ -1979,7 +1979,7 @@ function normalizeSourceKeyClient(type, key) {
     const match = value.match(/^(https?):\\\/\\\/([^/]+)(.*)$/i);
     if (match) return match[1].toLowerCase() + '://' + match[2].toLowerCase() + match[3];
   }
-  if (type === 'domains') return value.replace(/\.+$/, '').toLowerCase();
+  if (type === 'domains') return value.replace(/\\.+$/, '').toLowerCase();
   return value;
 }
 

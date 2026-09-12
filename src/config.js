@@ -67,6 +67,7 @@ export function normalizeKvData(data, sourceType) {
         if (isPlainObject(value.dnsErrorCodes)) normalizedEntry.dnsErrorCodes = Object.fromEntries(Object.entries(value.dnsErrorCodes).filter(([type, code]) => ["A", "AAAA", "CNAME"].includes(type) && typeof code === "string").map(([type, code]) => [type, code.slice(0, 80)]));
         if (isPlainObject(value.dnsProviders)) normalizedEntry.dnsProviders = Object.fromEntries(Object.entries(value.dnsProviders).filter(([type, provider]) => ["A", "AAAA", "CNAME"].includes(type) && typeof provider === "string").map(([type, provider]) => [type, provider.slice(0, 40)]));
         if (Number.isFinite(Number(value.checkedAt)) && Number(value.checkedAt) > 0) normalizedEntry.checkedAt = Number(value.checkedAt);
+        if (Number.isFinite(Number(value.durationMs)) && Number(value.durationMs) >= 0) normalizedEntry.durationMs = Number(value.durationMs);
       }
       normalized[normalizedKey] = normalizedEntry;
     }

@@ -15,6 +15,7 @@ import {
   normalizeFilterRules,
   normalizeSettings,
   normalizeKvData,
+  normalizeSourceKey,
   isPlainObject,
   readJsonObject as readPagesJsonObject,
   SOURCE_MODE_SELECTED,
@@ -255,6 +256,44 @@ function normalizePreferredDomain(value) {
   return domain;
 }
 
+async function persistPreferredDomainStatuses(env, snapshot, sourceSelection = null) {
+  const current = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
+  if (!isPlainObject(current)) return current;
+  const configured = { ...current };
+  const selectedKeys = sourceSelection === null
+    ? new Set(Object.keys(configured).map((key) => normalizeSourceKey("domains", key)).filter(Boolean))
+    : new Set((Array.isArray(sourceSelection) ? sourceSelection : [])
+      .filter((source) => source?.type === "domains")
+      .map((source) => normalizeSourceKey("domains", source.key))
+      .filter(Boolean));
+  let changed = false;
+  for (const key of selectedKeys) {
+    const status = snapshot?.domains?.[key];
+    if (!isPlainObject(status)) continue;
+    const previous = isPlainObject(configured[key]) ? configured[key] : {};
+    const records = isPlainObject(status.dnsRecords)
+      ? Object.fromEntries(["A", "AAAA", "CNAME"].map((type) => [type, Array.isArray(status.dnsRecords[type]) ? status.dnsRecords[type] : []]))
+      : { A: [], AAAA: [], CNAME: [] };
+    const checkedAt = Date.parse(status.lastAttemptAt || "");
+    const next = {
+      ...previous,
+      domain: key,
+      records,
+      errors: isPlainObject(status.dnsErrors) ? status.dnsErrors : {},
+      dnsErrorCodes: isPlainObject(status.dnsErrorCodes) ? status.dnsErrorCodes : {},
+      dnsProviders: isPlainObject(status.dnsProviders) ? status.dnsProviders : {},
+      ...(Number.isFinite(checkedAt) && checkedAt > 0 ? { checkedAt } : {}),
+      ...(Number.isFinite(Number(status.durationMs)) && Number(status.durationMs) >= 0 ? { durationMs: Number(status.durationMs) } : {}),
+    };
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      configured[key] = next;
+      changed = true;
+    }
+  }
+  if (changed) await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
+  return configured;
+}
+
 async function handleGetPreferredDomains(env) {
   const data = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
   return pagesJsonResponse(isPlainObject(data) ? data : {});
@@ -347,6 +386,7 @@ async function checkSourceStatuses(env, request) {
   const checkResponse = await subscriptions.handleRoot(env, sourceSelection, { forceDns: true });
   if (!checkResponse.ok) return checkResponse;
   const snapshot = await getSourceStatusSnapshot(env, false);
+  await persistPreferredDomainStatuses(env, snapshot, sourceSelection);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
   return pagesJsonResponse(snapshot);
 }
@@ -374,6 +414,7 @@ async function handleSourceRaw(request, env) {
     const resultOptions = { includeRaw: true };
     const response = await subscriptions.handleRoot(env, [{ type, key }], resultOptions);
     const snapshot = await getSourceStatusSnapshot(env, false);
+    await persistPreferredDomainStatuses(env, snapshot, [{ type, key }]);
     await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
     const text = await response.text();
     const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -443,6 +484,7 @@ async function handleCustomApiPreview(request, env) {
     return total;
   }, {});
   const snapshot = await getSourceStatusSnapshot(env, false);
+  await persistPreferredDomainStatuses(env, snapshot, sourceSelection);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
   const sourceMeta = (sourceSelection || []).map((source) => ({ type: source.type, key: source.key, remark: snapshot[source.type]?.[source.key]?.remark || "" }));
   const selectedStatuses = (sourceSelection || []).map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);

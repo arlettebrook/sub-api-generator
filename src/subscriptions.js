@@ -289,11 +289,11 @@ export function getSourceStatuses(subsConfig, apisConfig, domainsConfig) {
       const configuredCounts = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, Array.isArray(configuredRecords[name]) ? configuredRecords[name].length : 0]));
       const hasConfiguredResult = type === "domains" && (Object.values(configuredCounts).some((count) => count > 0) || Object.keys(configuredErrors).length > 0);
       const configuredCheckedAt = Number(entry?.checkedAt);
-      result[type][key] = {
+      const baseStatus = {
         state: hasConfiguredResult ? (Object.values(configuredCounts).some((count) => count > 0) ? "success" : "empty") : "idle",
         nodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
         rawNodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
-        durationMs: null,
+        durationMs: type === "domains" && Number.isFinite(Number(entry?.durationMs)) ? Number(entry.durationMs) : null,
         error: type === "domains" && Object.keys(configuredErrors).length ? Object.entries(configuredErrors).map(([recordType, message]) => `${recordType}: ${message}`).join("；") : "",
         errorType: type === "domains" && Object.keys(configuredErrors).length ? "DNS_PARTIAL_FAILURE" : "",
         statusCode: null,
@@ -306,9 +306,41 @@ export function getSourceStatuses(subsConfig, apisConfig, domainsConfig) {
         dnsErrorCodes: type === "domains" && isPlainObject(entry) && isPlainObject(entry.dnsErrorCodes) ? entry.dnsErrorCodes : {},
         dnsProviders: type === "domains" && isPlainObject(entry) && isPlainObject(entry.dnsProviders) ? entry.dnsProviders : {},
         dnsRecordCounts: configuredCounts,
-        ...(sourceStatus.get(`${type}:${key}`) || {}),
         remark,
       };
+      const runtimeStatus = sourceStatus.get(`${type}:${key}`);
+      if (type === "domains") {
+        // DNS records belong to the domain configuration. Runtime status may
+        // contain an older snapshot, so it is only merged when it was captured
+        // after the configured check and must never replace newer records.
+        const configuredCheckedAtMs = Number.isFinite(configuredCheckedAt) && configuredCheckedAt > 0 ? configuredCheckedAt : 0;
+        const runtimeCheckedAt = Date.parse(runtimeStatus?.lastAttemptAt || "") || 0;
+        const runtimeIsNewer = Boolean(runtimeStatus) && runtimeCheckedAt >= configuredCheckedAtMs;
+        const records = runtimeIsNewer && isPlainObject(runtimeStatus.dnsRecords) ? runtimeStatus.dnsRecords : configuredRecords;
+        const errors = runtimeIsNewer && isPlainObject(runtimeStatus.dnsErrors) ? runtimeStatus.dnsErrors : configuredErrors;
+        const dnsErrorCodes = runtimeIsNewer && isPlainObject(runtimeStatus.dnsErrorCodes) ? runtimeStatus.dnsErrorCodes : (isPlainObject(entry?.dnsErrorCodes) ? entry.dnsErrorCodes : {});
+        const dnsProviders = runtimeIsNewer && isPlainObject(runtimeStatus.dnsProviders) ? runtimeStatus.dnsProviders : (isPlainObject(entry?.dnsProviders) ? entry.dnsProviders : {});
+        const recordCounts = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, Array.isArray(records[name]) ? records[name].length : 0]));
+        const recordTotal = Object.values(recordCounts).reduce((total, count) => total + count, 0);
+        const hasResult = recordTotal > 0 || Object.keys(errors).length > 0;
+        result[type][key] = {
+          ...baseStatus,
+          ...(runtimeIsNewer ? runtimeStatus : {}),
+          state: runtimeIsNewer && runtimeStatus.state ? runtimeStatus.state : (hasResult ? (recordTotal > 0 ? "success" : "empty") : "idle"),
+          nodeCount: recordTotal,
+          rawNodeCount: recordTotal,
+          dnsRecords: records,
+          dnsErrors: errors,
+          dnsErrorCodes,
+          dnsProviders,
+          dnsRecordCounts: recordCounts,
+          lastSuccessNodeCount: recordTotal,
+          lastSuccessRawNodeCount: recordTotal,
+          remark,
+        };
+      } else {
+        result[type][key] = { ...baseStatus, ...(runtimeStatus || {}), remark };
+      }
     }
   }
   return result;
