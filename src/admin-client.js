@@ -1616,6 +1616,7 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
     }
     preferredDomains[entry.domain] = entry;
     renderPreferredDomains();
+    await loadSourceStatuses('read');
     showToast('优选域名已保存并重新解析', 'success');
     return true;
   } catch (error) {
@@ -1698,6 +1699,7 @@ async function addPreferredDomain() {
     input.value = '';
     if (remarkInput) remarkInput.value = '';
     renderPreferredDomains();
+    await loadSourceStatuses('read');
     showToast('域名添加成功，解析结果已保存', 'success');
   } catch (error) {
     setInputError(input, error.message);
@@ -1785,6 +1787,7 @@ function refreshRenderedSourceStatuses(sources = null) {
     });
     refreshSourceHealthRows('subs', grouped.subs);
     refreshSourceHealthRows('apis', grouped.apis);
+    refreshSourceHealthRows('domains', grouped.domains);
     return;
   }
   refreshSourceHealthRows('subs');

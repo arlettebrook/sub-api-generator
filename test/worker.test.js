@@ -608,6 +608,11 @@ test("manages preferred domains and resolves A, AAAA, and CNAME records", async 
     });
     assert.deepEqual(values.preferred_domains["example.com"].records, entry.records);
 
+    const savedStatus = await worker.fetch(new Request("https://example.test/api/source-status", { headers }), runtime);
+    const savedStatusResult = await savedStatus.json();
+    assert.deepEqual(savedStatusResult.domains["example.com"].dnsRecordCounts, { A: 1, AAAA: 1, CNAME: 1 });
+    assert.equal(savedStatusResult.domains["example.com"].state, "success");
+
     const raw = await worker.fetch(new Request("https://example.test/api/source-raw", {
       method: "POST",
       headers,

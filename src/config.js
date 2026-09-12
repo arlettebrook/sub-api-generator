@@ -53,9 +53,22 @@ export function normalizeKvData(data, sourceType) {
     if (typeof value === "boolean") {
       normalized[normalizedKey] = { remark: "" };
     } else if (isPlainObject(value)) {
-      normalized[normalizedKey] = {
+      const normalizedEntry = {
         remark: typeof value.remark === "string" ? value.remark : "",
       };
+      if (sourceType === "domains") {
+        if (isPlainObject(value.records)) {
+          normalizedEntry.records = Object.fromEntries(["A", "AAAA", "CNAME"].map((type) => [
+            type,
+            Array.isArray(value.records[type]) ? value.records[type].filter((item) => typeof item === "string" && item.trim()).slice(0, 100) : [],
+          ]));
+        }
+        if (isPlainObject(value.errors)) normalizedEntry.errors = Object.fromEntries(Object.entries(value.errors).filter(([type, message]) => ["A", "AAAA", "CNAME"].includes(type) && typeof message === "string").map(([type, message]) => [type, message.slice(0, 300)]));
+        if (isPlainObject(value.dnsErrorCodes)) normalizedEntry.dnsErrorCodes = Object.fromEntries(Object.entries(value.dnsErrorCodes).filter(([type, code]) => ["A", "AAAA", "CNAME"].includes(type) && typeof code === "string").map(([type, code]) => [type, code.slice(0, 80)]));
+        if (isPlainObject(value.dnsProviders)) normalizedEntry.dnsProviders = Object.fromEntries(Object.entries(value.dnsProviders).filter(([type, provider]) => ["A", "AAAA", "CNAME"].includes(type) && typeof provider === "string").map(([type, provider]) => [type, provider.slice(0, 40)]));
+        if (Number.isFinite(Number(value.checkedAt)) && Number(value.checkedAt) > 0) normalizedEntry.checkedAt = Number(value.checkedAt);
+      }
+      normalized[normalizedKey] = normalizedEntry;
     }
   }
   return normalized;
