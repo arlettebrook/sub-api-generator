@@ -7,6 +7,7 @@ import {
   KV_KEY_SUBS,
   KV_KEY_SOURCE_STATUS,
   KV_KEY_PREFERRED_DOMAINS,
+  MAX_CONFIG_ENTRIES,
   getRuntimeConfig as getPagesRuntimeConfig,
   isAllowedApiPath,
   normalizeCustomApiData,
@@ -221,13 +222,14 @@ async function handleGetApis(env) {
 }
 
 async function getSourceStatusSnapshot(env, restore = true) {
-  const [subs, apis, persisted] = await Promise.all([
+  const [subs, apis, domains, persisted] = await Promise.all([
     env.KV.get(KV_KEY_SUBS, "json"),
     env.KV.get(KV_KEY_APIS, "json"),
+    env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
     env.KV.get(KV_KEY_SOURCE_STATUS, "json"),
   ]);
   if (restore) subscriptions.restoreSourceStatuses(persisted);
-  return subscriptions.getSourceStatuses(subs, apis);
+  return subscriptions.getSourceStatuses(subs, apis, domains);
 }
 
 async function readSourceStatuses(env) {
@@ -301,9 +303,13 @@ async function handlePostPreferredDomain(request, env) {
   try { domain = normalizePreferredDomain(body?.domain); } catch (error) { return pagesTextResponse(error.message, 400); }
   const current = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
   const configured = isPlainObject(current) ? current : {};
+  if (!Object.prototype.hasOwnProperty.call(configured, domain) && Object.keys(configured).length >= MAX_CONFIG_ENTRIES) {
+    return pagesTextResponse(`优选域名不能超过 ${MAX_CONFIG_ENTRIES} 个`, 400);
+  }
   const result = await queryPreferredDomain(domain);
   const entry = {
     domain,
+    remark: typeof body?.remark === "string" ? body.remark.trim().slice(0, 200) : (isPlainObject(configured[domain]) ? configured[domain].remark || "" : ""),
     records: result.records,
     errors: result.errors,
     checkedAt: Date.now(),
@@ -341,12 +347,13 @@ async function checkSourceStatuses(env, request) {
     sourceSelection = null;
   } else if (scope === "selected") {
     if (!Array.isArray(body?.sources)) return pagesTextResponse("数据源选择无效", 400);
-    sourceSelection = body.sources.filter((source) => source && ["subs", "apis"].includes(source.type) && typeof source.key === "string");
+    sourceSelection = body.sources.filter((source) => source && ["subs", "apis", "domains"].includes(source.type) && typeof source.key === "string");
   } else if (scope === "used") {
-    const [customApis, subs, apis] = await Promise.all([
+    const [customApis, subs, apis, domains] = await Promise.all([
       env.KV.get(KV_KEY_CUSTOM_APIS, "json"),
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
+      env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
     ]);
     const configuredSources = [];
     let usesAllSources = false;
@@ -361,7 +368,7 @@ async function checkSourceStatuses(env, request) {
     if (usesAllSources) sourceSelection = null;
     else sourceSelection = configuredSources;
     // Ensure malformed source configuration does not cause a broad check.
-    if (!isPlainObject(subs) && !isPlainObject(apis)) sourceSelection = [];
+    if (!isPlainObject(subs) && !isPlainObject(apis) && !isPlainObject(domains)) sourceSelection = [];
   } else {
     return pagesTextResponse("检测范围无效", 400);
   }
@@ -385,8 +392,8 @@ async function handleSourceRaw(request, env) {
   try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
   const type = body?.type;
   const key = typeof body?.key === "string" ? body.key.trim() : "";
-  if (!["subs", "apis"].includes(type) || !key) return pagesTextResponse("数据源参数无效", 400);
-  const configured = await env.KV.get(type === "subs" ? KV_KEY_SUBS : KV_KEY_APIS, "json");
+  if (!["subs", "apis", "domains"].includes(type) || !key) return pagesTextResponse("数据源参数无效", 400);
+  const configured = await env.KV.get(type === "subs" ? KV_KEY_SUBS : type === "apis" ? KV_KEY_APIS : KV_KEY_PREFERRED_DOMAINS, "json");
   const normalized = normalizeKvData(configured, type);
   if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
   const guard = acquirePreviewProtection('source', type + ':' + key);
@@ -431,10 +438,15 @@ async function handleCustomApiPreview(request, env) {
   try {
   let sourceSelection = entry.sources;
   if (entry.sourceMode !== SOURCE_MODE_SELECTED) {
-    const [subs, apis] = await Promise.all([env.KV.get(KV_KEY_SUBS, "json"), env.KV.get(KV_KEY_APIS, "json")]);
+    const [subs, apis, domains] = await Promise.all([
+      env.KV.get(KV_KEY_SUBS, "json"),
+      env.KV.get(KV_KEY_APIS, "json"),
+      env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
+    ]);
     sourceSelection = [
       ...Object.keys(normalizeKvData(subs, "subs")).map((key) => ({ type: "subs", key })),
       ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
+      ...Object.keys(normalizeKvData(domains, "domains")).map((key) => ({ type: "domains", key })),
     ];
   }
   subscriptions.clearAggregateCache();

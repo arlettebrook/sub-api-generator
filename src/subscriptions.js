@@ -5,6 +5,7 @@ import {
   KV_KEY_APIS,
   KV_KEY_BLACKLIST,
   KV_KEY_FILTER_RULES,
+  KV_KEY_PREFERRED_DOMAINS,
   KV_KEY_SUBS,
   normalizeFilterRules,
   normalizeBlacklist,
@@ -26,6 +27,11 @@ const REMARK_SYMBOL_REGEX = /[\p{So}\uFE0F]+/gu;
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const AGGREGATE_CACHE_MAX_ENTRIES = 128;
 const SOURCE_CHECK_CONCURRENCY = 6;
+const DNS_RECORD_TYPES = [
+  { name: "A", code: 1 },
+  { name: "AAAA", code: 28 },
+  { name: "CNAME", code: 5 },
+];
 const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
 const sourceInflight = new Map();
@@ -113,6 +119,54 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
   return result;
 }
 
+async function fetchPreferredDomain(domain) {
+  const valuesByType = {};
+  const records = {};
+  const errors = [];
+  await Promise.all(DNS_RECORD_TYPES.map(async ({ name, code }) => {
+    try {
+      const endpoint = new URL("https://cloudflare-dns.com/dns-query");
+      endpoint.searchParams.set("name", domain);
+      endpoint.searchParams.set("type", name);
+      const response = await fetchWithTimeout(endpoint, { headers: { Accept: "application/dns-json" } });
+      if (!response.ok) {
+        const error = new Error(`DNS ${name} 查询 HTTP ${response.status}`);
+        error.code = "HTTP_ERROR";
+        error.statusCode = response.status;
+        throw error;
+      }
+      const payload = await response.json();
+      if (Number(payload.Status) !== 0) {
+        const error = new Error(payload.Comment || `DNS ${name} 查询失败`);
+        error.code = "DNS_ERROR";
+        throw error;
+      }
+      const answerValues = (Array.isArray(payload.Answer) ? payload.Answer : [])
+        .filter((answer) => Number(answer.type) === code && typeof answer.data === "string")
+        .map((answer) => answer.data.trim().replace(/\.+$/, ""))
+        .filter(Boolean);
+      records[name] = answerValues;
+      valuesByType[name] = answerValues.map((value) => `${name === "AAAA" ? `[${value}]` : value}:443`);
+    } catch (error) {
+      records[name] = [];
+      errors.push({ type: "domains", key: domain, recordType: name, message: sourceErrorMessage(error) });
+    }
+  }));
+  const values = DNS_RECORD_TYPES.flatMap(({ name }) => valuesByType[name] || []);
+  if (!values.length && errors.length === DNS_RECORD_TYPES.length) {
+    const error = new Error(errors.map((item) => `${item.recordType}: ${item.message}`).join("；"));
+    error.code = "DNS_ERROR";
+    error.sourceType = "domains";
+    error.sourceKey = domain;
+    throw error;
+  }
+  Object.defineProperty(values, "statusCode", { value: 200, enumerable: false });
+  Object.defineProperty(values, "unfilteredNodes", { value: [...values], enumerable: false });
+  Object.defineProperty(values, "records", { value: records, enumerable: false });
+  Object.defineProperty(values, "errors", { value: errors, enumerable: false });
+  return values;
+}
+
 function recordSourceStatus(type, key, details) {
   const normalizedKey = normalizeSourceKey(type, key);
   if (!normalizedKey) return;
@@ -125,9 +179,9 @@ function recordSourceStatus(type, key, details) {
   });
 }
 
-export function getSourceStatuses(subsConfig, apisConfig) {
-  const result = { subs: {}, apis: {} };
-  for (const [type, config] of [["subs", subsConfig], ["apis", apisConfig]]) {
+export function getSourceStatuses(subsConfig, apisConfig, domainsConfig) {
+  const result = { subs: {}, apis: {}, domains: {} };
+  for (const [type, config] of [["subs", subsConfig], ["apis", apisConfig], ["domains", domainsConfig]]) {
     const normalized = normalizeKvData(config, type);
     for (const [key, entry] of Object.entries(normalized)) {
       const remark = isPlainObject(entry) && typeof entry.remark === "string" ? entry.remark : "";
@@ -153,7 +207,7 @@ export function getSourceStatuses(subsConfig, apisConfig) {
 
 export function restoreSourceStatuses(snapshot) {
   if (!isPlainObject(snapshot)) return;
-  for (const type of ["subs", "apis"]) {
+  for (const type of ["subs", "apis", "domains"]) {
     for (const [key, status] of Object.entries(snapshot[type] || {})) {
       if (isPlainObject(status)) sourceStatus.set(`${type}:${normalizeSourceKey(type, key)}`, { ...status });
     }
@@ -310,7 +364,7 @@ function normalizeSourceSelection(sourceSelection) {
   const unique = new Map();
   for (const source of sourceSelection) {
     const type = source?.type;
-    if (!["subs", "apis"].includes(type)) continue;
+    if (!["subs", "apis", "domains"].includes(type)) continue;
     const key = normalizeSourceKey(type, source?.key);
     if (!key) continue;
     unique.set(`${type}:${key}`, { type, key });
@@ -322,11 +376,12 @@ function normalizeSourceSelection(sourceSelection) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules, outputTransform = {}) {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
+    domains: domainsConfig,
     blacklist,
     filterRules,
     outputTransform,
@@ -403,20 +458,21 @@ async function allSettledWithConcurrency(tasks, limit = SOURCE_CHECK_CONCURRENCY
 
 export async function handleRoot(env, sourceSelection, options = {}) {
   try {
-    const [subsConfig, apisConfig, blacklistConfig, filterRulesConfig] = await Promise.all([
+    const [subsConfig, apisConfig, domainsConfig, blacklistConfig, filterRulesConfig] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
+      env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
       env.KV.get(KV_KEY_BLACKLIST, "json"),
       env.KV.get(KV_KEY_FILTER_RULES, "json"),
     ]);
-    if (!isPlainObject(subsConfig)) {
+    if (!isPlainObject(subsConfig) && !isPlainObject(apisConfig) && !isPlainObject(domainsConfig)) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
     const blacklist = normalizeBlacklist(blacklistConfig);
     const filterRules = normalizeFilterRules(filterRulesConfig);
     const outputTransform = getOutputTransform(options);
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, blacklist, filterRules, outputTransform);
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -530,9 +586,40 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           throw failure;
         }
       }));
+    selectedEntries(domainsConfig, "domains").forEach(([domain, entry]) => sourceTasks.push(async () => {
+        const startedAt = Date.now();
+        try {
+          const rawValues = await fetchPreferredDomain(domain);
+          const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
+          const timestamp = new Date().toISOString();
+          recordSourceStatus("domains", domain, {
+            state: values.length > 0 ? "success" : "empty",
+            nodeCount: values.length,
+            rawNodeCount: rawValues.length,
+            durationMs: Date.now() - startedAt,
+            error: rawValues.errors?.length ? rawValues.errors.map((item) => item.message).join("；") : "",
+            errorType: rawValues.errors?.length ? "DNS_ERROR" : "",
+            statusCode: rawValues.statusCode || null,
+            lastAttemptAt: timestamp,
+            ...(values.length > 0 ? { lastSuccessAt: timestamp, lastSuccessNodeCount: values.length, lastSuccessRawNodeCount: rawValues.length } : {}),
+          });
+          return { type: "domains", key: domain, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+        } catch (error) {
+          const failure = error instanceof Error ? error : new Error(String(error));
+          failure.sourceType = "domains";
+          failure.sourceKey = domain;
+          recordSourceStatus("domains", domain, {
+            state: sourceFailureState(failure), nodeCount: 0, rawNodeCount: 0, durationMs: Date.now() - startedAt,
+            error: sourceErrorMessage(failure), errorType: failure.code || "DNS_ERROR", statusCode: failure.statusCode || null,
+            lastAttemptAt: new Date().toISOString(),
+          });
+          throw failure;
+        }
+      }));
     const sourceResults = await allSettledWithConcurrency(sourceTasks);
     const subsResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "subs" : result.reason?.sourceType === "subs");
     const apiResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "apis" : result.reason?.sourceType === "apis");
+    const domainResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "domains" : result.reason?.sourceType === "domains");
 
     const preferred = [];
     const filterStats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
@@ -557,6 +644,14 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "apis", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
+    }
+    for (const result of domainResults) {
+      if (result.status === "fulfilled") {
+        extra.push(...result.value.values);
+        mergeFilterStats(filterStats, result.value.filterStats);
+        result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "domains", result.value.key, result.value.remark)));
+      }
+      else sourceErrors.push({ type: "domains", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
 
     const filtered = [...new Set(preferred)];
@@ -630,4 +725,4 @@ export function clearAggregateCache() {
   aggregateCache.clear();
 }
 
-export { decodeSubscriptionBody, fetchWithTimeout, fetchPreferredSubs, filterPreferredIps, normalizeKvData, parsePreferredIpLine };
+export { decodeSubscriptionBody, fetchWithTimeout, fetchPreferredSubs, fetchPreferredDomain, filterPreferredIps, normalizeKvData, parsePreferredIpLine };

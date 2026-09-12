@@ -243,7 +243,16 @@ export const adminHTML = `
     <div class="source-status-panel-body">
       <div class="add-row preferred-domain-add-row">
         <label class="add-field add-field-wide"><span class="sr-only">域名</span><input id="newPreferredDomain" placeholder="例如 example.com" autocomplete="off" /><small class="inline-error" hidden></small></label>
+        <label class="add-field"><span class="sr-only">域名备注</span><input id="newPreferredDomainRemark" placeholder="备注（可选）" autocomplete="off" /></label>
         <button class="btn-primary" type="button" id="addPreferredDomainButton">➕ 添加域名</button>
+      </div>
+      <div class="toolbar preferred-domain-toolbar">
+        <input id="preferredDomainsSearch" class="list-search" type="search" placeholder="搜索域名或备注" aria-label="搜索优选域名" />
+        <select id="preferredDomainsSort" class="list-sort" aria-label="优选域名排序"><option value="default">默认顺序</option><option value="name-asc">域名 A-Z</option><option value="name-desc">域名 Z-A</option></select>
+        <button type="button" class="batch-button" data-batch="domains-select">全选</button><button type="button" class="batch-button batch-delete" data-batch="domains-delete">批量删除</button>
+        <button type="button" id="exportPreferredDomainsButton">📤 导出配置</button>
+        <button type="button" id="importPreferredDomainsButton">📥 导入配置</button>
+        <input type="file" id="importPreferredDomainsFile" accept=".json,application/json" style="display:none" />
       </div>
       <div id="preferredDomainsList"></div>
     </div>

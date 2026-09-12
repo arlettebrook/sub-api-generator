@@ -3098,8 +3098,8 @@ export const adminStyle = `
   }
 
   .preferred-domain-row {
-    display: grid;
-    grid-template-columns: minmax(150px, .7fr) minmax(0, 2fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 14px;
     padding: 12px;

@@ -628,6 +628,39 @@ test("rejects invalid preferred domains", async () => {
   assert.match(await response.text(), /域名格式无效/);
 });
 
+test("uses preferred domains as selectable live sources with port 443", async () => {
+  const values = {
+    subs: {},
+    apis: {},
+    preferred_domains: { "edge.example.com": { domain: "edge.example.com", remark: "边缘域名" } },
+    custom_apis: { domain_api: { enabled: true, sourceMode: "selected", sources: [{ type: "domains", key: "edge.example.com" }] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    if (url.hostname !== "cloudflare-dns.com") return originalFetch(resource);
+    requests.push(url.searchParams.get("type"));
+    const type = url.searchParams.get("type");
+    const answers = type === "A"
+      ? [{ type: 1, data: "1.2.3.4" }]
+      : type === "AAAA"
+        ? [{ type: 28, data: "2001:db8::1" }]
+        : [{ type: 5, data: "target.example.net." }];
+    return new Response(JSON.stringify({ Status: 0, Answer: answers }), { status: 200 });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://example.test/domain_api", { headers: { Cookie: `auth=${hash}` } }), runtime);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.text()).split("\n"), ["1.2.3.4:443", "[2001:db8::1]:443", "target.example.net:443"]);
+    assert.deepEqual(requests.sort(), ["A", "AAAA", "CNAME"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("rejects invalid blacklist payloads", async () => {
   const runtime = env();
   const hash = await sha256Hex("secret");

@@ -238,7 +238,7 @@ function renderSourceLoadStatus(errors = []) {
   const list = document.createElement('ul');
   errors.forEach((error) => {
     const item = document.createElement('li');
-    const sourceName = error.type === 'apis' ? 'API 源' : error.type === 'config' ? '配置' : '订阅源';
+    const sourceName = error.type === 'apis' ? 'API 源' : error.type === 'domains' ? '优选域名' : error.type === 'config' ? '配置' : '订阅源';
     item.textContent = sourceName + '：' + error.message;
     list.appendChild(item);
   });
@@ -273,7 +273,7 @@ function renderPreviewSourceErrors(errors = []) {
   const list = document.createElement('ul');
   errors.forEach((error) => {
     const item = document.createElement('li');
-    const sourceName = error.key || (error.type === 'apis' ? 'API 源' : error.type === 'config' ? '配置' : '订阅源');
+    const sourceName = error.key || (error.type === 'apis' ? 'API 源' : error.type === 'domains' ? '优选域名' : error.type === 'config' ? '配置' : '订阅源');
     item.textContent = sourceName + '：' + error.message;
     list.appendChild(item);
   });
@@ -348,7 +348,7 @@ function renderSourceStatusSummary() {
     const name = document.createElement('strong');
     name.textContent = status.remark || key;
     const kind = document.createElement('small');
-    kind.textContent = (type === 'apis' ? 'API 源 · ' : '订阅源 · ') + key;
+    kind.textContent = (type === 'apis' ? 'API 源 · ' : type === 'domains' ? '优选域名 · ' : '订阅源 · ') + key;
     identity.append(name, kind);
     const detail = document.createElement('span');
     detail.className = 'source-status-issue-detail';
@@ -1366,7 +1366,7 @@ function sourceGroupId(type, key) {
 }
 
 function sourceGroupTypeLabel(type) {
-  return type === 'apis' ? 'API 源' : type === 'subs' ? '订阅源' : '来源';
+  return type === 'apis' ? 'API 源' : type === 'domains' ? '优选域名' : type === 'subs' ? '订阅源' : '来源';
 }
 
 function sourceGroupShortName(key) {
@@ -1446,7 +1446,7 @@ async function loadCustomApis(loadSources = false) {
   }
   const requests = [readJsonResponse('/api/custom-apis', '优选 API 配置')];
   if (loadSources) {
-    requests.push(readJsonResponse('/api/subs', '订阅源配置'), readJsonResponse('/api/apis', 'API 源配置'));
+    requests.push(readJsonResponse('/api/subs', '订阅源配置'), readJsonResponse('/api/apis', 'API 源配置'), readJsonResponse('/api/preferred-domains', '优选域名配置'));
   }
   const results = await Promise.allSettled(requests);
   if (results[0].status === 'rejected') {
@@ -1467,6 +1467,11 @@ async function loadCustomApis(loadSources = false) {
       apis = {};
       sourceErrors.push({ type: 'apis', message: results[2].reason.message });
     }
+    if (results[3].status === 'fulfilled') preferredDomains = results[3].value;
+    else {
+      preferredDomains = {};
+      sourceErrors.push({ type: 'domains', message: results[3].reason.message });
+    }
     renderSourceLoadStatus(sourceErrors);
   }
   setCustomApisDirty(false);
@@ -1479,10 +1484,11 @@ function sourceEntries() {
   return [
     ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
     ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
+    ...Object.entries(preferredDomains).map(([key, value]) => ({ type: 'domains', key, label: value.remark || key })),
   ];
 }
 
-let sourceStatuses = { subs: {}, apis: {} };
+let sourceStatuses = { subs: {}, apis: {}, domains: {} };
 let preferredDomains = {};
 
 function formatPreferredDomainTime(value) {
@@ -1494,7 +1500,10 @@ function renderPreferredDomains() {
   const container = $('preferredDomainsList');
   if (!container) return;
   container.innerHTML = '';
-  const entries = Object.entries(preferredDomains || {});
+  const query = ($('preferredDomainsSearch')?.value || '').trim().toLowerCase();
+  const sort = $('preferredDomainsSort')?.value || 'default';
+  let entries = Object.entries(preferredDomains || {}).filter(([domain, entry]) => !query || (domain + ' ' + (entry.remark || '')).toLowerCase().includes(query));
+  if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
   if (!entries.length) {
     const empty = document.createElement('div');
     empty.className = 'data-empty preferred-domain-empty';
@@ -1503,16 +1512,38 @@ function renderPreferredDomains() {
     return;
   }
   const fragment = document.createDocumentFragment();
-  entries.sort(([a], [b]) => a.localeCompare(b, 'zh-CN')).forEach(([domain, entry]) => {
+  entries.forEach(([domain, entry]) => {
     const row = document.createElement('div');
-    row.className = 'preferred-domain-row';
+    row.className = 'row preferred-domain-row';
+    row.dataset.sourceKey = domain;
+    const select = document.createElement('input');
+    select.type = 'checkbox';
+    select.className = 'source-select';
+    select.dataset.key = domain;
+    select.setAttribute('aria-label', '选择优选域名 ' + domain);
+    const remarkInput = document.createElement('input');
+    remarkInput.className = 'remark-input';
+    remarkInput.value = entry?.remark || '';
+    remarkInput.placeholder = '备注（可选）';
+    remarkInput.style.maxWidth = '180px';
+    remarkInput.onchange = async () => {
+      await savePreferredDomain(domain, remarkInput.value);
+    };
     const identity = document.createElement('div');
     identity.className = 'preferred-domain-identity';
-    const title = document.createElement('strong');
-    title.textContent = domain;
+    const domainInput = document.createElement('input');
+    domainInput.className = 'host-input';
+    domainInput.value = domain;
+    domainInput.title = domain;
+    domainInput.setAttribute('aria-label', '域名 ' + domain);
+    domainInput.onchange = async () => {
+      const nextDomain = domainInput.value.trim();
+      if (!nextDomain || nextDomain.toLowerCase() === domain) { domainInput.value = domain; return; }
+      await savePreferredDomain(nextDomain, entry?.remark || '', domain);
+    };
     const checked = document.createElement('small');
     checked.textContent = '最后解析：' + formatPreferredDomainTime(entry?.checkedAt);
-    identity.append(title, checked);
+    identity.append(domainInput, checked);
 
     const records = document.createElement('div');
     records.className = 'preferred-domain-records';
@@ -1561,10 +1592,78 @@ function renderPreferredDomains() {
       } catch (error) { showToast(error.message, 'error'); setButtonBusy(remove, false); }
     };
     actions.append(refresh, remove);
-    row.append(identity, records, actions);
+    row.append(select, remarkInput, identity, createCopyButton(domain, '域名'), healthForPreferredDomain(domain), createSourceCheckButton('domains', domain), records, actions);
     fragment.appendChild(row);
   });
   container.appendChild(fragment);
+}
+
+function healthForPreferredDomain(domain) {
+  return createSourceHealth('domains', domain);
+}
+
+async function savePreferredDomain(domain, remark = '', previousDomain = '') {
+  try {
+    const entry = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark }) });
+    if (previousDomain && previousDomain !== entry.domain) {
+      await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(previousDomain), '旧域名删除', { method: 'DELETE' });
+      delete preferredDomains[previousDomain];
+    }
+    preferredDomains[entry.domain] = entry;
+    renderPreferredDomains();
+    showToast('优选域名已保存并重新解析', 'success');
+    return true;
+  } catch (error) {
+    showToast(error.message, 'error');
+    renderPreferredDomains();
+    return false;
+  }
+}
+
+async function deletePreferredDomains(keys, trigger = null) {
+  if (!keys.length) { showToast('请先选择优选域名', 'warning'); return; }
+  if (!window.confirm('确定删除选中的 ' + keys.length + ' 个优选域名吗？此操作不可撤销。')) return;
+  if (trigger) setButtonBusy(trigger, true, '删除中…');
+  try {
+    for (const domain of keys) {
+      await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
+      delete preferredDomains[domain];
+    }
+    renderPreferredDomains();
+    showToast('已删除 ' + keys.length + ' 个优选域名', 'success');
+  } catch (error) { showToast(error.message, 'error'); }
+  finally { if (trigger) setButtonBusy(trigger, false); }
+}
+
+function exportPreferredDomains() {
+  const blob = new Blob([JSON.stringify(preferredDomains, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'preferred_domains_backup.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast('配置已导出', 'success');
+}
+
+function importPreferredDomains(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('配置格式无效');
+      for (const [domain, entry] of Object.entries(data)) {
+        await savePreferredDomain(domain, typeof entry?.remark === 'string' ? entry.remark : '');
+      }
+      showToast('导入成功', 'success');
+    } catch (error) { showToast('导入失败：' + error.message, 'error'); }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
 async function loadPreferredDomains() {
@@ -1582,15 +1681,17 @@ async function loadPreferredDomains() {
 
 async function addPreferredDomain() {
   const input = $('newPreferredDomain');
+  const remarkInput = $('newPreferredDomainRemark');
   const domain = input?.value.trim() || '';
   if (!domain) { setInputError(input, '请输入域名'); input?.focus(); return; }
   clearInputError(input);
   const button = $('addPreferredDomainButton');
   setButtonBusy(button, true, '解析中…');
   try {
-    const entry = await readJsonResponse('/api/preferred-domains', '域名解析', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }) });
+    const entry = await readJsonResponse('/api/preferred-domains', '域名解析', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark: remarkInput?.value.trim() || '' }) });
     preferredDomains[entry.domain] = entry;
     input.value = '';
+    if (remarkInput) remarkInput.value = '';
     renderPreferredDomains();
     showToast('域名添加成功，解析结果已保存', 'success');
   } catch (error) {
@@ -1638,7 +1739,7 @@ function createSourceHealth(type, key) {
 }
 
 function refreshSourceHealthRows(type, sourceKeys = null) {
-  const list = $(type === 'subs' ? 'subsList' : 'apisList');
+  const list = $(type === 'subs' ? 'subsList' : type === 'apis' ? 'apisList' : 'preferredDomainsList');
   if (!list) return;
   const normalizedKeys = sourceKeys ? new Set(sourceKeys.map((key) => normalizeSourceKeyClient(type, key))) : null;
   list.querySelectorAll('.row[data-source-key]').forEach((row) => {
@@ -1651,7 +1752,7 @@ function refreshSourceHealthRows(type, sourceKeys = null) {
 function refreshRenderedSourceStatuses(sources = null) {
   renderSourceStatusSummary();
   if (sources?.length) {
-    const grouped = { subs: [], apis: [] };
+    const grouped = { subs: [], apis: [], domains: [] };
     sources.forEach(({ type, key }) => {
       if (grouped[type]) grouped[type].push(key);
     });
@@ -1661,6 +1762,7 @@ function refreshRenderedSourceStatuses(sources = null) {
   }
   refreshSourceHealthRows('subs');
   refreshSourceHealthRows('apis');
+  refreshSourceHealthRows('domains');
 }
 
 async function loadSourceStatuses(mode = 'read', sources = []) {
@@ -1670,6 +1772,7 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
   const previousStatuses = {
     subs: { ...(sourceStatuses.subs || {}) },
     apis: { ...(sourceStatuses.apis || {}) },
+    domains: { ...(sourceStatuses.domains || {}) },
   };
   if (manual && refreshButton) {
     refreshButton.disabled = true;
@@ -1677,6 +1780,7 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
     sourceStatuses = {
       subs: { ...previousStatuses.subs },
       apis: { ...previousStatuses.apis },
+      domains: { ...previousStatuses.domains },
     };
     const targets = mode === 'selected'
       ? sources
@@ -1747,6 +1851,7 @@ function normalizeSourceKeyClient(type, key) {
     const match = value.match(/^(https?):\\\/\\\/([^/]+)(.*)$/i);
     if (match) return match[1].toLowerCase() + '://' + match[2].toLowerCase() + match[3];
   }
+  if (type === 'domains') return value.replace(/\.+$/, '').toLowerCase();
   return value;
 }
 
@@ -1825,7 +1930,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
       updateCount();
       return;
     }
-    for (const [type, title] of [['subs', '订阅源'], ['apis', 'API 源']]) {
+    for (const [type, title] of [['subs', '订阅源'], ['apis', 'API 源'], ['domains', '优选域名']]) {
       const group = visible.filter((source) => source.type === type);
       if (!group.length) continue;
       const heading = document.createElement('div');
@@ -2503,8 +2608,8 @@ function renderSubs() {
 }
 
 async function applySourceBatch(type, action, trigger) {
-  const data = type === 'subs' ? subs : apis;
-  const list = $(type === 'subs' ? 'subsList' : 'apisList');
+  const data = type === 'subs' ? subs : type === 'apis' ? apis : preferredDomains;
+  const list = $(type === 'subs' ? 'subsList' : type === 'apis' ? 'apisList' : 'preferredDomainsList');
   const selected = [...list.querySelectorAll('.source-select:checked')].map((input) => input.dataset.key);
   if (action === 'select') { list.querySelectorAll('.source-select').forEach((input) => { input.checked = true; }); return; }
   if (!selected.length) { showToast('请先选择数据源', 'warning'); return; }
@@ -2517,13 +2622,13 @@ async function applySourceBatch(type, action, trigger) {
     selected.forEach((key) => {
       delete data[key];
     });
-    const saved = type === 'subs' ? await queueSubsSave() : await queueApisSave();
+    const saved = type === 'subs' ? await queueSubsSave() : type === 'apis' ? await queueApisSave() : (await Promise.all(selected.map((key) => readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(key), '域名删除', { method: 'DELETE' })))).length === selected.length;
     if (!saved) throw new Error('保存失败');
-    type === 'subs' ? renderSubs() : renderApis();
+    type === 'subs' ? renderSubs() : type === 'apis' ? renderApis() : renderPreferredDomains();
     showToast('已删除 ' + selected.length + ' 个数据源', 'success');
   } catch (error) {
     selected.forEach((key) => { if (previous[key]) data[key] = previous[key]; });
-    type === 'subs' ? renderSubs() : renderApis();
+    type === 'subs' ? renderSubs() : type === 'apis' ? renderApis() : renderPreferredDomains();
     showToast('批量删除失败：' + error.message, 'error', () => applySourceBatch(type, action));
   } finally {
     buttons.forEach((button) => { button.disabled = false; if (button.dataset.idleText) button.textContent = button.dataset.idleText; });
@@ -2735,7 +2840,7 @@ function renderApis() {
 }
 
 function sourceRawEntry(type, key) {
-  const data = type === 'subs' ? subs : type === 'apis' ? apis : customApis;
+  const data = type === 'subs' ? subs : type === 'apis' ? apis : type === 'domains' ? preferredDomains : customApis;
   return data && Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
 }
 
@@ -3083,7 +3188,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     renderSourceRawCacheStatus('正在检测数据…', 'checking');
   }
   renderSourceRawHistory(type === 'customApis' ? loadSourceRawHistory(type, key) : []);
-  const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : '优选 API · /';
+  const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : type === 'domains' ? '优选域名 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
   if (!preserveState) {
     resetSourceRawScroll();
@@ -3182,7 +3287,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     resetSourceRawScroll();
     requestAnimationFrame(resetSourceRawScroll);
   }
-  const isManagedSource = type === 'subs' || type === 'apis';
+  const isManagedSource = type === 'subs' || type === 'apis' || type === 'domains';
   const normalizedKey = isManagedSource ? normalizeSourceKeyClient(type, key) : key;
   const previousStatus = isManagedSource ? getSourceStatus(type, key) : { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
   if (isManagedSource) {
@@ -4246,6 +4351,39 @@ function bindPageControls() {
     newPreferredDomain.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') { event.preventDefault(); void addPreferredDomain(); }
     });
+  }
+  const preferredDomainSearch = $('preferredDomainsSearch');
+  const preferredDomainSort = $('preferredDomainsSort');
+  if (preferredDomainSearch && preferredDomainSearch.dataset.bound !== 'true') {
+    preferredDomainSearch.dataset.bound = 'true';
+    preferredDomainSearch.addEventListener('input', renderPreferredDomains);
+  }
+  if (preferredDomainSort && preferredDomainSort.dataset.bound !== 'true') {
+    preferredDomainSort.dataset.bound = 'true';
+    preferredDomainSort.addEventListener('change', renderPreferredDomains);
+  }
+  document.querySelectorAll('[data-batch^="domains-"]').forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    button.addEventListener('click', () => {
+      const list = $('preferredDomainsList');
+      const selected = [...(list?.querySelectorAll('.source-select:checked') || [])].map((input) => input.dataset.key);
+      if (button.dataset.batch === 'domains-select') {
+        list?.querySelectorAll('.source-select').forEach((input) => { input.checked = true; });
+      } else void deletePreferredDomains(selected, button);
+    });
+  });
+  const exportPreferredDomainsButton = $('exportPreferredDomainsButton');
+  if (exportPreferredDomainsButton && exportPreferredDomainsButton.dataset.bound !== 'true') {
+    exportPreferredDomainsButton.dataset.bound = 'true';
+    exportPreferredDomainsButton.addEventListener('click', exportPreferredDomains);
+  }
+  const importPreferredDomainsButton = $('importPreferredDomainsButton');
+  const importPreferredDomainsFile = $('importPreferredDomainsFile');
+  if (importPreferredDomainsButton && importPreferredDomainsFile && importPreferredDomainsButton.dataset.bound !== 'true') {
+    importPreferredDomainsButton.dataset.bound = 'true';
+    importPreferredDomainsButton.addEventListener('click', () => importPreferredDomainsFile.click());
+    importPreferredDomainsFile.addEventListener('change', importPreferredDomains);
   }
 }
 

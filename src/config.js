@@ -70,6 +70,7 @@ export function normalizeSourceKey(type, key) {
     const match = value.match(/^(https?):\/\/([^/]+)(.*)$/i);
     if (match) return `${match[1].toLowerCase()}://${match[2].toLowerCase()}${match[3]}`;
   }
+  if (type === "domains") return value.replace(/\.+$/, "").toLowerCase();
   return value;
 }
 
@@ -264,7 +265,7 @@ export function validateApiPathPayload(body) {
     const sources = Array.isArray(value.sources) ? value.sources : [];
     const normalizedSources = [];
     for (const source of sources) {
-      if (!isPlainObject(source) || !["subs", "apis"].includes(source.type) || typeof source.key !== "string") {
+      if (!isPlainObject(source) || !["subs", "apis", "domains"].includes(source.type) || typeof source.key !== "string") {
         throw new Error(`数据源配置无效: ${rawPath}`);
       }
       const key = normalizeSourceKey(source.type, source.key);
@@ -313,7 +314,7 @@ export function normalizeCustomApiData(data) {
         ...(suffixStrategy !== "skip" ? { suffixStrategy } : {}),
         sourceMode,
         sources: sourceMode === SOURCE_MODE_SELECTED && Array.isArray(value.sources)
-          ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis"].includes(source.type) && typeof source.key === "string")
+          ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis", "domains"].includes(source.type) && typeof source.key === "string")
               .map((source) => ({ type: source.type, key: normalizeSourceKey(source.type, source.key) }))
           : [],
       };
