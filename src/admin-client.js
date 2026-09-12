@@ -470,13 +470,19 @@ async function copyNodeData(event) {
   }
 }
 
+// 导出文件名统一使用北京时间（UTC+8）后缀，格式如 2026-09-13-14-30-25，与服务端 WebDAV 备份保持一致。
+function beijingStamp() {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', '-').replace(/:/g, '-');
+}
+
 function sanitizeDownloadName(value, fallback = 'api-data') {
   const safeName = String(value || '')
     .replace(/[<>:"\\/|?*\u0000-\u001F]/g, '-')
     .replace(/[. ]+$/g, '')
     .trim()
     .slice(0, 80) || fallback;
-  return safeName.toLowerCase().endsWith('.txt') ? safeName : safeName + '.txt';
+  const base = safeName.toLowerCase().endsWith('.txt') ? safeName.slice(0, -4) : safeName;
+  return base + '-' + beijingStamp() + '.txt';
 }
 
 function saveTextDownload(text, filename, successMessage) {
@@ -1696,7 +1702,7 @@ function exportPreferredDomains() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'preferred_domains_backup.json';
+  link.download = 'preferred-domains-backup-' + beijingStamp() + '.json';
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -2890,7 +2896,7 @@ function exportSubs() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'subs_backup.json';
+  a.download = 'subs-backup-' + beijingStamp() + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3698,7 +3704,7 @@ function exportApis() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'apis_backup.json';
+  a.download = 'apis-backup-' + beijingStamp() + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3910,7 +3916,7 @@ function addBlacklistWord() {
 }
 
 function exportBlacklist() {
-  downloadJsonFile(blacklist, 'blacklist_backup.json');
+  downloadJsonFile(blacklist, 'blacklist-backup-' + beijingStamp() + '.json');
   showToast('黑名单已导出', 'success');
 }
 
@@ -4419,7 +4425,7 @@ function initSettingsEnhancements() {
 }
 
 function exportFilterRules() {
-  downloadJsonFile(filterRules, 'filter_rules_backup.json');
+  downloadJsonFile(filterRules, 'filter-rules-backup-' + beijingStamp() + '.json');
   showToast('备注过滤规则已导出', 'success');
 }
 
@@ -4672,8 +4678,7 @@ const BACKUP_SECTION_LABELS = {  subs: '订阅源',
 
 // 备份文件名统一使用北京时间（UTC+8），与服务端 WebDAV 备份保持一致。
 function backupFileName() {
-  const stamp = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, '');
-  return 'sub-api-generator-backup-' + stamp.slice(0, 8) + '-' + stamp.slice(8) + '.json';
+  return 'sub-api-generator-backup-' + beijingStamp() + '.json';
 }
 
 async function exportBackup(button) {
@@ -4832,6 +4837,17 @@ function initWebdavBackupSettings() {
     element.dataset.webdavBound = 'true';
     element.addEventListener('input', () => updateWebdavBackupUi(true));
   });
+  const deleteDialog = $('webdavDeleteDialog');
+  if (deleteDialog && deleteDialog.dataset.bound !== 'true') {
+    deleteDialog.dataset.bound = 'true';
+    $('cancelWebdavDeleteButton')?.addEventListener('click', () => deleteDialog.close());
+    $('confirmWebdavDeleteButton')?.addEventListener('click', () => {
+      const target = deleteDialog._deleteTarget;
+      deleteDialog._deleteTarget = null;
+      deleteDialog.close();
+      if (target) void performWebdavDelete(target.filename, target.button);
+    });
+  }
 }
 
 async function saveWebdavConfig() {
@@ -4929,7 +4945,7 @@ async function restoreWebdavBackup(filename) {
     return;
   }
   if (filename) {
-    openRestoreConfirm('<span><strong>WebDAV</strong>' + filename + '</span>', () => applyWebdavRestore(filename));
+    openRestoreConfirm('<span><strong>WebDAV 备份</strong>' + filename + '</span>', () => applyWebdavRestore(filename));
     return;
   }
   // 未指定文件名时先获取云端列表，确认框中展示将要恢复的具体文件。
@@ -4942,7 +4958,7 @@ async function restoreWebdavBackup(filename) {
       showToast('WebDAV 上没有找到备份文件', 'error');
       return;
     }
-    openRestoreConfirm('<span><strong>WebDAV</strong>' + newest + '</span>', () => applyWebdavRestore(newest));
+    openRestoreConfirm('<span><strong>WebDAV 备份</strong>' + newest + '</span>', () => applyWebdavRestore(newest));
   } catch (error) {
     showToast(error.message || '获取云端备份列表失败', 'error', () => restoreWebdavBackup());
   } finally {
@@ -4953,7 +4969,13 @@ async function restoreWebdavBackup(filename) {
 // ======================== WebDAV 云端备份列表 ========================
 // 兼容旧命名：时间戳部分同时接受 - 和 _ 连接符。
 function formatBackupFilenameTime(filename) {
-  const match = String(filename || '').match(/[-_](\d{8})[-_](\d{6})\.json$/i);
+  const name = String(filename || '');
+  // 当前格式：-2026-09-13-12-30-45；兼容旧紧凑格式（-20260913-123045 / _20260913_123045）。
+  const extended = name.match(/[-_](\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.json$/i);
+  if (extended) {
+    return extended[1] + '-' + extended[2] + '-' + extended[3] + ' ' + extended[4] + ':' + extended[5] + ':' + extended[6] + '（北京时间）';
+  }
+  const match = name.match(/[-_](\d{8})[-_](\d{6})\.json$/i);
   if (!match) return '';
   const date = match[1];
   const time = match[2];
@@ -5055,15 +5077,25 @@ async function downloadWebdavBackup(filename) {
   }
 }
 
-async function deleteWebdavBackup(filename, button) {
-  if (!settingConfirm('确定删除云端备份 ' + filename + ' 吗？删除后无法恢复。')) return;
+function deleteWebdavBackup(filename, button) {
+  const dialog = $('webdavDeleteDialog');
+  if (!dialog || typeof dialog.showModal !== 'function') {
+    if (settingConfirm('确定删除云端备份 ' + filename + ' 吗？删除后无法恢复。')) void performWebdavDelete(filename, button);
+    return;
+  }
+  $('webdavDeleteStats').innerHTML = '<span><strong>云端备份</strong>' + filename + '</span>';
+  dialog._deleteTarget = { filename, button };
+  dialog.showModal();
+}
+
+async function performWebdavDelete(filename, button) {
   setButtonBusy(button, true, '删除中…');
   try {
     await webdavAction('/api/backup/webdav/delete', '删除云端备份', { filename });
     showToast('云端备份已删除：' + filename, 'success');
     void refreshWebdavRemoteList();
   } catch (error) {
-    showToast(error.message || '删除云端备份失败', 'error', () => deleteWebdavBackup(filename, button));
+    showToast(error.message || '删除云端备份失败', 'error', () => performWebdavDelete(filename, button));
   } finally {
     setButtonBusy(button, false);
   }

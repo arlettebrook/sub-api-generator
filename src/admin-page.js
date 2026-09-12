@@ -671,6 +671,16 @@ export const adminHTML = `
           <button class="btn-primary" type="button" id="confirmRestoreButton">确认恢复</button>
         </div>
       </dialog>
+      <dialog class="confirm-dialog" id="webdavDeleteDialog" aria-labelledby="webdavDeleteTitle" aria-describedby="webdavDeleteMessage">
+        <div class="confirm-dialog-icon" aria-hidden="true">🗑</div>
+        <h3 id="webdavDeleteTitle">删除云端备份</h3>
+        <p id="webdavDeleteMessage">删除后无法恢复，请确认要删除的备份。</p>
+        <div class="import-preview-stats" id="webdavDeleteStats"></div>
+        <div class="confirm-dialog-actions">
+          <button class="btn-outline" type="button" id="cancelWebdavDeleteButton">取消</button>
+          <button class="btn-primary" type="button" id="confirmWebdavDeleteButton">确认删除</button>
+        </div>
+      </dialog>
     </div>
   </div>
   <dialog class="confirm-dialog rule-import-dialog" id="ruleImportPreviewDialog" aria-labelledby="ruleImportPreviewTitle" aria-describedby="ruleImportPreviewMessage">

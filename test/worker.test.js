@@ -702,7 +702,7 @@ test("configures WebDAV and backs up and restores through it", async () => {
   }
   const xmlListing = () => '<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">'
     + [...oldBackupNames, ...Object.keys(storedFiles).map((url) => url.split("/").pop())]
-      .map((name, index) => `<D:response><D:href>/backup/${name}</D:href><D:propstat><D:prop><D:getcontentlength>${1024 * (index + 1)}</D:getcontentlength><D:getlastmodified>Mon, 01 Sep 2025 00:00:00 GMT</D:getlastmodified></D:prop></D:propstat></D:response>`)
+      .map((name, index) => `<D:response><D:href>/backup/${name}</D:href><D:propstat><D:prop><D:getcontentlength>${1024 * (index + 1)}</D:getcontentlength><D:getlastmodified>${name === "my-backup.json" ? "Mon, 01 Sep 2024 00:00:00 GMT" : "Mon, 01 Sep 2025 00:00:00 GMT"}</D:getlastmodified></D:prop></D:propstat></D:response>`)
       .join("")
     + "</D:multistatus>";
   const originalFetch = globalThis.fetch;
@@ -732,12 +732,12 @@ test("configures WebDAV and backs up and restores through it", async () => {
     }), runtime);
     assert.equal(uploadResponse.status, 200);
     const uploadJson = await uploadResponse.json();
-    assert.match(uploadJson.filename, /^my-backup-\d{8}-\d{6}\.json$/);
+    assert.match(uploadJson.filename, /^my-backup-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.json$/);
     assert.equal(putAttempts, 2);
     assert.ok(webdavRequests.some((request) => request.method === "MKCOL" && request.url === "https://dav.example.com/backup/"));
     assert.ok(webdavRequests.some((request) => request.method === "MKCOL" && request.url === "https://dav.example.com/backup/sub-api-generator-backup/"));
     const put = webdavRequests.find((request) => request.method === "PUT");
-    assert.match(put.url, /^https:\/\/dav\.example\.com\/backup\/sub-api-generator-backup\/my-backup-\d{8}-\d{6}\.json$/);
+    assert.match(put.url, /^https:\/\/dav\.example\.com\/backup\/sub-api-generator-backup\/my-backup-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.json$/);
     assert.equal(put.headers.Authorization, "Basic " + btoa("user:pass"));
     const uploaded = JSON.parse(put.body);
     assert.equal(uploaded.version, 1);

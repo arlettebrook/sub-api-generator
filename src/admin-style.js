@@ -1075,6 +1075,26 @@ export const adminStyle = `
     font-size: 16px;
   }
 
+  /* 恢复/删除确认框中的统计标签数量不定（可能只有 1 个且含长文件名），改用弹性布局避免被压缩成窄条。 */
+  #restoreConfirmDialog .import-preview-stats,
+  #webdavDeleteDialog .import-preview-stats {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  #restoreConfirmDialog .import-preview-stats span,
+  #webdavDeleteDialog .import-preview-stats span {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 9px 12px;
+    word-break: break-all;
+  }
+
+  #restoreConfirmDialog .import-preview-stats strong,
+  #webdavDeleteDialog .import-preview-stats strong {
+    font-size: 12px;
+  }
+
   .blacklist-row {
     display: flex;
     align-items: center;

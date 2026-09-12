@@ -189,10 +189,9 @@ export async function webdavDownload(config, filename) {
   return response.text();
 }
 
-// 备份文件名统一使用北京时间（UTC+8）时间戳，例如 sub-api-generator-backup-20260913-123045.json。
+// 备份文件名统一使用北京时间（UTC+8）时间戳，例如 sub-api-generator-backup-2026-09-13-12-30-45.json。
 export function beijingBackupToken(date = new Date()) {
-  const stamp = new Date(date.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, "");
-  return `${stamp.slice(0, 8)}-${stamp.slice(8)}`;
+  return new Date(date.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace("T", "-").replace(/:/g, "-");
 }
 
 export function timestampedBackupFilename(baseFilename, date = new Date()) {
@@ -201,18 +200,42 @@ export function timestampedBackupFilename(baseFilename, date = new Date()) {
 
 function backupFilenamePattern(baseFilename) {
   const stem = baseFilename.replace(/\.json$/i, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // 兼容旧命名：时间戳部分同时接受 - 和 _ 连接符。
-  return new RegExp(`^${stem}(?:[-_](\\d{8}[-_]\\d{6}))?\\.json$`, "i");
+  // 兼容旧命名：时间戳部分同时接受旧紧凑格式与新连字符格式，连接符接受 - 和 _。
+  return new RegExp(`^${stem}(?:[-_](\\d{8}[-_]\\d{6}|\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2}))?\\.json$`, "i");
 }
 
 export function isValidBackupFilename(baseFilename, filename) {
   return typeof filename === "string" && backupFilenamePattern(baseFilename).test(filename);
 }
 
-// 按时间戳倒序（最新在前）；不带时间戳的旧文件视为最旧。
+// 解析文件名中的北京时间戳，兼容旧紧凑格式（20260913-123045）与新格式（2026-09-13-12-30-45）。
+function parseBackupTokenMs(name) {
+  const newToken = name.match(/[-_](\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.json$/i);
+  if (newToken) {
+    const raw = newToken[1];
+    const parsed = Date.parse(`${raw.slice(0, 10)}T${raw.slice(11, 13)}:${raw.slice(14, 16)}:${raw.slice(17, 19)}+08:00`);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const oldToken = name.match(/[-_](\d{8})[-_](\d{6})\.json$/i);
+  if (oldToken) {
+    const date = oldToken[1];
+    const time = oldToken[2];
+    const parsed = Date.parse(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)}+08:00`);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return NaN;
+}
+
+// 解析备份时间：优先取文件名中的北京时间戳，其次用服务端修改时间，均无则为 0（视为最旧）。
+function backupTimeValue(name, lastModified) {
+  const parsed = parseBackupTokenMs(name);
+  if (Number.isFinite(parsed)) return parsed;
+  return Number(lastModified) || 0;
+}
+
+// 按备份时间倒序（最新在前）；无时间信息的旧文件视为最旧。
 export function sortBackupFilenames(filenames) {
-  const token = (filename) => filename.match(/[-_](\d{8}[-_]\d{6})\.json$/i)?.[1] || "";
-  return [...filenames].sort((left, right) => token(right).localeCompare(token(left)));
+  return [...filenames].sort((left, right) => backupTimeValue(right, 0) - backupTimeValue(left, 0));
 }
 
 export async function webdavDelete(config, filename) {
@@ -261,10 +284,9 @@ export async function webdavListBackupEntries(config, baseFilename) {
   return sortBackupEntries(entries);
 }
 
-// 按时间戳倒序（最新在前）；不带时间戳的旧文件视为最旧。
+// 按备份时间倒序（最新在前）；文件名无时间戳的旧文件回退用服务端修改时间比较。
 export function sortBackupEntries(entries) {
-  const token = (name) => name.match(/[-_](\d{8}[-_]\d{6})\.json$/i)?.[1] || "";
-  return [...entries].sort((left, right) => token(right.name).localeCompare(token(left.name)));
+  return [...entries].sort((left, right) => backupTimeValue(right.name, right.lastModified) - backupTimeValue(left.name, left.lastModified));
 }
 
 export async function webdavListBackups(config, baseFilename) {
