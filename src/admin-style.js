@@ -3141,6 +3141,9 @@ export const adminStyle = `
   .preferred-domain-row .remark-input,
   .preferred-domain-row .host-input { min-width: 0; width: auto; }
   .preferred-domain-row .source-delete-button { white-space: nowrap; }
+  /* 列表为共享列宽的网格：检测按钮在“检测/检测中…”两种文案间切换，
+     固定其最小宽度可避免点击检测时整列变宽、所有行横向伸缩。 */
+  .preferred-domain-row .source-check-button { min-width: 84px; }
   #preferredDomainsList .source-health { max-width: none; min-width: 0; }
   #preferredDomainsList .source-health strong {
     display: -webkit-box;
