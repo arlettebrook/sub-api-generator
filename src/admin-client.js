@@ -407,13 +407,15 @@ async function logout() {
   const button = document.querySelector('.btn-logout');
   if (button) button.disabled = true;
   try {
+    // redirect: 'manual' 避免跟随 /logout -> / -> 伪装站点的跨域重定向导致 Failed to fetch；
+    // opaqueredirect 响应 status 为 0，因此不能按 response.ok 判断成败
     const response = await fetch('/logout', {
       method: 'POST',
       credentials: 'same-origin',
       cache: 'no-store',
-      redirect: 'follow',
+      redirect: 'manual',
     });
-    if (!response.ok) throw new Error('退出登录请求失败');
+    if (!response.ok && response.type !== 'opaqueredirect') throw new Error('退出登录请求失败');
   } catch (error) {
     if (button) button.disabled = false;
     showToast(error.message, 'error');
