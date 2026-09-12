@@ -2173,14 +2173,16 @@ export const adminStyle = `
 
   #subsList,
   #apisList,
-  #customApisList {
+  #customApisList,
+  #preferredDomainsList {
     display: grid;
     gap: 8px;
   }
 
   #subsList .row,
   #apisList .row,
-  #customApisList .row {
+  #customApisList .row,
+  #preferredDomainsList .row {
     margin-bottom: 0;
     border-color: var(--border-color);
     background: var(--bg-tertiary);
@@ -2188,7 +2190,8 @@ export const adminStyle = `
 
   /* 管理列表可能包含大量数据源。让浏览器跳过视口外行的绘制，滚动时只处理当前可见区域。 */
   #subsList .row,
-  #apisList .row {
+  #apisList .row,
+  #preferredDomainsList .row {
     content-visibility: auto;
     contain-intrinsic-size: 0 86px;
   }
@@ -4595,13 +4598,15 @@ export const adminStyle = `
     }
     /* 管理列表移动端按信息层级排列，避免四个操作按钮在窄屏挤成一行。 */
     #subsList .row,
-    #apisList .row {
+    #apisList .row,
+    #preferredDomainsList .row {
       align-items: center;
       gap: 8px;
       padding: 10px;
     }
     #subsList .row .source-select,
-    #apisList .row .source-select {
+    #apisList .row .source-select,
+    #preferredDomainsList .row .source-select {
       order: 1;
       flex: 0 0 20px;
       width: 16px;
@@ -4609,14 +4614,16 @@ export const adminStyle = `
       margin: 0;
     }
     #subsList .row .remark-input,
-    #apisList .row .remark-input {
+    #apisList .row .remark-input,
+    #preferredDomainsList .row .remark-input {
       order: 1;
       flex: 1 1 auto;
       width: auto;
       min-width: 0;
     }
     #subsList .row .copy-source-button,
-    #apisList .row .copy-source-button {
+    #apisList .row .copy-source-button,
+    #preferredDomainsList .row .copy-source-button {
       order: 1;
       flex: 0 0 32px;
       width: 32px;
@@ -4624,14 +4631,16 @@ export const adminStyle = `
       padding: 0;
     }
     #subsList .row .host-input,
-    #apisList .row .host-input {
+    #apisList .row .host-input,
+    #preferredDomainsList .row .host-input {
       order: 2;
       flex: 1 1 100%;
       width: 100%;
       min-width: 0;
     }
     #subsList .row .source-health,
-    #apisList .row .source-health {
+    #apisList .row .source-health,
+    #preferredDomainsList .row .source-health {
       order: 3;
       flex: 1 1 100%;
       width: 100%;
@@ -4654,15 +4663,21 @@ export const adminStyle = `
       font-size: 12px;
     }
     .preferred-domain-row {
-      grid-template-columns: 1fr;
+      display: flex;
       gap: 10px;
     }
-    .preferred-domain-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-    .preferred-domain-actions > * {
+    .preferred-domain-row .preferred-domain-identity,
+    .preferred-domain-row .preferred-domain-records {
+      flex: 1 1 100%;
       width: 100%;
+    }
+    .preferred-domain-row .source-check-button,
+    .preferred-domain-row .source-view-button,
+    .preferred-domain-row .source-download-button,
+    .preferred-domain-row .source-delete-button {
+      flex: 1 1 calc(50% - 5px);
+      width: calc(50% - 5px);
+      min-width: 0;
       min-height: 40px;
     }
     .nodes-count {

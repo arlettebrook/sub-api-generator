@@ -1560,39 +1560,38 @@ function renderPreferredDomains() {
       records.appendChild(group);
     });
 
-    const actions = document.createElement('div');
-    actions.className = 'preferred-domain-actions';
-    const refresh = document.createElement('button');
-    refresh.type = 'button';
-    refresh.className = 'btn-outline icon-action';
-    refresh.textContent = '🔄 刷新';
-    refresh.setAttribute('aria-label', '刷新域名解析 ' + domain);
-    refresh.onclick = async () => {
-      setButtonBusy(refresh, true, '解析中…');
-      try {
-        const updated = await readJsonResponse('/api/preferred-domains', '域名解析', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }) });
-        preferredDomains[domain] = updated;
-        renderPreferredDomains();
-        showToast('域名解析已刷新', 'success');
-      } catch (error) { showToast(error.message, 'error'); setButtonBusy(refresh, false); }
+    const viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'btn-outline icon-action source-view-button';
+    viewBtn.textContent = '👁 查看';
+    viewBtn.setAttribute('aria-label', '查看优选域名原始数据 ' + domain);
+    viewBtn.onclick = async () => {
+      viewBtn.disabled = true;
+      viewBtn.textContent = '⏳ 检测中…';
+      try { await openSourceRawDialog('domains', domain); }
+      finally { viewBtn.disabled = false; viewBtn.textContent = '👁 查看'; }
     };
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'del-btn source-delete-button';
-    remove.textContent = '🗑 删除';
-    remove.setAttribute('aria-label', '删除优选域名 ' + domain);
-    remove.onclick = async () => {
-      if (!window.confirm('确定删除域名 ' + domain + ' 吗？')) return;
-      setButtonBusy(remove, true, '删除中…');
+    const downloadBtn = document.createElement('button');
+    downloadBtn.type = 'button';
+    downloadBtn.className = 'btn-outline icon-action source-download-button';
+    downloadBtn.textContent = '⬇ 下载';
+    downloadBtn.setAttribute('aria-label', '下载优选域名节点数据 ' + domain);
+    downloadBtn.onclick = () => downloadSourceData('domains', domain, entry, downloadBtn);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del-btn source-delete-button';
+    delBtn.textContent = '🗑 删除';
+    delBtn.setAttribute('aria-label', '删除优选域名 ' + domain);
+    delBtn.onclick = async () => {
+      delBtn.disabled = true;
+      delBtn.textContent = '⏳ 删除中…';
       try {
         await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
         delete preferredDomains[domain];
         renderPreferredDomains();
-        showToast('域名已删除', 'success');
-      } catch (error) { showToast(error.message, 'error'); setButtonBusy(remove, false); }
+        showToast('已删除优选域名', 'success');
+      } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
     };
-    actions.append(refresh, remove);
-    row.append(select, remarkInput, identity, createCopyButton(domain, '域名'), healthForPreferredDomain(domain), createSourceCheckButton('domains', domain), records, actions);
+    row.append(select, remarkInput, identity, records, createCopyButton(domain, '域名'), healthForPreferredDomain(domain), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
     fragment.appendChild(row);
   });
   container.appendChild(fragment);
