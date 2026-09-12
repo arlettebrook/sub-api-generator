@@ -372,6 +372,9 @@ export const adminHTML = `
       <span aria-hidden="true">⌕</span>
       <input id="customApiSearch" class="list-search" type="search" placeholder="搜索访问路径或备注" aria-label="搜索优选 API" autocomplete="off" />
     </label>
+    <button type="button" id="exportCustomApisButton">📤 导出配置</button>
+    <button type="button" id="importCustomApisButton">📥 导入配置</button>
+    <input type="file" id="importCustomApisFile" accept=".json,application/json" style="display:none" />
   </div>
   <div id="customApisList"></div>
 </div>

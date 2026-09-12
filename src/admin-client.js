@@ -1524,6 +1524,41 @@ async function loadCustomApis(loadSources = false) {
   renderNewCustomApiSources();
 }
 
+function exportCustomApis() {
+  const blob = new Blob([JSON.stringify(customApis, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'custom-apis-backup-' + beijingStamp() + '.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast('配置已导出', 'success');
+}
+
+function importCustomApis(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('配置格式无效');
+      const response = await fetch('/api/custom-apis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) throw new Error('请求失败：' + response.status);
+      await loadCustomApis();
+      showToast('导入成功，共 ' + Object.keys(customApis).length + ' 个优选 API', 'success');
+    } catch (error) { showToast('导入失败：' + error.message, 'error'); }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
 function sourceEntries() {
   return [
     ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
@@ -4567,6 +4602,18 @@ function bindPageControls() {
       renderCustomApis();
       syncRouteState();
     });
+  }
+  const exportCustomApisButton = $('exportCustomApisButton');
+  if (exportCustomApisButton && exportCustomApisButton.dataset.bound !== 'true') {
+    exportCustomApisButton.dataset.bound = 'true';
+    exportCustomApisButton.addEventListener('click', exportCustomApis);
+  }
+  const importCustomApisButton = $('importCustomApisButton');
+  const importCustomApisFile = $('importCustomApisFile');
+  if (importCustomApisButton && importCustomApisFile && importCustomApisButton.dataset.bound !== 'true') {
+    importCustomApisButton.dataset.bound = 'true';
+    importCustomApisButton.addEventListener('click', () => importCustomApisFile.click());
+    importCustomApisFile.addEventListener('change', importCustomApis);
   }
   [nodesSearchEl, nodesRegionFilterEl, nodesSortEl, nodesSourceFilterEl, nodesStatusFilterEl].forEach((element) => {
     if (!element || element.dataset.bound === 'true') return;
