@@ -637,6 +637,45 @@ test("manages preferred domains and resolves A, AAAA, and CNAME records", async 
   }
 });
 
+test("refreshes preferred domain status after detection instead of keeping preview data", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  let address = "1.2.3.4";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const type = new URL(String(resource)).searchParams.get("type");
+    const answer = type === "A"
+      ? [{ type: 1, data: address }]
+      : type === "AAAA"
+        ? [{ type: 28, data: "2001:db8::1" }]
+        : [{ type: 5, data: "edge.example.net." }];
+    return new Response(JSON.stringify({ Status: 0, Answer: answer }), { status: 200 });
+  };
+  try {
+    await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+      method: "POST", headers, body: JSON.stringify({ domain: "refresh.example.com" }),
+    }), runtime);
+    await worker.fetch(new Request("https://example.test/api/source-raw", {
+      method: "POST", headers, body: JSON.stringify({ type: "domains", key: "refresh.example.com" }),
+    }), runtime);
+
+    address = "9.8.7.6";
+    const detected = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+      method: "POST", headers, body: JSON.stringify({ domain: "refresh.example.com" }),
+    }), runtime);
+    assert.equal((await detected.json()).records.A[0], "9.8.7.6");
+
+    const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status", { headers }), runtime);
+    const status = await statusResponse.json();
+    assert.equal(status.domains["refresh.example.com"].dnsRecords.A[0], "9.8.7.6");
+    assert.equal(status.domains["refresh.example.com"].durationMs >= 0, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("uses DNS provider failover and short cache with classified errors", async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];

@@ -270,6 +270,7 @@ async function handlePostPreferredDomain(request, env) {
   if (!Object.prototype.hasOwnProperty.call(configured, domain) && Object.keys(configured).length >= MAX_CONFIG_ENTRIES) {
     return pagesTextResponse(`优选域名不能超过 ${MAX_CONFIG_ENTRIES} 个`, 400);
   }
+  const startedAt = Date.now();
   const result = await subscriptions.resolvePreferredDomainRecords(domain, { force: true });
   const errors = Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.message || "DNS 查询失败"]));
   const entry = {
@@ -283,6 +284,9 @@ async function handlePostPreferredDomain(request, env) {
   };
   configured[domain] = entry;
   await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
+  subscriptions.recordPreferredDomainStatus(domain, result, Date.now() - startedAt);
+  const snapshot = subscriptions.getSourceStatuses(await env.KV.get(KV_KEY_SUBS, "json"), await env.KV.get(KV_KEY_APIS, "json"), configured);
+  await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
   return pagesJsonResponse(entry);
 }
 

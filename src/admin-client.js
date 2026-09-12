@@ -1509,6 +1509,7 @@ function sourceEntries() {
 }
 
 let sourceStatuses = { subs: {}, apis: {}, domains: {} };
+let sourceStatusRequestVersion = 0;
 let preferredDomains = {};
 
 function formatPreferredDomainTime(value) {
@@ -1796,6 +1797,7 @@ function refreshRenderedSourceStatuses(sources = null) {
 }
 
 async function loadSourceStatuses(mode = 'read', sources = []) {
+  const requestVersion = ++sourceStatusRequestVersion;
   const manual = mode !== 'read';
   const refreshButton = $('sourceStatusRefreshButton');
   const idleText = refreshButton?.textContent;
@@ -1827,20 +1829,24 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(mode === 'selected' ? { scope: 'selected', sources } : { scope: mode }),
     };
-    sourceStatuses = await readJsonResponse(
+    const nextStatuses = await readJsonResponse(
       manual ? '/api/source-status/check' : '/api/source-status',
       '数据源状态',
       requestOptions,
     );
+    // 页面初始化等旧请求可能晚于手动检测返回，不能覆盖较新的状态。
+    if (requestVersion !== sourceStatusRequestVersion) return { ok: true, stale: true };
+    sourceStatuses = nextStatuses;
     refreshRenderedSourceStatuses();
     if (nodesContainer && currentNodes.length) renderNodeView();
   } catch (error) {
+    if (requestVersion !== sourceStatusRequestVersion) return { ok: true, stale: true };
     sourceStatuses = previousStatuses;
     refreshRenderedSourceStatuses();
     // 状态接口不可用时保留配置页面，不阻断管理操作。
     return { ok: false, error };
   } finally {
-    if (manual && refreshButton) {
+    if (manual && refreshButton && requestVersion === sourceStatusRequestVersion) {
       refreshButton.disabled = false;
       refreshButton.textContent = idleText || '检测数据源';
     }

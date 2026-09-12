@@ -249,6 +249,35 @@ function recordSourceStatus(type, key, details) {
   });
 }
 
+// DNS 管理操作本身不会经过 handleRoot，因此要同步刷新该域名的状态缓存。
+export function recordPreferredDomainStatus(domain, result, durationMs = null) {
+  const records = isPlainObject(result?.records) ? result.records : {};
+  const errors = Array.isArray(result?.errors) ? result.errors : [];
+  const dnsRecords = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, Array.isArray(records[name]) ? records[name] : []]));
+  const dnsErrors = Object.fromEntries(errors.filter((item) => item?.recordType).map((item) => [item.recordType, item.message || "DNS 查询失败"]));
+  const dnsErrorCodes = Object.fromEntries(errors.filter((item) => item?.recordType).map((item) => [item.recordType, item.code || "DNS_ERROR"]));
+  const dnsProviders = isPlainObject(result?.providers) ? result.providers : {};
+  const dnsRecordCounts = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, dnsRecords[name].length]));
+  const nodeCount = Object.values(dnsRecordCounts).reduce((total, count) => total + count, 0);
+  const timestamp = new Date().toISOString();
+  recordSourceStatus("domains", domain, {
+    state: nodeCount > 0 ? "success" : "empty",
+    nodeCount,
+    rawNodeCount: nodeCount,
+    dnsRecords,
+    dnsErrors,
+    dnsErrorCodes,
+    dnsProviders,
+    dnsRecordCounts,
+    durationMs: Number.isFinite(durationMs) ? durationMs : null,
+    error: errors.length ? errors.map((item) => item.message || "DNS 查询失败").join("；") : "",
+    errorType: errors.length ? "DNS_PARTIAL_FAILURE" : "",
+    statusCode: null,
+    lastAttemptAt: timestamp,
+    ...(nodeCount > 0 ? { lastSuccessAt: timestamp, lastSuccessNodeCount: nodeCount, lastSuccessRawNodeCount: nodeCount } : {}),
+  });
+}
+
 export function getSourceStatuses(subsConfig, apisConfig, domainsConfig) {
   const result = { subs: {}, apis: {}, domains: {} };
   for (const [type, config] of [["subs", subsConfig], ["apis", apisConfig], ["domains", domainsConfig]]) {
