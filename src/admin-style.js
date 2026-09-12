@@ -3125,14 +3125,35 @@ export const adminStyle = `
   }
 
   .preferred-domain-row {
-    display: flex;
-    flex-wrap: wrap;
+    /* 固定网格列：复选框 | 备注 | 域名 | 复制 | 健康状态 | 检测/查看/下载/删除，保证多行横向对齐。 */
+    display: grid;
+    grid-template-columns: auto 140px minmax(180px, 1.2fr) 32px minmax(220px, 1.4fr) auto auto auto auto;
     align-items: center;
     gap: 14px;
     padding: 12px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: var(--bg-secondary);
+  }
+
+  /* 覆盖 .row input 的 flex/min-width，避免网格列被撑开。 */
+  .preferred-domain-row .source-select { width: 16px; min-width: 16px; margin: 0; }
+  .preferred-domain-row .remark-input,
+  .preferred-domain-row .host-input { min-width: 0; width: auto; }
+  .preferred-domain-row .source-delete-button { white-space: nowrap; }
+  #preferredDomainsList .source-health { max-width: none; min-width: 0; }
+  #preferredDomainsList .source-health strong {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  #preferredDomainsList .source-health-error-detail {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: none;
   }
 
   .preferred-domain-identity,

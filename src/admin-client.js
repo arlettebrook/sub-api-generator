@@ -1792,6 +1792,9 @@ function createSourceHealth(type, key, statusOverride = null) {
   const status = statusOverride || getSourceStatus(type, key);
   const state = ['success', 'filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error', 'checking'].includes(status.state) ? status.state : 'idle';
   const isDomain = type === 'domains';
+  // 域名的多记录错误串可能很长，行内只显示第一段，完整内容放悬浮提示。
+  const fullError = status.error || '';
+  const shortError = isDomain ? (fullError.split('；')[0] || fullError).slice(0, 80) : fullError;
   const health = document.createElement('div');
   health.className = 'source-health source-health-' + state;
   let text = '未检测';
@@ -1802,7 +1805,7 @@ function createSourceHealth(type, key, statusOverride = null) {
   } else if (state === 'success') text = '正常 · ' + status.nodeCount + ' 个节点';
   if (state === 'filtered') text = '已过滤 · 原始 ' + status.rawNodeCount + ' 个';
   if (state === 'empty') text = '返回空数据';
-  if (state === 'timeout' || state === 'http-error' || state === 'network-error' || state === 'error') text = sourceStatusLabel(state) + ' · ' + (status.error || '请求失败');
+  if (state === 'timeout' || state === 'http-error' || state === 'network-error' || state === 'error') text = sourceStatusLabel(state) + ' · ' + (shortError || '请求失败');
   if (state === 'checking') text = isDomain ? 'DNS 查询中…' : '检测中…';
   if (status.durationMs !== null && state !== 'idle') text += ' · ' + status.durationMs + ' ms';
   const primary = document.createElement('strong');
@@ -1820,7 +1823,8 @@ function createSourceHealth(type, key, statusOverride = null) {
   if (status.error) {
     const error = document.createElement('small');
     error.className = 'source-health-error-detail';
-    error.textContent = '最近错误：' + (status.errorType && isDomain ? '[' + dnsErrorCodeLabel(status.errorType) + '] ' : '') + status.error;
+    error.textContent = '最近错误：' + (status.errorType && isDomain ? '[' + dnsErrorCodeLabel(status.errorType) + '] ' : '') + shortError + (shortError.length < fullError.length ? '…' : '');
+    error.title = fullError;
     health.appendChild(error);
   }
   health.title = (status.lastAttemptAt ? '最后检测：' + formatSourceTime(status.lastAttemptAt) : '尚未检测此数据源') + (status.error ? '；最近错误：' + status.error : '');
