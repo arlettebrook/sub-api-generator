@@ -402,14 +402,16 @@ export const adminHTML = `
           <h4>伪装首页</h4>
           <p>启用后，只有通过管理入口路径才能打开管理面板；其他页面会跳转到指定地址。</p>
         </div>
-        <span class="section-summary" id="camouflageSummary">未启用</span>
+        <div class="setting-heading-actions">
+          <label class="custom-api-switch camouflage-enable-field">
+            <input id="camouflageEnabled" type="checkbox" />
+            <span class="custom-api-switch-track" aria-hidden="true"></span>
+            <span class="custom-api-switch-text">启用伪装首页</span>
+          </label>
+          <span class="section-summary" id="camouflageSummary">未启用</span>
+        </div>
       </div>
       <div class="camouflage-settings-grid">
-        <label class="custom-api-switch camouflage-enable-field">
-          <input id="camouflageEnabled" type="checkbox" />
-          <span class="custom-api-switch-track" aria-hidden="true"></span>
-          <span class="custom-api-switch-text">启用伪装首页</span>
-        </label>
         <label class="form-field">
           <span>管理入口路径</span>
           <input id="camouflageAccessPath" type="text" maxlength="128" placeholder="例如：secure-admin" autocomplete="off" />

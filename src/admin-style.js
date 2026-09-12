@@ -396,6 +396,14 @@ export const adminStyle = `
     padding-left: 12px;
   }
 
+  .setting-heading-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
   .setting-block-heading::before {
     position: absolute;
     top: 2px;
@@ -414,17 +422,13 @@ export const adminStyle = `
 
   .camouflage-settings-grid {
     display: grid;
-    grid-template-columns: minmax(180px, .8fr) minmax(0, 1fr) minmax(0, 1.35fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
     gap: 12px;
   }
 
   .camouflage-enable-field {
-    min-height: 42px;
-    padding: 0 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
+    min-height: 34px;
   }
 
   .settings-inline-footer {
@@ -3855,6 +3859,11 @@ export const adminStyle = `
     }
     .camouflage-settings-grid {
       grid-template-columns: 1fr;
+    }
+    .setting-heading-actions {
+      align-items: flex-end;
+      flex-direction: column-reverse;
+      gap: 6px;
     }
     .settings-inline-footer {
       align-items: stretch;

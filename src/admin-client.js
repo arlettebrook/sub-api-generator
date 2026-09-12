@@ -156,7 +156,7 @@ let subsSavePending = 0;
 let apisSavePending = 0;
 let subsDirty = false;
 let apisDirty = false;
-let camouflageSettings = { enabled: false, accessPath: '', redirectUrl: '/' };
+let camouflageSettings = { enabled: false, accessPath: '', redirectUrl: '' };
 let savedCamouflageSettings = { ...camouflageSettings };
 let camouflageDirty = false;
 
@@ -3511,11 +3511,11 @@ function initBlacklistForm() {
 
 function normalizeCamouflageSettingsClient(value) {
   const source = value && typeof value === 'object' && value.camouflage && typeof value.camouflage === 'object' ? value.camouflage : value;
-  if (!source || typeof source !== 'object') return { enabled: false, accessPath: '', redirectUrl: '/' };
+  if (!source || typeof source !== 'object') return { enabled: false, accessPath: '', redirectUrl: '' };
   return {
     enabled: source.enabled === true,
     accessPath: typeof source.accessPath === 'string' ? source.accessPath.trim().replace(/^\\/+|\\/+$/g, '') : '',
-    redirectUrl: typeof source.redirectUrl === 'string' && source.redirectUrl.trim() ? source.redirectUrl.trim() : '/',
+    redirectUrl: source.redirectUrl === '/' ? '' : (typeof source.redirectUrl === 'string' ? source.redirectUrl.trim() : ''),
   };
 }
 
@@ -3562,7 +3562,7 @@ function readCamouflageSettingsForm() {
   return normalizeCamouflageSettingsClient({
     enabled: $('camouflageEnabled')?.checked,
     accessPath: $('camouflageAccessPath')?.value || '',
-    redirectUrl: $('camouflageRedirectUrl')?.value || '/',
+    redirectUrl: $('camouflageRedirectUrl')?.value || '',
   });
 }
 
