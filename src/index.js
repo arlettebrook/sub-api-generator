@@ -240,11 +240,6 @@ async function handleGetSourceStatuses(env) {
   return readSourceStatuses(env);
 }
 
-const DNS_RECORD_TYPES = [
-  { name: "A", code: 1 },
-  { name: "AAAA", code: 28 },
-  { name: "CNAME", code: 5 },
-];
 const DOMAIN_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 
 function normalizePreferredDomain(value) {
@@ -258,37 +253,6 @@ function normalizePreferredDomain(value) {
     throw new Error("域名格式无效");
   }
   return domain;
-}
-
-async function queryPreferredDomain(domain) {
-  const results = {};
-  const errors = {};
-  await Promise.all(DNS_RECORD_TYPES.map(async ({ name, code }) => {
-    try {
-      const endpoint = new URL("https://cloudflare-dns.com/dns-query");
-      endpoint.searchParams.set("name", domain);
-      endpoint.searchParams.set("type", name);
-      const response = await fetch(endpoint, {
-        headers: { Accept: "application/dns-json" },
-      });
-      if (!response.ok) throw new Error(`DNS 服务返回 HTTP ${response.status}`);
-      const payload = await response.json();
-      if (Number(payload.Status) !== 0) {
-        throw new Error(payload.Comment || `DNS 查询失败（状态 ${payload.Status}）`);
-      }
-      results[name] = (Array.isArray(payload.Answer) ? payload.Answer : [])
-        .filter((answer) => Number(answer.type) === code && typeof answer.data === "string")
-        .map((answer) => answer.data.trim())
-        .filter(Boolean);
-    } catch (error) {
-      results[name] = [];
-      errors[name] = error.message || "DNS 查询失败";
-    }
-  }));
-  return {
-    records: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, results[name] || []])),
-    errors,
-  };
 }
 
 async function handleGetPreferredDomains(env) {
@@ -306,12 +270,15 @@ async function handlePostPreferredDomain(request, env) {
   if (!Object.prototype.hasOwnProperty.call(configured, domain) && Object.keys(configured).length >= MAX_CONFIG_ENTRIES) {
     return pagesTextResponse(`优选域名不能超过 ${MAX_CONFIG_ENTRIES} 个`, 400);
   }
-  const result = await queryPreferredDomain(domain);
+  const result = await subscriptions.resolvePreferredDomainRecords(domain, { force: true });
+  const errors = Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.message || "DNS 查询失败"]));
   const entry = {
     domain,
     remark: typeof body?.remark === "string" ? body.remark.trim().slice(0, 200) : (isPlainObject(configured[domain]) ? configured[domain].remark || "" : ""),
     records: result.records,
-    errors: result.errors,
+    errors,
+    dnsErrorCodes: Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.code || "DNS_ERROR"])),
+    dnsProviders: result.providers || {},
     checkedAt: Date.now(),
   };
   configured[domain] = entry;
@@ -373,7 +340,7 @@ async function checkSourceStatuses(env, request) {
     return pagesTextResponse("检测范围无效", 400);
   }
   await getSourceStatusSnapshot(env);
-  const checkResponse = await subscriptions.handleRoot(env, sourceSelection);
+  const checkResponse = await subscriptions.handleRoot(env, sourceSelection, { forceDns: true });
   if (!checkResponse.ok) return checkResponse;
   const snapshot = await getSourceStatusSnapshot(env, false);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));

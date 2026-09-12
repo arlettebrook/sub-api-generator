@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import worker from "../src/index.js";
+import { resolvePreferredDomainRecords } from "../src/subscriptions.js";
 import { adminHTML } from "../src/admin-page.js";
 import { adminClientScript } from "../src/admin-client.js";
 import { sha256Hex } from "../src/auth.js";
@@ -626,6 +627,49 @@ test("manages preferred domains and resolves A, AAAA, and CNAME records", async 
     }), runtime);
     assert.equal(deleted.status, 200);
     assert.deepEqual(values.preferred_domains, {});
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("uses DNS provider failover and short cache with classified errors", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    requests.push(url.hostname);
+    if (url.hostname === "cloudflare-dns.com") return new Response("unavailable", { status: 503 });
+    if (url.hostname === "dns.google") {
+      const type = url.searchParams.get("type");
+      const typeCode = type === "A" ? 1 : type === "AAAA" ? 28 : 5;
+      return new Response(JSON.stringify({ Status: 0, Answer: [{ type: typeCode, data: type === "A" ? "192.0.2.10" : type === "AAAA" ? "2001:db8::10" : "fallback.example.net." }] }));
+    }
+    return new Response("unavailable", { status: 503 });
+  };
+  try {
+    const first = await resolvePreferredDomainRecords("failover-cache.example");
+    assert.deepEqual(first.providers, { A: "google", AAAA: "google", CNAME: "google" });
+    assert.deepEqual(first.records.A, ["192.0.2.10"]);
+    assert.equal(requests.filter((host) => host === "cloudflare-dns.com").length, 3);
+    assert.equal(requests.filter((host) => host === "dns.google").length, 3);
+    const requestCount = requests.length;
+    const second = await resolvePreferredDomainRecords("failover-cache.example");
+    assert.deepEqual(second.records, first.records);
+    assert.equal(requests.length, requestCount);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("classifies DNS failures after all providers are unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  try {
+    const result = await resolvePreferredDomainRecords("dns-errors.example");
+    assert.equal(result.errors.length, 3);
+    assert.ok(result.errors.every((item) => item.code === "DNS_ALL_PROVIDERS_FAILED"));
+    assert.ok(result.errors.every((item) => item.attempts.length === 3));
+    assert.ok(result.errors.every((item) => item.attempts.some((attempt) => attempt.code === "DNS_HTTP_ERROR")));
   } finally {
     globalThis.fetch = originalFetch;
   }

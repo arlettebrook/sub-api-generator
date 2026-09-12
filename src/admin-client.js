@@ -307,6 +307,24 @@ function sourceStatusLabel(state) {
   }[state] || '未检测';
 }
 
+function dnsErrorCodeLabel(code) {
+  return {
+    DNS_TIMEOUT: '超时',
+    DNS_HTTP_ERROR: 'HTTP 错误',
+    DNS_NETWORK_ERROR: '网络错误',
+    DNS_INVALID_RESPONSE: '响应无效',
+    DNS_NXDOMAIN: '域名不存在',
+    DNS_SERVFAIL: '服务失败',
+    DNS_REFUSED: '请求被拒绝',
+    DNS_FORMAT_ERROR: '请求格式错误',
+    DNS_ALL_PROVIDERS_FAILED: '所有服务商失败',
+  }[code] || code || 'DNS 错误';
+}
+
+function dnsProviderLabel(provider) {
+  return { cloudflare: 'Cloudflare', google: 'Google', quad9: 'Quad9' }[provider] || provider || '未知服务商';
+}
+
 function renderSourceStatusSummary() {
   const summary = $('sourceStatusSummary');
   if (!summary) return;
@@ -1725,7 +1743,10 @@ function createSourceHealth(type, key) {
     const records = status.dnsRecords || {};
     const recordText = ['A', 'AAAA', 'CNAME'].map((recordType) => {
       const values = Array.isArray(records[recordType]) ? records[recordType] : [];
-      return recordType + ': ' + (values.length ? values.join('、') : (status.dnsErrors?.[recordType] || '无记录'));
+      const error = status.dnsErrors?.[recordType];
+      const code = status.dnsErrorCodes?.[recordType];
+      const provider = status.dnsProviders?.[recordType];
+      return recordType + ': ' + (values.length ? values.join('、') + '（' + dnsProviderLabel(provider) + '）' : (error ? dnsErrorCodeLabel(code) + ' · ' + error : '无记录'));
     }).join(' · ');
     const recordDetail = document.createElement('small');
     recordDetail.className = 'source-health-dns-records';
@@ -1736,7 +1757,7 @@ function createSourceHealth(type, key) {
   if (status.error) {
     const error = document.createElement('small');
     error.className = 'source-health-error-detail';
-    error.textContent = '最近错误：' + status.error;
+    error.textContent = '最近错误：' + (status.errorType && isDomain ? '[' + dnsErrorCodeLabel(status.errorType) + '] ' : '') + status.error;
     health.appendChild(error);
   }
   health.title = (status.lastAttemptAt ? '最后检测：' + formatSourceTime(status.lastAttemptAt) : '尚未检测此数据源') + (status.error ? '；最近错误：' + status.error : '');

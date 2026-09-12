@@ -15,6 +15,8 @@ import {
 import { textResponse, withSecurityHeaders } from "./http.js";
 
 const OUTBOUND_TIMEOUT_MS = 15000;
+const DNS_TIMEOUT_MS = 5000;
+const DNS_CACHE_TTL_MS = 30000;
 const FIXED_UUID = "00000000-0000-4000-8000-000000000000";
 const FIXED_HOST = "example.com";
 const UA_SUBS_FETCH = "v2r" + "ayN/edget" + "unnel (https://github.com/c" + "mliu/edget" + "unnel)";
@@ -32,21 +34,28 @@ const DNS_RECORD_TYPES = [
   { name: "AAAA", code: 28 },
   { name: "CNAME", code: 5 },
 ];
+const DNS_PROVIDERS = [
+  { id: "cloudflare", name: "Cloudflare", endpoint: "https://cloudflare-dns.com/dns-query" },
+  { id: "google", name: "Google", endpoint: "https://dns.google/resolve" },
+  { id: "quad9", name: "Quad9", endpoint: "https://dns.quad9.net:5053/dns-query" },
+];
 const UPSTREAM_RETRY_DELAYS_MS = [200, 600];
 const aggregateCache = new Map();
 const sourceInflight = new Map();
 const blacklistRegexCache = new Map();
 const sourceStatus = new Map();
+const dnsCache = new Map();
+const dnsInflight = new Map();
 
-async function fetchWithTimeout(resource, options = {}) {
+async function fetchWithTimeout(resource, options = {}, timeoutMs = OUTBOUND_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OUTBOUND_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(resource, { ...options, signal: controller.signal });
   } catch (error) {
     if (error?.name === "AbortError") {
-      const timeoutError = new Error("请求超时（15 秒）");
-      timeoutError.code = "TIMEOUT";
+      const timeoutError = new Error(`请求超时（${Math.round(timeoutMs / 1000)} 秒）`);
+      timeoutError.code = timeoutMs === DNS_TIMEOUT_MS ? "DNS_TIMEOUT" : "TIMEOUT";
       throw timeoutError;
     }
     throw error;
@@ -119,43 +128,103 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
   return result;
 }
 
-async function fetchPreferredDomain(domain) {
-  const valuesByType = {};
+const DNS_STATUS_CODES = { 1: "DNS_FORMAT_ERROR", 2: "DNS_SERVFAIL", 3: "DNS_NXDOMAIN", 4: "DNS_NOT_IMPLEMENTED", 5: "DNS_REFUSED" };
+
+function dnsError(code, message, details = {}) {
+  const error = new Error(message);
+  error.code = code;
+  Object.assign(error, details);
+  return error;
+}
+
+function classifyDnsError(error) {
+  if (error?.code) return error.code;
+  if (error?.name === "AbortError") return "DNS_TIMEOUT";
+  return "DNS_NETWORK_ERROR";
+}
+
+async function queryDnsProvider(provider, domain, type, code) {
+  const endpoint = new URL(provider.endpoint);
+  endpoint.searchParams.set("name", domain);
+  endpoint.searchParams.set("type", type);
+  let response;
+  try {
+    response = await fetchWithTimeout(endpoint, { headers: { Accept: "application/dns-json" } }, DNS_TIMEOUT_MS);
+  } catch (error) {
+    throw dnsError(classifyDnsError(error), error.message || "DNS 请求失败", { provider: provider.id });
+  }
+  if (!response.ok) throw dnsError("DNS_HTTP_ERROR", `DNS 服务返回 HTTP ${response.status}`, { provider: provider.id, statusCode: response.status });
+  let payload;
+  try { payload = await response.json(); } catch {
+    throw dnsError("DNS_INVALID_RESPONSE", "DNS 服务返回无效 JSON", { provider: provider.id });
+  }
+  const status = Number(payload?.Status ?? 0);
+  if (status !== 0) {
+    const codeName = DNS_STATUS_CODES[status] || "DNS_ERROR";
+    throw dnsError(codeName, payload?.Comment || `DNS 查询失败（状态 ${status}）`, { provider: provider.id, dnsStatus: status });
+  }
+  const values = (Array.isArray(payload?.Answer) ? payload.Answer : [])
+    .filter((answer) => Number(answer.type) === code && typeof answer.data === "string")
+    .map((answer) => answer.data.trim())
+    .filter(Boolean);
+  return { values, provider: provider.id, providerName: provider.name };
+}
+
+async function resolveDnsRecord(domain, recordType, force = false) {
+  const typeInfo = DNS_RECORD_TYPES.find((item) => item.name === recordType);
+  if (!typeInfo) throw dnsError("DNS_UNSUPPORTED_RECORD", `不支持的 DNS 记录类型 ${recordType}`);
+  const cacheKey = `${domain}|${recordType}`;
+  const cached = dnsCache.get(cacheKey);
+  if (!force && cached && cached.expiresAt > Date.now()) return { ...cached.value, cached: true };
+  if (dnsInflight.has(cacheKey)) return { ...(await dnsInflight.get(cacheKey)), cached: false };
+  const request = (async () => {
+    const attempts = [];
+    for (const provider of DNS_PROVIDERS) {
+      try {
+        const result = await queryDnsProvider(provider, domain, recordType, typeInfo.code);
+        const value = { ...result, attempts };
+        dnsCache.set(cacheKey, { value, expiresAt: Date.now() + DNS_CACHE_TTL_MS });
+        return value;
+      } catch (error) {
+        attempts.push({ provider: provider.id, code: classifyDnsError(error), message: error.message || "DNS 查询失败", statusCode: error.statusCode || null });
+      }
+    }
+    const summary = attempts.map((item) => `${item.provider}: ${item.message}`).join("；");
+    throw dnsError("DNS_ALL_PROVIDERS_FAILED", summary || "所有 DNS 服务商均查询失败", { attempts });
+  })();
+  dnsInflight.set(cacheKey, request);
+  try { return { ...(await request), cached: false }; }
+  finally { dnsInflight.delete(cacheKey); }
+}
+
+export async function resolvePreferredDomainRecords(domain, { force = false } = {}) {
   const records = {};
   const errors = [];
-  await Promise.all(DNS_RECORD_TYPES.map(async ({ name, code }) => {
+  const providers = {};
+  await Promise.all(DNS_RECORD_TYPES.map(async ({ name }) => {
     try {
-      const endpoint = new URL("https://cloudflare-dns.com/dns-query");
-      endpoint.searchParams.set("name", domain);
-      endpoint.searchParams.set("type", name);
-      const response = await fetchWithTimeout(endpoint, { headers: { Accept: "application/dns-json" } });
-      if (!response.ok) {
-        const error = new Error(`DNS ${name} 查询 HTTP ${response.status}`);
-        error.code = "HTTP_ERROR";
-        error.statusCode = response.status;
-        throw error;
-      }
-      const payload = await response.json();
-      if (Number(payload.Status) !== 0) {
-        const error = new Error(payload.Comment || `DNS ${name} 查询失败`);
-        error.code = "DNS_ERROR";
-        throw error;
-      }
-      const answerValues = (Array.isArray(payload.Answer) ? payload.Answer : [])
-        .filter((answer) => Number(answer.type) === code && typeof answer.data === "string")
-        .map((answer) => answer.data.trim().replace(/\.+$/, ""))
-        .filter(Boolean);
-      records[name] = answerValues;
-      valuesByType[name] = answerValues.map((value) => `${name === "AAAA" ? `[${value}]` : value}:443`);
+      const result = await resolveDnsRecord(domain, name, force);
+      records[name] = result.values;
+      providers[name] = result.provider;
     } catch (error) {
       records[name] = [];
-      errors.push({ type: "domains", key: domain, recordType: name, message: sourceErrorMessage(error) });
+      errors.push({ type: "domains", key: domain, recordType: name, code: classifyDnsError(error), message: error.message || "DNS 查询失败", attempts: error.attempts || [] });
     }
   }));
+  return { records: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, records[name] || []])), errors, providers };
+}
+
+async function fetchPreferredDomain(domain, force = false) {
+  const valuesByType = {};
+  const result = await resolvePreferredDomainRecords(domain, { force });
+  const { records: resolvedRecords, errors, providers } = result;
+  const records = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, (resolvedRecords[name] || []).map((value) => value.replace(/\.+$/, ""))]));
+  DNS_RECORD_TYPES.forEach(({ name }) => {
+    valuesByType[name] = (records[name] || []).map((value) => `${name === "AAAA" ? `[${value}]` : value}:443`);
+  });
   const values = DNS_RECORD_TYPES.flatMap(({ name }) => valuesByType[name] || []);
   if (!values.length && errors.length === DNS_RECORD_TYPES.length) {
-    const error = new Error(errors.map((item) => `${item.recordType}: ${item.message}`).join("；"));
-    error.code = "DNS_ERROR";
+    const error = dnsError("DNS_ALL_PROVIDERS_FAILED", errors.map((item) => `${item.recordType}: ${item.message}`).join("；"), { attempts: errors.flatMap((item) => item.attempts || []) });
     error.sourceType = "domains";
     error.sourceKey = domain;
     throw error;
@@ -164,6 +233,7 @@ async function fetchPreferredDomain(domain) {
   Object.defineProperty(values, "unfilteredNodes", { value: [...values], enumerable: false });
   Object.defineProperty(values, "records", { value: records, enumerable: false });
   Object.defineProperty(values, "errors", { value: errors, enumerable: false });
+  Object.defineProperty(values, "providers", { value: providers, enumerable: false });
   return values;
 }
 
@@ -195,15 +265,17 @@ export function getSourceStatuses(subsConfig, apisConfig, domainsConfig) {
         nodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
         rawNodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
         durationMs: null,
-        error: "",
-        errorType: "",
+        error: type === "domains" && Object.keys(configuredErrors).length ? Object.entries(configuredErrors).map(([recordType, message]) => `${recordType}: ${message}`).join("；") : "",
+        errorType: type === "domains" && Object.keys(configuredErrors).length ? "DNS_PARTIAL_FAILURE" : "",
         statusCode: null,
         lastAttemptAt: type === "domains" && Number.isFinite(configuredCheckedAt) && configuredCheckedAt > 0 ? new Date(configuredCheckedAt).toISOString() : null,
-        lastSuccessAt: null,
-        lastSuccessNodeCount: 0,
-        lastSuccessRawNodeCount: 0,
+        lastSuccessAt: type === "domains" && Object.values(configuredCounts).some((count) => count > 0) && Number.isFinite(configuredCheckedAt) && configuredCheckedAt > 0 ? new Date(configuredCheckedAt).toISOString() : null,
+        lastSuccessNodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
+        lastSuccessRawNodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
         dnsRecords: configuredRecords,
         dnsErrors: configuredErrors,
+        dnsErrorCodes: type === "domains" && isPlainObject(entry) && isPlainObject(entry.dnsErrorCodes) ? entry.dnsErrorCodes : {},
+        dnsProviders: type === "domains" && isPlainObject(entry) && isPlainObject(entry.dnsProviders) ? entry.dnsProviders : {},
         dnsRecordCounts: configuredCounts,
         ...(sourceStatus.get(`${type}:${key}`) || {}),
         remark,
@@ -597,7 +669,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     selectedEntries(domainsConfig, "domains").forEach(([domain, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
-          const rawValues = await fetchPreferredDomain(domain);
+          const rawValues = await fetchPreferredDomain(domain, options.forceDns === true);
           const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
           const timestamp = new Date().toISOString();
           const dnsRecords = rawValues.records || {};
@@ -611,10 +683,12 @@ export async function handleRoot(env, sourceSelection, options = {}) {
             rawNodeCount: rawValues.length,
             dnsRecords,
             dnsErrors,
+            dnsErrorCodes: Object.fromEntries((rawValues.errors || []).filter((item) => item?.recordType).map((item) => [item.recordType, item.code || "DNS_ERROR"])),
+            dnsProviders: rawValues.providers || {},
             dnsRecordCounts: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, Array.isArray(dnsRecords[name]) ? dnsRecords[name].length : 0])),
             durationMs: Date.now() - startedAt,
             error: rawValues.errors?.length ? rawValues.errors.map((item) => item.message).join("；") : "",
-            errorType: rawValues.errors?.length ? "DNS_ERROR" : "",
+            errorType: rawValues.errors?.length ? "DNS_PARTIAL_FAILURE" : "",
             statusCode: rawValues.statusCode || null,
             lastAttemptAt: timestamp,
             ...(values.length > 0 ? { lastSuccessAt: timestamp, lastSuccessNodeCount: values.length, lastSuccessRawNodeCount: rawValues.length } : {}),
@@ -628,6 +702,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
             state: sourceFailureState(failure), nodeCount: 0, rawNodeCount: 0, durationMs: Date.now() - startedAt,
             dnsRecords: {},
             dnsErrors: { A: failure.message || "DNS 查询失败", AAAA: failure.message || "DNS 查询失败", CNAME: failure.message || "DNS 查询失败" },
+            dnsErrorCodes: { A: failure.code || "DNS_ERROR", AAAA: failure.code || "DNS_ERROR", CNAME: failure.code || "DNS_ERROR" },
+            dnsProviders: {},
             error: sourceErrorMessage(failure), errorType: failure.code || "DNS_ERROR", statusCode: failure.statusCode || null,
             lastAttemptAt: new Date().toISOString(),
           });
@@ -729,8 +805,9 @@ function sourceErrorMessage(error) {
 
 function sourceFailureState(error) {
   if (error?.code === "EMPTY_RESPONSE") return "empty";
-  if (error?.code === "TIMEOUT" || error?.name === "AbortError") return "timeout";
-  if (error?.code === "HTTP_ERROR") return "http-error";
+  if (["TIMEOUT", "DNS_TIMEOUT"].includes(error?.code) || error?.name === "AbortError") return "timeout";
+  if (["HTTP_ERROR", "DNS_HTTP_ERROR"].includes(error?.code)) return "http-error";
+  if (error?.code === "DNS_NXDOMAIN") return "empty";
   return "network-error";
 }
 
