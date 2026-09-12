@@ -48,6 +48,16 @@ export const adminHTML = `
 <p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
 
 <main id="adminPageContent">
+<dialog class="confirm-dialog" id="sourceDeleteDialog" aria-labelledby="sourceDeleteTitle" aria-describedby="sourceDeleteMessage">
+  <div class="confirm-dialog-icon" aria-hidden="true">!</div>
+  <h3 id="sourceDeleteTitle">确认删除？</h3>
+  <p id="sourceDeleteMessage">此操作不可撤销。</p>
+  <div class="confirm-dialog-actions">
+    <button class="btn-outline" type="button" id="cancelSourceDeleteButton">取消</button>
+    <button class="btn-danger" type="button" id="confirmSourceDeleteButton">确认删除</button>
+  </div>
+</dialog>
+
 <!-- ADMIN_SECTION:customApiDialog:START -->
 <dialog class="confirm-dialog" id="customApiDeleteDialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
   <div class="confirm-dialog-icon" aria-hidden="true">!</div>

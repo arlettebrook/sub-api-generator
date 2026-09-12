@@ -1131,6 +1131,7 @@ let customApisDirty = false;
 let blacklistDirty = false;
 let filterRulesDirty = false;
 let pendingCustomApiDelete = null;
+let pendingSourceDeleteAction = null;
 let sourceRawRequest = null;
 let sourceRawSelection = null;
 let sourceRawNodes = [];
@@ -1608,17 +1609,21 @@ function renderPreferredDomains() {
     delBtn.className = 'del-btn source-delete-button';
     delBtn.textContent = '🗑 删除';
     delBtn.setAttribute('aria-label', '删除优选域名 ' + domain);
-    delBtn.onclick = async () => {
-      delBtn.disabled = true;
-      delBtn.textContent = '⏳ 删除中…';
-      try {
-        await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
-        delete preferredDomains[domain];
-        delete preferredDomainStatuses[normalizeSourceKeyClient('domains', domain)];
-        renderPreferredDomains();
-        showToast('已删除优选域名', 'success');
-      } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
-    };
+    delBtn.onclick = () => confirmSourceDelete({
+      title: '删除优选域名？',
+      message: '确定删除“' + domain + '”吗？其解析结果也会一并移除，此操作不可撤销。',
+      onConfirm: async () => {
+        delBtn.disabled = true;
+        delBtn.textContent = '⏳ 删除中…';
+        try {
+          await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
+          delete preferredDomains[domain];
+          delete preferredDomainStatuses[normalizeSourceKeyClient('domains', domain)];
+          renderPreferredDomains();
+          showToast('已删除优选域名', 'success');
+        } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
+      }
+    });
     row.append(select, remarkInput, identity, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
     fragment.appendChild(row);
   });
@@ -2371,6 +2376,42 @@ async function executeCustomApiDelete() {
   }
 }
 
+function confirmSourceDelete({ title, message, onConfirm }) {
+  const dialog = $('sourceDeleteDialog');
+  if (!dialog || dialog.open || typeof onConfirm !== 'function') return;
+  const titleEl = $('sourceDeleteTitle');
+  const messageEl = $('sourceDeleteMessage');
+  if (titleEl) titleEl.textContent = title || '确认删除？';
+  if (messageEl) messageEl.textContent = message || '此操作不可撤销。';
+  pendingSourceDeleteAction = onConfirm;
+  dialog.showModal();
+}
+
+function initSourceDeleteDialog() {
+  const dialog = $('sourceDeleteDialog');
+  if (!dialog || dialog.dataset.initSourceDelete === 'true') return;
+  dialog.dataset.initSourceDelete = 'true';
+  $('cancelSourceDeleteButton')?.addEventListener('click', () => {
+    pendingSourceDeleteAction = null;
+    dialog.close();
+  });
+  $('confirmSourceDeleteButton')?.addEventListener('click', async () => {
+    const action = pendingSourceDeleteAction;
+    pendingSourceDeleteAction = null;
+    if (dialog.open) dialog.close();
+    if (action) await action();
+  });
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) {
+      pendingSourceDeleteAction = null;
+      dialog.close();
+    }
+  });
+  dialog.addEventListener('close', () => {
+    pendingSourceDeleteAction = null;
+  });
+}
+
 function openCustomApiEditDialog(path) {
   const entry = customApis[path];
   const dialog = $('customApiEditDialog');
@@ -2689,16 +2730,21 @@ function renderSubs() {
     delBtn.className = 'del-btn source-delete-button';
     delBtn.textContent = '🗑 删除';
     delBtn.setAttribute('aria-label', '删除订阅源 ' + host);
-    delBtn.onclick = async () => {
-      delBtn.disabled = true;
-      delBtn.textContent = '⏳ 删除中…';
-      const removed = subs[host];
-      delete subs[host];
-      const saved = await queueSubsSave();
-      if (!saved) subs[host] = removed;
-      renderSubs();
-      if (saved) showToast('已删除订阅源', 'success');
-    };
+    delBtn.onclick = () => confirmSourceDelete({
+      title: '删除订阅源？',
+      message: '确定删除订阅源“' + host + '”吗？此操作不可撤销。',
+      onConfirm: async () => {
+        delBtn.disabled = true;
+        delBtn.textContent = '⏳ 删除中…';
+        const removed = subs[host];
+        delete subs[host];
+        const saved = await queueSubsSave();
+        if (!saved) subs[host] = removed;
+        renderSubs();
+        if (saved) showToast('已删除订阅源', 'success');
+        else { delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
+      }
+    });
 
     hostInput.onchange = () => {
       const newHost = hostInput.value.trim();
@@ -2921,16 +2967,21 @@ function renderApis() {
     delBtn.className = 'del-btn source-delete-button';
     delBtn.textContent = '🗑 删除';
     delBtn.setAttribute('aria-label', '删除 API 源 ' + url);
-    delBtn.onclick = async () => {
-      delBtn.disabled = true;
-      delBtn.textContent = '⏳ 删除中…';
-      const removed = apis[url];
-      delete apis[url];
-      const saved = await queueApisSave();
-      if (!saved) apis[url] = removed;
-      renderApis();
-      if (saved) showToast('已删除 API 源', 'success');
-    };
+    delBtn.onclick = () => confirmSourceDelete({
+      title: '删除 API 源？',
+      message: '确定删除 API 源“' + url + '”吗？此操作不可撤销。',
+      onConfirm: async () => {
+        delBtn.disabled = true;
+        delBtn.textContent = '⏳ 删除中…';
+        const removed = apis[url];
+        delete apis[url];
+        const saved = await queueApisSave();
+        if (!saved) apis[url] = removed;
+        renderApis();
+        if (saved) showToast('已删除 API 源', 'success');
+        else { delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
+      }
+    });
 
     urlInput.onchange = () => {
       const newUrl = urlInput.value.trim();
@@ -4943,6 +4994,7 @@ async function downloadWebdavBackup(filename) {
 }
 
 function loadActivePage(page) {
+  initSourceDeleteDialog();
   if (page === 'settings') {
     initSettingsEnhancements();
     initCamouflageSettings();
