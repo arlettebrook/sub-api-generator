@@ -6,6 +6,7 @@ import {
   KV_KEY_SETTINGS,
   KV_KEY_SUBS,
   KV_KEY_SOURCE_STATUS,
+  KV_KEY_PREFERRED_DOMAINS,
   getRuntimeConfig as getPagesRuntimeConfig,
   isAllowedApiPath,
   normalizeCustomApiData,
@@ -235,6 +236,93 @@ async function readSourceStatuses(env) {
 
 async function handleGetSourceStatuses(env) {
   return readSourceStatuses(env);
+}
+
+const DNS_RECORD_TYPES = [
+  { name: "A", code: 1 },
+  { name: "AAAA", code: 28 },
+  { name: "CNAME", code: 5 },
+];
+const DOMAIN_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+function normalizePreferredDomain(value) {
+  if (typeof value !== "string") throw new Error("域名必须是字符串");
+  const domain = value.trim().replace(/\.+$/, "").toLowerCase();
+  if (!domain || domain.length > 253 || domain.includes("/") || domain.includes(":")) {
+    throw new Error("域名格式无效");
+  }
+  const labels = domain.split(".");
+  if (labels.length < 2 || labels.some((label) => !DOMAIN_LABEL_REGEX.test(label))) {
+    throw new Error("域名格式无效");
+  }
+  return domain;
+}
+
+async function queryPreferredDomain(domain) {
+  const results = {};
+  const errors = {};
+  await Promise.all(DNS_RECORD_TYPES.map(async ({ name, code }) => {
+    try {
+      const endpoint = new URL("https://cloudflare-dns.com/dns-query");
+      endpoint.searchParams.set("name", domain);
+      endpoint.searchParams.set("type", name);
+      const response = await fetch(endpoint, {
+        headers: { Accept: "application/dns-json" },
+      });
+      if (!response.ok) throw new Error(`DNS 服务返回 HTTP ${response.status}`);
+      const payload = await response.json();
+      if (Number(payload.Status) !== 0) {
+        throw new Error(payload.Comment || `DNS 查询失败（状态 ${payload.Status}）`);
+      }
+      results[name] = (Array.isArray(payload.Answer) ? payload.Answer : [])
+        .filter((answer) => Number(answer.type) === code && typeof answer.data === "string")
+        .map((answer) => answer.data.trim())
+        .filter(Boolean);
+    } catch (error) {
+      results[name] = [];
+      errors[name] = error.message || "DNS 查询失败";
+    }
+  }));
+  return {
+    records: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, results[name] || []])),
+    errors,
+  };
+}
+
+async function handleGetPreferredDomains(env) {
+  const data = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
+  return pagesJsonResponse(isPlainObject(data) ? data : {});
+}
+
+async function handlePostPreferredDomain(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  let domain;
+  try { domain = normalizePreferredDomain(body?.domain); } catch (error) { return pagesTextResponse(error.message, 400); }
+  const current = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
+  const configured = isPlainObject(current) ? current : {};
+  const result = await queryPreferredDomain(domain);
+  const entry = {
+    domain,
+    records: result.records,
+    errors: result.errors,
+    checkedAt: Date.now(),
+  };
+  configured[domain] = entry;
+  await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
+  return pagesJsonResponse(entry);
+}
+
+async function handleDeletePreferredDomain(request, env) {
+  const url = new URL(request.url);
+  let domain;
+  try { domain = normalizePreferredDomain(url.searchParams.get("domain") || ""); } catch (error) { return pagesTextResponse(error.message, 400); }
+  const current = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
+  const configured = isPlainObject(current) ? current : {};
+  if (!Object.prototype.hasOwnProperty.call(configured, domain)) return pagesTextResponse("域名不存在", 404);
+  delete configured[domain];
+  await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
+  return pagesJsonResponse({ ok: true });
 }
 
 async function checkSourceStatuses(env, request) {
@@ -509,7 +597,7 @@ function handleAdmin(page = "overview", adminBasePath = "/admin") {
 }
 
 function renderAdminPage(page, adminBasePath = "/admin") {
-  const activeSections = new Set(page === "manage" ? ["subs", "apis", "sourceStatus"] : [page]);
+  const activeSections = new Set(page === "manage" ? ["subs", "apis", "sourceStatus", "preferredDomains"] : [page]);
   let html = adminHTML
     .replaceAll("__ADMIN_ASSET_VERSION__", ADMIN_ASSET_VERSION)
     .replaceAll("__ADMIN_BASE_PATH__", adminBasePath)
@@ -643,6 +731,11 @@ export default {
         case "/api/source-status/check":
           if (method === "POST") return await checkSourceStatuses(env, request);
           return pagesMethodNotAllowed("POST");
+        case "/api/preferred-domains":
+          if (method === "GET") return await handleGetPreferredDomains(env);
+          if (method === "POST") return await handlePostPreferredDomain(request, env);
+          if (method === "DELETE") return await handleDeletePreferredDomain(request, env);
+          return pagesMethodNotAllowed("GET, POST, DELETE");
         case "/api/source-raw":
           if (method === "POST") return await handleSourceRaw(request, env);
           return pagesMethodNotAllowed("POST");

@@ -1483,6 +1483,121 @@ function sourceEntries() {
 }
 
 let sourceStatuses = { subs: {}, apis: {} };
+let preferredDomains = {};
+
+function formatPreferredDomainTime(value) {
+  if (!value) return '尚未解析';
+  try { return new Date(value).toLocaleString('zh-CN', { hour12: false }); } catch { return '尚未解析'; }
+}
+
+function renderPreferredDomains() {
+  const container = $('preferredDomainsList');
+  if (!container) return;
+  container.innerHTML = '';
+  const entries = Object.entries(preferredDomains || {});
+  if (!entries.length) {
+    const empty = document.createElement('div');
+    empty.className = 'data-empty preferred-domain-empty';
+    empty.textContent = '暂无优选域名，请先添加一个域名。';
+    container.appendChild(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  entries.sort(([a], [b]) => a.localeCompare(b, 'zh-CN')).forEach(([domain, entry]) => {
+    const row = document.createElement('div');
+    row.className = 'preferred-domain-row';
+    const identity = document.createElement('div');
+    identity.className = 'preferred-domain-identity';
+    const title = document.createElement('strong');
+    title.textContent = domain;
+    const checked = document.createElement('small');
+    checked.textContent = '最后解析：' + formatPreferredDomainTime(entry?.checkedAt);
+    identity.append(title, checked);
+
+    const records = document.createElement('div');
+    records.className = 'preferred-domain-records';
+    ['A', 'AAAA', 'CNAME'].forEach((type) => {
+      const group = document.createElement('div');
+      group.className = 'preferred-domain-record';
+      const label = document.createElement('b');
+      label.textContent = type;
+      const values = Array.isArray(entry?.records?.[type]) ? entry.records[type] : [];
+      const value = document.createElement('span');
+      value.textContent = values.length ? values.join('、') : (entry?.errors?.[type] || '无记录');
+      value.title = value.textContent;
+      group.append(label, value);
+      records.appendChild(group);
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'preferred-domain-actions';
+    const refresh = document.createElement('button');
+    refresh.type = 'button';
+    refresh.className = 'btn-outline icon-action';
+    refresh.textContent = '🔄 刷新';
+    refresh.setAttribute('aria-label', '刷新域名解析 ' + domain);
+    refresh.onclick = async () => {
+      setButtonBusy(refresh, true, '解析中…');
+      try {
+        const updated = await readJsonResponse('/api/preferred-domains', '域名解析', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }) });
+        preferredDomains[domain] = updated;
+        renderPreferredDomains();
+        showToast('域名解析已刷新', 'success');
+      } catch (error) { showToast(error.message, 'error'); setButtonBusy(refresh, false); }
+    };
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'del-btn source-delete-button';
+    remove.textContent = '🗑 删除';
+    remove.setAttribute('aria-label', '删除优选域名 ' + domain);
+    remove.onclick = async () => {
+      if (!window.confirm('确定删除域名 ' + domain + ' 吗？')) return;
+      setButtonBusy(remove, true, '删除中…');
+      try {
+        await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
+        delete preferredDomains[domain];
+        renderPreferredDomains();
+        showToast('域名已删除', 'success');
+      } catch (error) { showToast(error.message, 'error'); setButtonBusy(remove, false); }
+    };
+    actions.append(refresh, remove);
+    row.append(identity, records, actions);
+    fragment.appendChild(row);
+  });
+  container.appendChild(fragment);
+}
+
+async function loadPreferredDomains() {
+  const container = $('preferredDomainsList');
+  if (container) container.innerHTML = listSkeletonMarkup(2);
+  try {
+    const data = await readJsonResponse('/api/preferred-domains', '优选域名配置');
+    preferredDomains = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    renderPreferredDomains();
+  } catch (error) {
+    renderLoadError('preferredDomainsList', error.message, loadPreferredDomains);
+    showToast(error.message, 'error');
+  }
+}
+
+async function addPreferredDomain() {
+  const input = $('newPreferredDomain');
+  const domain = input?.value.trim() || '';
+  if (!domain) { setInputError(input, '请输入域名'); input?.focus(); return; }
+  clearInputError(input);
+  const button = $('addPreferredDomainButton');
+  setButtonBusy(button, true, '解析中…');
+  try {
+    const entry = await readJsonResponse('/api/preferred-domains', '域名解析', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }) });
+    preferredDomains[entry.domain] = entry;
+    input.value = '';
+    renderPreferredDomains();
+    showToast('域名添加成功，解析结果已保存', 'success');
+  } catch (error) {
+    setInputError(input, error.message);
+    showToast(error.message, 'error');
+  } finally { setButtonBusy(button, false); }
+}
 
 function getSourceStatus(type, key) {
   const normalizedKey = normalizeSourceKeyClient(type, key);
@@ -4120,6 +4235,18 @@ function bindPageControls() {
     sourceStatusIssuesButton.dataset.bound = 'true';
     sourceStatusIssuesButton.addEventListener('click', detectProblemSources);
   }
+  const addPreferredDomainButton = $('addPreferredDomainButton');
+  if (addPreferredDomainButton && addPreferredDomainButton.dataset.bound !== 'true') {
+    addPreferredDomainButton.dataset.bound = 'true';
+    addPreferredDomainButton.addEventListener('click', () => void addPreferredDomain());
+  }
+  const newPreferredDomain = $('newPreferredDomain');
+  if (newPreferredDomain && newPreferredDomain.dataset.bound !== 'true') {
+    newPreferredDomain.dataset.bound = 'true';
+    newPreferredDomain.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); void addPreferredDomain(); }
+    });
+  }
 }
 
 function loadActivePage(page) {
@@ -4143,6 +4270,7 @@ function loadActivePage(page) {
     void loadSubs();
     void loadApis();
     void loadSourceStatuses('read');
+    void loadPreferredDomains();
   } else if (page === 'overview') {
     void loadCustomApis()
       .then(() => {

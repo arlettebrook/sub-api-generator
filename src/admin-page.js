@@ -230,6 +230,27 @@ export const adminHTML = `
 </div>
 <!-- ADMIN_SECTION:sourceStatus:END -->
 
+<!-- ADMIN_SECTION:preferredDomains:START -->
+<!-- ==================== 优选域名管理 ==================== -->
+<div class="card" id="preferredDomainsSection">
+  <details class="source-status-panel preferred-domains-panel" open>
+    <summary>
+      <div>
+      <h3>🌐 优选域名管理</h3>
+      <p class="section-caption">添加域名后自动解析 A、AAAA 和 CNAME 记录。</p>
+      </div>
+    </summary>
+    <div class="source-status-panel-body">
+      <div class="add-row preferred-domain-add-row">
+        <label class="add-field add-field-wide"><span class="sr-only">域名</span><input id="newPreferredDomain" placeholder="例如 example.com" autocomplete="off" /><small class="inline-error" hidden></small></label>
+        <button class="btn-primary" type="button" id="addPreferredDomainButton">➕ 添加域名</button>
+      </div>
+      <div id="preferredDomainsList"></div>
+    </div>
+  </details>
+</div>
+<!-- ADMIN_SECTION:preferredDomains:END -->
+
 <!-- ADMIN_SECTION:customApis:START -->
 <!-- ==================== 优选 API ==================== -->
 <div class="card" id="customApiSection">

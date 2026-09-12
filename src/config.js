@@ -4,6 +4,7 @@ export const KV_KEY_CUSTOM_APIS = "custom_apis";
 export const KV_KEY_BLACKLIST = "blacklist";
 export const KV_KEY_FILTER_RULES = "filter_rules";
 export const KV_KEY_SOURCE_STATUS = "source_status";
+export const KV_KEY_PREFERRED_DOMAINS = "preferred_domains";
 export const KV_KEY_SETTINGS = "settings";
 export const MAX_CONFIG_ENTRIES = 200;
 export const MAX_CONFIG_KEY_LENGTH = 2048;

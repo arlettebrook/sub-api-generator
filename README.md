@@ -123,6 +123,7 @@ npm run test:e2e
 - `/api/filter-rules`：节点备注过滤规则配置接口，需要登录
 - `/api/settings`：伪装首页和管理入口设置接口，需要登录
 - `/api/custom-apis`：优选 API 路径和数据源配置接口，需要登录
+- `/api/preferred-domains`：优选域名解析记录管理接口，需要登录；添加或刷新域名时自动查询 A、AAAA、CNAME 记录
 - `/api/detection-history`：D1 检测历史分页接口，需要登录（未绑定 D1 时返回空列表）
 
 认证、订阅抓取和 KV 读写全部运行在 Pages Functions 的 Worker 运行时中，不需要额外的服务器。

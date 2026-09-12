@@ -117,8 +117,11 @@ test("serves separate responsive admin pages", async () => {
       assert.match(html, /id="subsSection"/);
       assert.match(html, /id="apisSection"/);
       assert.match(html, /id="sourceStatusSection"/);
+      assert.match(html, /id="preferredDomainsSection"/);
+      assert.match(html, /id="newPreferredDomain"/);
       assert.match(html, /data-nav-page="manage"/);
       assert.ok(html.indexOf('id="sourceStatusSection"') < html.indexOf('id="subsSection"'));
+      assert.ok(html.indexOf('id="sourceStatusSection"') < html.indexOf('id="preferredDomainsSection"'));
     }
     if (page === "overview") assert.doesNotMatch(html, /id="sourceStatusSection"/);
     if (page === "customApis") {
@@ -569,6 +572,60 @@ test("reads and updates remark filter rules", async () => {
     headers: authHeaders,
   }), runtime);
   assert.deepEqual(await savedResponse.json(), ["-VIP", "🐲"]);
+});
+
+test("manages preferred domains and resolves A, AAAA, and CNAME records", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    const type = url.searchParams.get("type");
+    const payloads = {
+      A: { Status: 0, Answer: [{ type: 1, data: "1.2.3.4" }] },
+      AAAA: { Status: 0, Answer: [{ type: 28, data: "2001:db8::1" }] },
+      CNAME: { Status: 0, Answer: [{ type: 5, data: "edge.example.net." }] },
+    };
+    return new Response(JSON.stringify(payloads[type]), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  try {
+    const empty = await worker.fetch(new Request("https://example.test/api/preferred-domains", { headers }), runtime);
+    assert.deepEqual(await empty.json(), {});
+
+    const added = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+      method: "POST", headers, body: JSON.stringify({ domain: " Example.COM. " }),
+    }), runtime);
+    assert.equal(added.status, 200);
+    const entry = await added.json();
+    assert.equal(entry.domain, "example.com");
+    assert.deepEqual(entry.records, {
+      A: ["1.2.3.4"],
+      AAAA: ["2001:db8::1"],
+      CNAME: ["edge.example.net."],
+    });
+    assert.deepEqual(values.preferred_domains["example.com"].records, entry.records);
+
+    const deleted = await worker.fetch(new Request("https://example.test/api/preferred-domains?domain=example.com", {
+      method: "DELETE", headers,
+    }), runtime);
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(values.preferred_domains, {});
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects invalid preferred domains", async () => {
+  const hash = await sha256Hex("secret");
+  const response = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ domain: "https://example.com/path" }),
+  }), env());
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /域名格式无效/);
 });
 
 test("rejects invalid blacklist payloads", async () => {

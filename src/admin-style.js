@@ -3088,6 +3088,81 @@ export const adminStyle = `
     padding: 16px 20px 20px;
   }
 
+  .preferred-domain-add-row {
+    margin-bottom: 14px;
+  }
+
+  #preferredDomainsList {
+    display: grid;
+    gap: 8px;
+  }
+
+  .preferred-domain-row {
+    display: grid;
+    grid-template-columns: minmax(150px, .7fr) minmax(0, 2fr) auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+  }
+
+  .preferred-domain-identity,
+  .preferred-domain-records {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .preferred-domain-identity strong {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .preferred-domain-identity small {
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .preferred-domain-record {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 8px;
+    align-items: baseline;
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .preferred-domain-record b {
+    color: var(--accent-primary);
+    font-size: 11px;
+  }
+
+  .preferred-domain-record span {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .preferred-domain-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .preferred-domain-empty {
+    padding: 18px;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    text-align: center;
+  }
+
   .source-status-actions {
     justify-content: flex-end;
     margin-bottom: 14px;
@@ -4577,6 +4652,18 @@ export const adminStyle = `
       min-height: 40px;
       padding: 0 8px;
       font-size: 12px;
+    }
+    .preferred-domain-row {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .preferred-domain-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .preferred-domain-actions > * {
+      width: 100%;
+      min-height: 40px;
     }
     .nodes-count {
       width: 100%;
