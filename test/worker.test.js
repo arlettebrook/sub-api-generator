@@ -670,6 +670,22 @@ test("uses preferred domains as selectable live sources with port 443", async ()
     assert.equal(response.status, 200);
     assert.deepEqual((await response.text()).split("\n"), ["1.2.3.4:443", "[2001:db8::1]:443", "target.example.net:443"]);
     assert.deepEqual(requests.sort(), ["A", "AAAA", "CNAME"]);
+
+    requests.length = 0;
+    const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status/check", {
+      method: "POST",
+      headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+      body: JSON.stringify({ scope: "selected", sources: [{ type: "domains", key: "edge.example.com" }] }),
+    }), runtime);
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.deepEqual(status.domains["edge.example.com"].dnsRecordCounts, { A: 1, AAAA: 1, CNAME: 1 });
+    assert.deepEqual(status.domains["edge.example.com"].dnsRecords, {
+      A: ["1.2.3.4"],
+      AAAA: ["2001:db8::1"],
+      CNAME: ["target.example.net"],
+    });
+    assert.deepEqual(requests.sort(), ["A", "AAAA", "CNAME"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -1544,7 +1544,8 @@ function renderPreferredDomains() {
       await savePreferredDomain(nextDomain, entry?.remark || '', domain);
     };
     const checked = document.createElement('small');
-    checked.textContent = '最后解析：' + formatPreferredDomainTime(entry?.checkedAt);
+    const domainStatus = getSourceStatus('domains', domain);
+    checked.textContent = '最后解析：' + formatPreferredDomainTime(domainStatus.lastAttemptAt || entry?.checkedAt);
     identity.append(domainInput, checked);
 
     const viewBtn = document.createElement('button');
@@ -1694,14 +1695,19 @@ function getSourceStatus(type, key) {
 function createSourceHealth(type, key) {
   const status = getSourceStatus(type, key);
   const state = ['success', 'filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error', 'checking'].includes(status.state) ? status.state : 'idle';
+  const isDomain = type === 'domains';
   const health = document.createElement('div');
   health.className = 'source-health source-health-' + state;
   let text = '未检测';
-  if (state === 'success') text = '正常 · ' + status.nodeCount + ' 个节点';
+  if (isDomain && state === 'success') {
+    const counts = status.dnsRecordCounts || {};
+    const hasDnsErrors = Object.keys(status.dnsErrors || {}).length > 0;
+    text = (hasDnsErrors ? '部分成功' : 'DNS 正常') + ' · A ' + (counts.A || 0) + ' · AAAA ' + (counts.AAAA || 0) + ' · CNAME ' + (counts.CNAME || 0);
+  } else if (state === 'success') text = '正常 · ' + status.nodeCount + ' 个节点';
   if (state === 'filtered') text = '已过滤 · 原始 ' + status.rawNodeCount + ' 个';
   if (state === 'empty') text = '返回空数据';
   if (state === 'timeout' || state === 'http-error' || state === 'network-error' || state === 'error') text = sourceStatusLabel(state) + ' · ' + (status.error || '请求失败');
-  if (state === 'checking') text = '检测中…';
+  if (state === 'checking') text = isDomain ? 'DNS 查询中…' : '检测中…';
   if (status.durationMs !== null && state !== 'idle') text += ' · ' + status.durationMs + ' ms';
   const primary = document.createElement('strong');
   primary.textContent = text;
@@ -1709,10 +1715,24 @@ function createSourceHealth(type, key) {
   checked.textContent = status.lastAttemptAt ? '最后检测：' + formatSourceTime(status.lastAttemptAt) : '尚未检测';
   if (status.lastSuccessAt) checked.textContent += ' · 最近成功 ' + (status.lastSuccessNodeCount || 0) + ' 个节点';
   const diagnostics = document.createElement('small');
-  diagnostics.textContent = 'HTTP ' + (status.statusCode || '--')
-    + ' · ' + (status.durationMs === null || status.durationMs === undefined ? '--' : status.durationMs + ' ms')
-    + ' · 原始 ' + (status.rawNodeCount || 0) + ' · 过滤后 ' + (status.nodeCount || 0);
+  diagnostics.textContent = isDomain
+    ? '解析节点 ' + (status.nodeCount || 0) + ' · ' + (status.durationMs === null || status.durationMs === undefined ? '--' : status.durationMs + ' ms')
+    : 'HTTP ' + (status.statusCode || '--')
+      + ' · ' + (status.durationMs === null || status.durationMs === undefined ? '--' : status.durationMs + ' ms')
+      + ' · 原始 ' + (status.rawNodeCount || 0) + ' · 过滤后 ' + (status.nodeCount || 0);
   health.append(primary, checked, diagnostics);
+  if (isDomain) {
+    const records = status.dnsRecords || {};
+    const recordText = ['A', 'AAAA', 'CNAME'].map((recordType) => {
+      const values = Array.isArray(records[recordType]) ? records[recordType] : [];
+      return recordType + ': ' + (values.length ? values.join('、') : (status.dnsErrors?.[recordType] || '无记录'));
+    }).join(' · ');
+    const recordDetail = document.createElement('small');
+    recordDetail.className = 'source-health-dns-records';
+    recordDetail.textContent = recordText;
+    recordDetail.title = recordText;
+    health.appendChild(recordDetail);
+  }
   if (status.error) {
     const error = document.createElement('small');
     error.className = 'source-health-error-detail';
@@ -1790,16 +1810,18 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
     );
     refreshRenderedSourceStatuses();
     if (nodesContainer && currentNodes.length) renderNodeView();
-  } catch {
+  } catch (error) {
     sourceStatuses = previousStatuses;
     refreshRenderedSourceStatuses();
     // 状态接口不可用时保留配置页面，不阻断管理操作。
+    return { ok: false, error };
   } finally {
     if (manual && refreshButton) {
       refreshButton.disabled = false;
       refreshButton.textContent = idleText || '检测数据源';
     }
   }
+  return { ok: true };
 }
 
 function createSourceCheckButton(type, key) {
@@ -1812,7 +1834,9 @@ function createSourceCheckButton(type, key) {
     button.disabled = true;
     const idleText = button.textContent;
     button.textContent = '⏳ 检测中…';
-    await loadSourceStatuses('selected', [{ type, key }]);
+    const result = await loadSourceStatuses('selected', [{ type, key }]);
+    if (result?.ok) showToast(type === 'domains' ? 'DNS 记录检测完成' : '数据源检测完成', 'success');
+    else showToast(result?.error?.message || '检测失败，请稍后重试', 'error');
     button.disabled = false;
     button.textContent = idleText;
   };
@@ -1821,7 +1845,8 @@ function createSourceCheckButton(type, key) {
 
 function detectProblemSources() {
   const sources = Object.entries(sourceStatuses || {}).flatMap(([type, values]) => Object.entries(values || {})
-    .filter(([, status]) => ['filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error'].includes(status.state))
+    .filter(([, status]) => ['filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error'].includes(status.state)
+      || (type === 'domains' && Object.keys(status.dnsErrors || {}).length > 0))
     .map(([key]) => ({ type, key })));
   if (!sources.length) {
     showToast('当前没有已知异常数据源', 'info');

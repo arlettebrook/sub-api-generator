@@ -185,18 +185,26 @@ export function getSourceStatuses(subsConfig, apisConfig, domainsConfig) {
     const normalized = normalizeKvData(config, type);
     for (const [key, entry] of Object.entries(normalized)) {
       const remark = isPlainObject(entry) && typeof entry.remark === "string" ? entry.remark : "";
+      const configuredRecords = type === "domains" && isPlainObject(entry) && isPlainObject(entry.records) ? entry.records : {};
+      const configuredErrors = type === "domains" && isPlainObject(entry) && isPlainObject(entry.errors) ? entry.errors : {};
+      const configuredCounts = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, Array.isArray(configuredRecords[name]) ? configuredRecords[name].length : 0]));
+      const hasConfiguredResult = type === "domains" && (Object.values(configuredCounts).some((count) => count > 0) || Object.keys(configuredErrors).length > 0);
+      const configuredCheckedAt = Number(entry?.checkedAt);
       result[type][key] = {
-        state: "idle",
-        nodeCount: 0,
-        rawNodeCount: 0,
+        state: hasConfiguredResult ? (Object.values(configuredCounts).some((count) => count > 0) ? "success" : "empty") : "idle",
+        nodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
+        rawNodeCount: Object.values(configuredCounts).reduce((total, count) => total + count, 0),
         durationMs: null,
         error: "",
         errorType: "",
         statusCode: null,
-        lastAttemptAt: null,
+        lastAttemptAt: type === "domains" && Number.isFinite(configuredCheckedAt) && configuredCheckedAt > 0 ? new Date(configuredCheckedAt).toISOString() : null,
         lastSuccessAt: null,
         lastSuccessNodeCount: 0,
         lastSuccessRawNodeCount: 0,
+        dnsRecords: configuredRecords,
+        dnsErrors: configuredErrors,
+        dnsRecordCounts: configuredCounts,
         ...(sourceStatus.get(`${type}:${key}`) || {}),
         remark,
       };
@@ -592,10 +600,18 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const rawValues = await fetchPreferredDomain(domain);
           const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
           const timestamp = new Date().toISOString();
+          const dnsRecords = rawValues.records || {};
+          const dnsErrors = (rawValues.errors || []).reduce((result, item) => {
+            if (item?.recordType) result[item.recordType] = item.message || "DNS 查询失败";
+            return result;
+          }, {});
           recordSourceStatus("domains", domain, {
             state: values.length > 0 ? "success" : "empty",
             nodeCount: values.length,
             rawNodeCount: rawValues.length,
+            dnsRecords,
+            dnsErrors,
+            dnsRecordCounts: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, Array.isArray(dnsRecords[name]) ? dnsRecords[name].length : 0])),
             durationMs: Date.now() - startedAt,
             error: rawValues.errors?.length ? rawValues.errors.map((item) => item.message).join("；") : "",
             errorType: rawValues.errors?.length ? "DNS_ERROR" : "",
@@ -610,6 +626,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           failure.sourceKey = domain;
           recordSourceStatus("domains", domain, {
             state: sourceFailureState(failure), nodeCount: 0, rawNodeCount: 0, durationMs: Date.now() - startedAt,
+            dnsRecords: {},
+            dnsErrors: { A: failure.message || "DNS 查询失败", AAAA: failure.message || "DNS 查询失败", CNAME: failure.message || "DNS 查询失败" },
             error: sourceErrorMessage(failure), errorType: failure.code || "DNS_ERROR", statusCode: failure.statusCode || null,
             lastAttemptAt: new Date().toISOString(),
           });
