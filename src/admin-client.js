@@ -1826,9 +1826,15 @@ function renderCustomApiSelect() {
   select.hidden = select.options.length === 0;
   const validValues = new Set([...select.options].map((option) => option.value));
   const preferred = [current, saved].find((value) => value && validValues.has(value));
-  if (preferred) select.value = preferred;
-  else if (select.options.length) select.selectedIndex = 0;
-  if (select.value) savePreviewApiPath(select.value);
+  if (preferred) {
+    select.value = preferred;
+    savePreviewApiPath(preferred);
+  } else if (saved) {
+    // Keep an unavailable saved choice out of the visible selection without replacing it.
+    select.selectedIndex = -1;
+  } else if (select.options.length) {
+    select.selectedIndex = 0;
+  }
 }
 
 let editingCustomApiPath = '';
