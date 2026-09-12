@@ -407,21 +407,19 @@ async function logout() {
   const button = document.querySelector('.btn-logout');
   if (button) button.disabled = true;
   try {
-    // redirect: 'manual' 避免跟随 /logout -> / -> 伪装站点的跨域重定向导致 Failed to fetch；
-    // opaqueredirect 响应 status 为 0，因此不能按 response.ok 判断成败
+    // 服务端会将 /logout 重定向到登录页（伪装模式下为 accessPath，否则为 /），同为同源页面，可安全跟随
     const response = await fetch('/logout', {
       method: 'POST',
       credentials: 'same-origin',
       cache: 'no-store',
-      redirect: 'manual',
     });
-    if (!response.ok && response.type !== 'opaqueredirect') throw new Error('退出登录请求失败');
+    if (!response.ok) throw new Error('退出登录请求失败');
+    window.location.replace(response.url || '/');
   } catch (error) {
     if (button) button.disabled = false;
     showToast(error.message, 'error');
     return;
   }
-  window.location.replace('/');
 }
 
 // ======================== 复制订阅地址功能 ========================

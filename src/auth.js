@@ -36,9 +36,9 @@ export async function handleLogin(request, validHash, loginPage, redirectPath = 
   });
 }
 
-export function handleLogout(request) {
+export function handleLogout(request, redirectTo = "/") {
   const secure = new URL(request.url).protocol === "https:";
-  return redirectResponse(request, "/", {
+  return redirectResponse(request, redirectTo, {
     "set-cookie": `auth=; Path=/; HttpOnly; ${secure ? "Secure; " : ""}SameSite=Lax; Max-Age=0`,
     "cache-control": "no-store",
   });

@@ -1051,7 +1051,9 @@ export default {
       return await auth.handleLogin(request, validPwdHash, (message) => loginPage(message, path), path);
     }
     if (path === "/logout" && method === "POST") {
-      return auth.handleLogout(request);
+      // 伪装模式下跳回登录页而不是 "/"，避免退出后被重定向到伪装站点
+      const logoutRedirect = settings.enabled && settings.accessPath ? `/${settings.accessPath}` : "/";
+      return auth.handleLogout(request, logoutRedirect);
     }
     if (path === "/login" || path === "/logout") {
       return pagesMethodNotAllowed("POST");
