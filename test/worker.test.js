@@ -735,8 +735,9 @@ test("configures WebDAV and backs up and restores through it", async () => {
     assert.match(uploadJson.filename, /^my-backup-\d{8}-\d{6}\.json$/);
     assert.equal(putAttempts, 2);
     assert.ok(webdavRequests.some((request) => request.method === "MKCOL" && request.url === "https://dav.example.com/backup/"));
+    assert.ok(webdavRequests.some((request) => request.method === "MKCOL" && request.url === "https://dav.example.com/backup/sub-api-generator-backup/"));
     const put = webdavRequests.find((request) => request.method === "PUT");
-    assert.match(put.url, /^https:\/\/dav\.example\.com\/backup\/my-backup-\d{8}-\d{6}\.json$/);
+    assert.match(put.url, /^https:\/\/dav\.example\.com\/backup\/sub-api-generator-backup\/my-backup-\d{8}-\d{6}\.json$/);
     assert.equal(put.headers.Authorization, "Basic " + btoa("user:pass"));
     const uploaded = JSON.parse(put.body);
     assert.equal(uploaded.version, 1);
@@ -745,9 +746,9 @@ test("configures WebDAV and backs up and restores through it", async () => {
     assert.equal(uploadJson.pruned, 3);
     const deletes = webdavRequests.filter((request) => request.method === "DELETE").map((request) => request.url);
     assert.equal(deletes.length, 3);
-    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup.json"));
-    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup-20250101-000001.json"));
-    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup-20250102-000001.json"));
+    assert.ok(deletes.includes("https://dav.example.com/backup/sub-api-generator-backup/my-backup.json"));
+    assert.ok(deletes.includes("https://dav.example.com/backup/sub-api-generator-backup/my-backup-20250101-000001.json"));
+    assert.ok(deletes.includes("https://dav.example.com/backup/sub-api-generator-backup/my-backup-20250102-000001.json"));
 
     // 连接测试：密码留空时沿用已保存密码；401 提示账号密码错误；407 类失败返回 ok:false；非法地址返回 400。
     const savedFetchMock = globalThis.fetch;
@@ -809,7 +810,7 @@ test("configures WebDAV and backs up and restores through it", async () => {
 
     // 手动选择指定备份恢复：恢复更旧的一份。
     const olderFilename = "my-backup-20250103-000001.json";
-    storedFiles[`https://dav.example.com/backup/${olderFilename}`] = JSON.stringify({
+    storedFiles[`https://dav.example.com/backup/sub-api-generator-backup/${olderFilename}`] = JSON.stringify({
       app: "sub-api-generator",
       version: 1,
       exportedAt: "2025-01-03T00:00:00.000Z",
@@ -852,6 +853,33 @@ test("configures WebDAV and backs up and restores through it", async () => {
       body: JSON.stringify({ filename: "evil.json" }),
     }), restoreRuntime2);
     assert.equal(invalidDownloadResponse.status, 400);
+
+    // 手动删除指定云端备份。
+    const deleteResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/delete", {
+      method: "POST",
+      headers: { ...authHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ filename: olderFilename }),
+    }), restoreRuntime2);
+    assert.equal(deleteResponse.status, 200);
+    assert.deepEqual(await deleteResponse.json(), { ok: true, filename: olderFilename });
+    assert.ok(webdavRequests.some((request) => request.method === "DELETE" && request.url === `https://dav.example.com/backup/sub-api-generator-backup/${olderFilename}`));
+
+    const invalidDeleteResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/delete", {
+      method: "POST",
+      headers: { ...authHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ filename: "evil.json" }),
+    }), restoreRuntime2);
+    assert.equal(invalidDeleteResponse.status, 400);
+
+    const savedForDelete = globalThis.fetch;
+    globalThis.fetch = async () => new Response(null, { status: 500 });
+    const failedDeleteResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/delete", {
+      method: "POST",
+      headers: { ...authHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ filename: olderFilename }),
+    }), restoreRuntime2);
+    assert.equal(failedDeleteResponse.status, 502);
+    globalThis.fetch = savedForDelete;
 
     getOverride = () => new Response("not-json", { status: 200 });
     const brokenResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav/restore", {

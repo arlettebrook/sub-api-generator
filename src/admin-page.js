@@ -256,7 +256,7 @@ export const adminHTML = `
         <label class="add-field"><span class="sr-only">域名备注</span><input id="newPreferredDomainRemark" placeholder="备注（可选）" autocomplete="off" /></label>
         <button class="btn-primary" type="button" id="addPreferredDomainButton">➕ 添加域名</button>
       </div>
-      <div class="toolbar preferred-domain-toolbar">
+      <div class="toolbar list-toolbar preferred-domain-toolbar">
         <input id="preferredDomainsSearch" class="list-search" type="search" placeholder="搜索域名或备注" aria-label="搜索优选域名" />
         <select id="preferredDomainsStatusFilter" class="list-sort" aria-label="优选域名状态筛选"><option value="all">全部状态</option><option value="success">DNS 正常</option><option value="partial">部分成功</option><option value="failed">失败或空数据</option><option value="idle">未检测</option></select>
         <select id="preferredDomainsSort" class="list-sort" aria-label="优选域名排序"><option value="default">默认顺序</option><option value="name-asc">域名 A-Z</option><option value="name-desc">域名 Z-A</option><option value="checked-desc">按检测时间</option><option value="abnormal">异常优先</option></select>
@@ -388,7 +388,7 @@ export const adminHTML = `
     <label class="add-field"><span class="sr-only">订阅源备注</span><input id="newRemark" placeholder="备注（可选）" /></label>
     <button class="btn-primary" onclick="addSub()">➕ 添加订阅源</button>
   </div>
-  <div class="toolbar">
+  <div class="toolbar list-toolbar">
     <input id="subsSearch" class="list-search" type="search" placeholder="搜索订阅源或备注" aria-label="搜索订阅源" />
     <select id="subsSort" class="list-sort" aria-label="订阅源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option></select>
     <button type="button" class="batch-button" data-batch="subs-select">全选</button><button type="button" class="batch-button batch-delete" data-batch="subs-delete">批量删除</button>
@@ -413,7 +413,7 @@ export const adminHTML = `
     <label class="add-field"><span class="sr-only">API 备注</span><input id="newApiRemark" placeholder="备注（可选）" /></label>
     <button class="btn-primary" onclick="addApi()">➕ 添加API</button>
   </div>
-  <div class="toolbar">
+  <div class="toolbar list-toolbar">
     <input id="apisSearch" class="list-search" type="search" placeholder="搜索 API 地址或备注" aria-label="搜索 API 源" />
     <select id="apisSort" class="list-sort" aria-label="API 源排序"><option value="default">默认顺序</option><option value="name-asc">地址 A-Z</option><option value="name-desc">地址 Z-A</option></select>
     <button type="button" class="batch-button" data-batch="apis-select">全选</button><button type="button" class="batch-button batch-delete" data-batch="apis-delete">批量删除</button>
@@ -627,8 +627,8 @@ export const adminHTML = `
         <div class="webdav-config-grid">
           <label class="form-field">
             <span>WebDAV 地址</span>
-            <input id="webdavUrl" type="url" maxlength="2048" placeholder="例如：https://dav.example.com/backup/" autocomplete="off" />
-            <small>备份文件的目录地址，目录不存在时会自动尝试创建。</small>
+            <input id="webdavUrl" type="url" maxlength="2048" placeholder="例如：https://dav.example.com/dav/" autocomplete="off" />
+            <small>备份自动存放在该地址下的 sub-api-generator-backup 子目录中，目录不存在时会自动创建。</small>
           </label>
           <label class="form-field">
             <span>用户名</span>

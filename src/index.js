@@ -48,6 +48,7 @@ import {
   timestampedBackupFilename,
   validateWebdavConfigPayload,
   webdavDownload,
+  webdavDelete,
   webdavListBackupEntries,
   webdavListBackups,
   webdavPruneBackups,
@@ -778,6 +779,24 @@ async function handleWebdavBackupTest(request, env) {
   return pagesJsonResponse(await webdavTestConnection(config));
 }
 
+async function handleWebdavBackupFileDelete(request, env) {
+  const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  if (!isWebdavConfigured(config)) return pagesTextResponse("请先配置并保存 WebDAV 地址", 400);
+  const baseFilename = config.filename || DEFAULT_WEBDAV_FILENAME;
+  let filename = null;
+  try {
+    const body = await request.json();
+    if (typeof body?.filename === "string") filename = body.filename;
+  } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  if (!filename || !isValidBackupFilename(baseFilename, filename)) return pagesTextResponse("备份文件名无效", 400);
+  try {
+    await webdavDelete(config, filename);
+  } catch (error) {
+    return pagesTextResponse(error.message || "删除云端备份失败", 502);
+  }
+  return pagesJsonResponse({ ok: true, filename });
+}
+
 async function handleWebdavBackupList(env) {
   const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
   if (!isWebdavConfigured(config)) return pagesTextResponse("请先配置并保存 WebDAV 地址", 400);
@@ -1156,6 +1175,9 @@ export default {
           return pagesMethodNotAllowed("POST");
         case "/api/backup/webdav/download":
           if (method === "POST") return await handleWebdavBackupDownload(request, env);
+          return pagesMethodNotAllowed("POST");
+        case "/api/backup/webdav/delete":
+          if (method === "POST") return await handleWebdavBackupFileDelete(request, env);
           return pagesMethodNotAllowed("POST");
         case "/api/restore":
           if (method === "POST") return await handleRestore(request, env);

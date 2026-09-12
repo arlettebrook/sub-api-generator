@@ -3627,6 +3627,15 @@ export const adminStyle = `
     background: var(--bg-tertiary);
   }
 
+  /* 列表工具栏：桌面端保持一行，空间不足时优先压缩搜索框和下拉框，按钮不收缩 */
+  .list-toolbar {
+    flex-wrap: nowrap;
+  }
+
+  .list-toolbar .list-search { flex: 1 1 160px; min-width: 60px; }
+  .list-toolbar .list-sort { min-width: 120px; padding: 0 24px 0 8px; }
+  .list-toolbar > button { flex-shrink: 0; }
+
   .nodes-filters {
     display: grid;
     grid-template-columns: minmax(220px, 1fr) minmax(140px, 0.35fr) minmax(150px, 0.4fr) auto;
@@ -5025,6 +5034,9 @@ export const adminStyle = `
   }
 
   @media screen and (min-width: 769px) and (max-width: 900px), screen and (min-device-width: 769px) and (max-device-width: 900px) {
+    .list-toolbar {
+      flex-wrap: wrap;
+    }
     .custom-api-dialog .form-grid {
       grid-template-columns: 1fr;
     }

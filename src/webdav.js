@@ -18,7 +18,7 @@ export const EMPTY_WEBDAV_CONFIG = {
 // 连通性测试：PROPFIND 目录验证地址、账号密码是否可用；404 视为"连接成功但目录未创建"（上传时会自动创建）。
 export async function webdavTestConnection(config) {
   const authHeader = webdavAuthHeader(config);
-  const collectionUrl = config.url.replace(/\/+$/, "") + "/";
+  const collectionUrl = backupCollectionUrl(config) + "/";
   let response;
   try {
     response = await fetch(collectionUrl, {
@@ -119,10 +119,19 @@ function webdavAuthHeader(config) {
   return `Basic ${encoded}`;
 }
 
-function webdavFileUrl(config, filename) {
+// 备份统一存放在配置地址下的固定子目录中；地址已指向同名目录时不重复追加。
+export const BACKUP_DIRECTORY = "sub-api-generator-backup";
+
+function backupCollectionUrl(config) {
   const base = new URL(config.url);
-  base.pathname = `${base.pathname.replace(/\/+$/, "")}/${filename}`;
+  const segments = base.pathname.split("/").filter(Boolean);
+  if (segments[segments.length - 1] !== BACKUP_DIRECTORY) segments.push(BACKUP_DIRECTORY);
+  base.pathname = `/${segments.join("/")}`;
   return base.toString();
+}
+
+function webdavFileUrl(config, filename) {
+  return `${backupCollectionUrl(config).replace(/\/+$/, "")}/${filename}`;
 }
 
 // WebDAV 服务器通常不会自动创建多级目录，上传前逐级 MKCOL，已存在（405）等情况忽略。
@@ -206,7 +215,7 @@ export function sortBackupFilenames(filenames) {
   return [...filenames].sort((left, right) => token(right).localeCompare(token(left)));
 }
 
-async function webdavDelete(config, filename) {
+export async function webdavDelete(config, filename) {
   const authHeader = webdavAuthHeader(config);
   const response = await fetch(webdavFileUrl(config, filename), {
     method: "DELETE",
@@ -219,7 +228,7 @@ async function webdavDelete(config, filename) {
 
 export async function webdavListBackupEntries(config, baseFilename) {
   const authHeader = webdavAuthHeader(config);
-  const collectionUrl = config.url.replace(/\/+$/, "") + "/";
+  const collectionUrl = backupCollectionUrl(config) + "/";
   const response = await fetch(collectionUrl, {
     method: "PROPFIND",
     headers: {

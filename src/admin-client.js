@@ -5007,7 +5007,12 @@ function renderWebdavRemoteList(items) {
     downloadButton.className = 'btn-subtle';
     downloadButton.textContent = '⬇ 下载';
     downloadButton.onclick = () => downloadWebdavBackup(item.filename);
-    actions.append(restoreButton, downloadButton);
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'btn-subtle setting-reset-button';
+    deleteButton.textContent = '🗑 删除';
+    deleteButton.onclick = () => deleteWebdavBackup(item.filename, deleteButton);
+    actions.append(restoreButton, downloadButton, deleteButton);
     row.append(meta, actions);
     fragment.appendChild(row);
   }
@@ -5047,6 +5052,20 @@ async function downloadWebdavBackup(filename) {
     showToast('云端备份已下载：' + filename, 'success');
   } catch (error) {
     showToast(error.message || '下载云端备份失败', 'error', () => downloadWebdavBackup(filename));
+  }
+}
+
+async function deleteWebdavBackup(filename, button) {
+  if (!settingConfirm('确定删除云端备份 ' + filename + ' 吗？删除后无法恢复。')) return;
+  setButtonBusy(button, true, '删除中…');
+  try {
+    await webdavAction('/api/backup/webdav/delete', '删除云端备份', { filename });
+    showToast('云端备份已删除：' + filename, 'success');
+    void refreshWebdavRemoteList();
+  } catch (error) {
+    showToast(error.message || '删除云端备份失败', 'error', () => deleteWebdavBackup(filename, button));
+  } finally {
+    setButtonBusy(button, false);
   }
 }
 
