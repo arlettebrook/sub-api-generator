@@ -567,14 +567,30 @@ function downloadNodeData(event) {
 
 // ======================== 主题切换逻辑 ========================
 let themeMode = 'system';
+let viewTransitionSeq = 0;
 
 function applyTheme(mode) {
   const root = document.documentElement;
   themeMode = ['light', 'dark', 'system'].includes(mode) ? mode : 'system';
   const isDark = themeMode === 'dark' || (window.matchMedia?.('(prefers-color-scheme: dark)').matches && themeMode === 'system');
-  root.dataset.themeMode = themeMode;
-  root.classList.toggle('dark', isDark);
-  document.body.classList.toggle('dark', isDark);
+  const alreadyApplied = root.dataset.themeMode === themeMode && root.classList.contains('dark') === isDark;
+  const mutate = () => {
+    root.dataset.themeMode = themeMode;
+    root.classList.toggle('dark', isDark);
+    document.body.classList.toggle('dark', isDark);
+  };
+  // 渐变背景等属性无法通过 CSS transition 平滑过渡，用视图过渡做整体交叉淡入。
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  if (!alreadyApplied && typeof document.startViewTransition === 'function' && !reduceMotion) {
+    const seq = ++viewTransitionSeq;
+    const transition = document.startViewTransition(mutate);
+    root.classList.add('view-transitioning');
+    transition.finished.finally(() => {
+      if (seq === viewTransitionSeq) root.classList.remove('view-transitioning');
+    });
+  } else {
+    mutate();
+  }
   const switcher = document.querySelector('.theme-switch');
   if (switcher) {
     const labels = { light: '亮色', dark: '暗色', system: '跟随系统' };

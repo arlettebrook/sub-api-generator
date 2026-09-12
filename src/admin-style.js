@@ -68,6 +68,19 @@ export const adminStyle = `
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.35);
   }
 
+  /* ========== 主题切换视图过渡 ========== */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.3s;
+    animation-timing-function: ease;
+  }
+  /* 过渡期间暂停元素自身的过渡，避免快照交叉淡入叠加元素级动画导致闪烁 */
+  .view-transitioning *,
+  .view-transitioning *::before,
+  .view-transitioning *::after {
+    transition: none !important;
+  }
+
   * {
     box-sizing: border-box;
     margin: 0;
