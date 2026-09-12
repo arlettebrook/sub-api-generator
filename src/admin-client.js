@@ -1563,7 +1563,9 @@ function renderPreferredDomains() {
       await savePreferredDomain(nextDomain, entry?.remark || '', domain);
     };
     const checked = document.createElement('small');
-    const domainStatus = getSourceStatus('domains', domain);
+    const configuredDomainStatus = preferredDomainEntryStatus(entry);
+    const runtimeDomainStatus = sourceStatuses.domains?.[normalizeSourceKeyClient('domains', domain)];
+    const domainStatus = runtimeDomainStatus && runtimeDomainStatus.state !== 'idle' ? runtimeDomainStatus : configuredDomainStatus;
     checked.textContent = '最后解析：' + formatPreferredDomainTime(domainStatus.lastAttemptAt || entry?.checkedAt);
     identity.append(domainInput, checked);
 
@@ -1598,7 +1600,7 @@ function renderPreferredDomains() {
         showToast('已删除优选域名', 'success');
       } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
     };
-    row.append(select, remarkInput, identity, createCopyButton(domain, '域名'), healthForPreferredDomain(domain), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
+    row.append(select, remarkInput, identity, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
     fragment.appendChild(row);
   });
   container.appendChild(fragment);
@@ -1616,6 +1618,7 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
       delete preferredDomains[previousDomain];
     }
     preferredDomains[entry.domain] = entry;
+    syncPreferredDomainStatus(entry);
     renderPreferredDomains();
     await loadSourceStatuses('read');
     showToast('优选域名已保存并重新解析', 'success');
@@ -1679,6 +1682,7 @@ async function loadPreferredDomains() {
   try {
     const data = await readJsonResponse('/api/preferred-domains', '优选域名配置');
     preferredDomains = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    Object.values(preferredDomains).forEach((entry) => syncPreferredDomainStatus(entry));
     renderPreferredDomains();
   } catch (error) {
     renderLoadError('preferredDomainsList', error.message, loadPreferredDomains);
@@ -1697,6 +1701,7 @@ async function addPreferredDomain() {
   try {
     const entry = await readJsonResponse('/api/preferred-domains', '域名解析', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark: remarkInput?.value.trim() || '' }) });
     preferredDomains[entry.domain] = entry;
+    syncPreferredDomainStatus(entry);
     input.value = '';
     if (remarkInput) remarkInput.value = '';
     renderPreferredDomains();
@@ -1710,11 +1715,53 @@ async function addPreferredDomain() {
 
 function getSourceStatus(type, key) {
   const normalizedKey = normalizeSourceKeyClient(type, key);
-  return sourceStatuses[type]?.[normalizedKey] || { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
+  const status = sourceStatuses[type]?.[normalizedKey];
+  if (type === 'domains' && preferredDomains[normalizedKey]) {
+    // 初始化请求可能留下 idle 占位状态；域名配置中的解析结果更具体，不能被占位覆盖。
+    if (!status || status.state === 'idle') return { ...preferredDomainEntryStatus(preferredDomains[normalizedKey]), ...(status?.remark ? { remark: status.remark } : {}) };
+  }
+  if (status) return status;
+  return { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
 }
 
-function createSourceHealth(type, key) {
-  const status = getSourceStatus(type, key);
+function preferredDomainEntryStatus(entry) {
+  const records = entry?.records && typeof entry.records === 'object' ? entry.records : {};
+  const dnsRecords = Object.fromEntries(['A', 'AAAA', 'CNAME'].map((type) => [type, Array.isArray(records[type]) ? records[type] : []]));
+  const dnsErrors = entry?.errors && typeof entry.errors === 'object' ? entry.errors : {};
+  const dnsErrorCodes = entry?.dnsErrorCodes && typeof entry.dnsErrorCodes === 'object' ? entry.dnsErrorCodes : {};
+  const dnsProviders = entry?.dnsProviders && typeof entry.dnsProviders === 'object' ? entry.dnsProviders : {};
+  const dnsRecordCounts = Object.fromEntries(Object.entries(dnsRecords).map(([type, values]) => [type, values.length]));
+  const nodeCount = Object.values(dnsRecordCounts).reduce((total, count) => total + count, 0);
+  const checkedAt = Number(entry?.checkedAt);
+  const timestamp = Number.isFinite(checkedAt) && checkedAt > 0 ? new Date(checkedAt).toISOString() : null;
+  return {
+    state: nodeCount > 0 ? 'success' : (Object.keys(dnsErrors).length ? 'error' : 'idle'),
+    nodeCount,
+    rawNodeCount: nodeCount,
+    durationMs: null,
+    error: Object.keys(dnsErrors).length ? Object.entries(dnsErrors).map(([type, message]) => type + ': ' + message).join('；') : '',
+    errorType: Object.keys(dnsErrors).length ? 'DNS_PARTIAL_FAILURE' : '',
+    lastAttemptAt: timestamp,
+    lastSuccessAt: nodeCount > 0 ? timestamp : null,
+    lastSuccessNodeCount: nodeCount,
+    lastSuccessRawNodeCount: nodeCount,
+    dnsRecords,
+    dnsErrors,
+    dnsErrorCodes,
+    dnsProviders,
+    dnsRecordCounts,
+  };
+}
+
+function syncPreferredDomainStatus(entry) {
+  const domain = normalizeSourceKeyClient('domains', entry?.domain);
+  if (!domain) return;
+  sourceStatuses.domains ||= {};
+  sourceStatuses.domains[domain] = { ...preferredDomainEntryStatus(entry), remark: entry?.remark || '' };
+}
+
+function createSourceHealth(type, key, statusOverride = null) {
+  const status = statusOverride || getSourceStatus(type, key);
   const state = ['success', 'filtered', 'empty', 'timeout', 'http-error', 'network-error', 'error', 'checking'].includes(status.state) ? status.state : 'idle';
   const isDomain = type === 'domains';
   const health = document.createElement('div');
@@ -1836,7 +1883,19 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
     );
     // 页面初始化等旧请求可能晚于手动检测返回，不能覆盖较新的状态。
     if (requestVersion !== sourceStatusRequestVersion) return { ok: true, stale: true };
-    sourceStatuses = nextStatuses;
+    const mergedStatuses = {
+      subs: { ...(nextStatuses?.subs || {}) },
+      apis: { ...(nextStatuses?.apis || {}) },
+      domains: { ...(nextStatuses?.domains || {}) },
+    };
+    for (const [domain, entry] of Object.entries(preferredDomains || {})) {
+      const normalizedDomain = normalizeSourceKeyClient('domains', domain);
+      const configuredStatus = preferredDomainEntryStatus(entry);
+      if (!mergedStatuses.domains[normalizedDomain] || mergedStatuses.domains[normalizedDomain].state === 'idle') {
+        mergedStatuses.domains[normalizedDomain] = { ...configuredStatus, remark: entry?.remark || '' };
+      }
+    }
+    sourceStatuses = mergedStatuses;
     refreshRenderedSourceStatuses();
     if (nodesContainer && currentNodes.length) renderNodeView();
   } catch (error) {
@@ -1862,6 +1921,7 @@ async function checkPreferredDomain(domain) {
     body: JSON.stringify({ domain, remark: typeof entry.remark === 'string' ? entry.remark : '' }),
   });
   preferredDomains[updated.domain] = updated;
+  syncPreferredDomainStatus(updated);
   renderPreferredDomains();
   await loadSourceStatuses('read');
 }
