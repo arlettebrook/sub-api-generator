@@ -248,7 +248,8 @@ export const adminHTML = `
       </div>
       <div class="toolbar preferred-domain-toolbar">
         <input id="preferredDomainsSearch" class="list-search" type="search" placeholder="搜索域名或备注" aria-label="搜索优选域名" />
-        <select id="preferredDomainsSort" class="list-sort" aria-label="优选域名排序"><option value="default">默认顺序</option><option value="name-asc">域名 A-Z</option><option value="name-desc">域名 Z-A</option></select>
+        <select id="preferredDomainsStatusFilter" class="list-sort" aria-label="优选域名状态筛选"><option value="all">全部状态</option><option value="success">DNS 正常</option><option value="partial">部分成功</option><option value="failed">失败或空数据</option><option value="idle">未检测</option></select>
+        <select id="preferredDomainsSort" class="list-sort" aria-label="优选域名排序"><option value="default">默认顺序</option><option value="name-asc">域名 A-Z</option><option value="name-desc">域名 Z-A</option><option value="checked-desc">按检测时间</option><option value="abnormal">异常优先</option></select>
         <button type="button" class="batch-button" data-batch="domains-select">全选</button><button type="button" class="batch-button batch-delete" data-batch="domains-delete">批量删除</button>
         <button type="button" id="exportPreferredDomainsButton">📤 导出配置</button>
         <button type="button" id="importPreferredDomainsButton">📥 导入配置</button>

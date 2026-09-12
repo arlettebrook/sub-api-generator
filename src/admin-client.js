@@ -1514,14 +1514,33 @@ function formatPreferredDomainTime(value) {
   try { return new Date(value).toLocaleString('zh-CN', { hour12: false }); } catch { return '尚未解析'; }
 }
 
+function preferredDomainStatusCategory(status) {
+  const state = status?.state;
+  if (state === 'checking') return 'checking';
+  if (state === 'success') return Object.keys(status?.dnsErrors || {}).length > 0 ? 'partial' : 'success';
+  if (['empty', 'error', 'timeout', 'http-error', 'network-error'].includes(state)) return 'failed';
+  return 'idle';
+}
+
 function renderPreferredDomains() {
   const container = $('preferredDomainsList');
   if (!container) return;
   container.innerHTML = '';
   const query = ($('preferredDomainsSearch')?.value || '').trim().toLowerCase();
   const sort = $('preferredDomainsSort')?.value || 'default';
+  const statusFilter = $('preferredDomainsStatusFilter')?.value || 'all';
   let entries = Object.entries(preferredDomains || {}).filter(([domain, entry]) => !query || (domain + ' ' + (entry.remark || '')).toLowerCase().includes(query));
+  if (statusFilter !== 'all') {
+    entries = entries.filter(([domain, entry]) => preferredDomainStatusCategory(getPreferredDomainStatus(domain, entry)) === statusFilter);
+  }
   if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
+  if (sort === 'checked-desc') {
+    entries.sort((a, b) => (Date.parse(getPreferredDomainStatus(b[0], b[1]).lastAttemptAt) || 0) - (Date.parse(getPreferredDomainStatus(a[0], a[1]).lastAttemptAt) || 0) || a[0].localeCompare(b[0], 'zh-CN'));
+  }
+  if (sort === 'abnormal') {
+    const rank = { failed: 0, partial: 1, checking: 2, idle: 3, success: 4 };
+    entries.sort((a, b) => rank[preferredDomainStatusCategory(getPreferredDomainStatus(a[0], a[1]))] - rank[preferredDomainStatusCategory(getPreferredDomainStatus(b[0], b[1]))] || a[0].localeCompare(b[0], 'zh-CN'));
+  }
   if (!entries.length) {
     const empty = document.createElement('div');
     empty.className = 'data-empty preferred-domain-empty';
@@ -1557,6 +1576,10 @@ function renderPreferredDomains() {
     domainInput.onchange = async () => {
       const nextDomain = domainInput.value.trim();
       if (!nextDomain || nextDomain.toLowerCase() === domain) { domainInput.value = domain; return; }
+      if (!window.confirm('确定将域名 "' + domain + '" 改为 "' + nextDomain + '" 吗？\\n新域名将重新解析 DNS 记录，旧域名的解析结果会被删除，此操作不可撤销。')) {
+        domainInput.value = domain;
+        return;
+      }
       await savePreferredDomain(nextDomain, entry?.remark || '', domain);
     };
     const checked = document.createElement('small');
@@ -1604,7 +1627,9 @@ function renderPreferredDomains() {
 
 async function savePreferredDomain(domain, remark = '', previousDomain = '') {
   try {
-    const entry = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark }) });
+    // 仅改备注/同域名保存时跳过 DNS 解析；改域名为新域名时才需要重新解析。
+    const resolve = Boolean(previousDomain && previousDomain !== domain);
+    const entry = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark, resolve }) });
     if (previousDomain && previousDomain !== entry.domain) {
       await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(previousDomain), '旧域名删除', { method: 'DELETE' });
       delete preferredDomains[previousDomain];
@@ -1614,7 +1639,7 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
     setPreferredDomainStatus(entry.domain, preferredDomainEntryStatus(entry));
     renderPreferredDomains();
     refreshRenderedSourceStatuses([{ type: 'domains', key: entry.domain }]);
-    showToast('优选域名已保存并重新解析', 'success');
+    showToast(resolve ? '优选域名已保存并重新解析' : '备注已保存', 'success');
     return true;
   } catch (error) {
     showToast(error.message, 'error');
@@ -1625,14 +1650,15 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
 
 async function deletePreferredDomains(keys, trigger = null) {
   if (!keys.length) { showToast('请先选择优选域名', 'warning'); return; }
-  if (!window.confirm('确定删除选中的 ' + keys.length + ' 个优选域名吗？此操作不可撤销。')) return;
+  const summary = keys.length <= 5 ? keys.join('、') : keys.slice(0, 5).join('、') + ' 等 ' + keys.length + ' 个域名';
+  if (!window.confirm('确定删除选中的 ' + keys.length + ' 个优选域名吗？\\n' + summary + '\\n此操作不可撤销。')) return;
   if (trigger) setButtonBusy(trigger, true, '删除中…');
   try {
-    for (const domain of keys) {
-      await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
+    await readJsonResponse('/api/preferred-domains/delete-batch', '域名批量删除', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domains: keys }) });
+    keys.forEach((domain) => {
       delete preferredDomains[domain];
       delete preferredDomainStatuses[normalizeSourceKeyClient('domains', domain)];
-    }
+    });
     renderPreferredDomains();
     showToast('已删除 ' + keys.length + ' 个优选域名', 'success');
   } catch (error) { showToast(error.message, 'error'); }
@@ -1660,10 +1686,9 @@ function importPreferredDomains(event) {
     try {
       const data = JSON.parse(reader.result);
       if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('配置格式无效');
-      for (const [domain, entry] of Object.entries(data)) {
-        await savePreferredDomain(domain, typeof entry?.remark === 'string' ? entry.remark : '');
-      }
-      showToast('导入成功', 'success');
+      const result = await readJsonResponse('/api/preferred-domains/import', '优选域名导入', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      await loadPreferredDomains();
+      showToast('导入成功，共 ' + (result.count || 0) + ' 个域名（已保留配置中的解析结果，未重新解析）', 'success');
     } catch (error) { showToast('导入失败：' + error.message, 'error'); }
     event.target.value = '';
   };
@@ -1736,7 +1761,7 @@ function preferredDomainEntryStatus(entry) {
   const checkedAt = Number(entry?.checkedAt);
   const timestamp = Number.isFinite(checkedAt) && checkedAt > 0 ? new Date(checkedAt).toISOString() : null;
   return {
-    state: nodeCount > 0 ? 'success' : (Object.keys(dnsErrors).length ? 'error' : 'idle'),
+    state: nodeCount > 0 ? 'success' : (Object.keys(dnsErrors).length ? 'error' : (timestamp ? 'empty' : 'idle')),
     nodeCount,
     rawNodeCount: nodeCount,
     durationMs: null,
@@ -4521,6 +4546,7 @@ function bindPageControls() {
   }
   const preferredDomainSearch = $('preferredDomainsSearch');
   const preferredDomainSort = $('preferredDomainsSort');
+  const preferredDomainStatusFilter = $('preferredDomainsStatusFilter');
   if (preferredDomainSearch && preferredDomainSearch.dataset.bound !== 'true') {
     preferredDomainSearch.dataset.bound = 'true';
     preferredDomainSearch.addEventListener('input', renderPreferredDomains);
@@ -4528,6 +4554,10 @@ function bindPageControls() {
   if (preferredDomainSort && preferredDomainSort.dataset.bound !== 'true') {
     preferredDomainSort.dataset.bound = 'true';
     preferredDomainSort.addEventListener('change', renderPreferredDomains);
+  }
+  if (preferredDomainStatusFilter && preferredDomainStatusFilter.dataset.bound !== 'true') {
+    preferredDomainStatusFilter.dataset.bound = 'true';
+    preferredDomainStatusFilter.addEventListener('change', renderPreferredDomains);
   }
   document.querySelectorAll('[data-batch^="domains-"]').forEach((button) => {
     if (button.dataset.bound === 'true') return;

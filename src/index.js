@@ -309,24 +309,96 @@ async function handlePostPreferredDomain(request, env) {
   if (!Object.prototype.hasOwnProperty.call(configured, domain) && Object.keys(configured).length >= MAX_CONFIG_ENTRIES) {
     return pagesTextResponse(`优选域名不能超过 ${MAX_CONFIG_ENTRIES} 个`, 400);
   }
-  const startedAt = Date.now();
-  const result = await subscriptions.resolvePreferredDomainRecords(domain, { force: true });
-  const errors = Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.message || "DNS 查询失败"]));
-  const entry = {
-    domain,
-    remark: typeof body?.remark === "string" ? body.remark.trim().slice(0, 200) : (isPlainObject(configured[domain]) ? configured[domain].remark || "" : ""),
-    records: result.records,
-    errors,
-    dnsErrorCodes: Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.code || "DNS_ERROR"])),
-    dnsProviders: result.providers || {},
-    checkedAt: Date.now(),
-  };
+  const previous = isPlainObject(configured[domain]) ? configured[domain] : null;
+  const remark = typeof body?.remark === "string" ? body.remark.trim().slice(0, 200) : (previous ? previous.remark || "" : "");
+  let entry;
+  if (body?.resolve === false) {
+    // 仅更新备注：保留已有解析结果，不触发 DNS 查询。
+    entry = {
+      domain,
+      remark,
+      ...(previous ? {
+        records: isPlainObject(previous.records) ? previous.records : { A: [], AAAA: [], CNAME: [] },
+        errors: isPlainObject(previous.errors) ? previous.errors : {},
+        dnsErrorCodes: isPlainObject(previous.dnsErrorCodes) ? previous.dnsErrorCodes : {},
+        dnsProviders: isPlainObject(previous.dnsProviders) ? previous.dnsProviders : {},
+        ...(Number(previous.checkedAt) > 0 ? { checkedAt: Number(previous.checkedAt) } : {}),
+        ...(Number.isFinite(Number(previous.durationMs)) && Number(previous.durationMs) >= 0 ? { durationMs: Number(previous.durationMs) } : {}),
+      } : {}),
+    };
+  } else {
+    const startedAt = Date.now();
+    const result = await subscriptions.resolvePreferredDomainRecords(domain, { force: true });
+    const errors = Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.message || "DNS 查询失败"]));
+    entry = {
+      domain,
+      remark,
+      records: result.records,
+      errors,
+      dnsErrorCodes: Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.code || "DNS_ERROR"])),
+      dnsProviders: result.providers || {},
+      checkedAt: Date.now(),
+      ...(Number.isFinite(Number(result.durationMs)) && Number(result.durationMs) >= 0 ? { durationMs: Date.now() - startedAt } : {}),
+    };
+    subscriptions.recordPreferredDomainStatus(domain, result, Date.now() - startedAt);
+  }
   configured[domain] = entry;
   await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
-  subscriptions.recordPreferredDomainStatus(domain, result, Date.now() - startedAt);
   const snapshot = subscriptions.getSourceStatuses(await env.KV.get(KV_KEY_SUBS, "json"), await env.KV.get(KV_KEY_APIS, "json"), configured);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
   return pagesJsonResponse(entry);
+}
+
+async function handleDeletePreferredDomainsBatch(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  if (!Array.isArray(body?.domains)) return pagesTextResponse("请求 JSON 无效", 400);
+  const domains = [];
+  for (const value of body.domains.slice(0, MAX_CONFIG_ENTRIES)) {
+    let domain;
+    try { domain = normalizePreferredDomain(typeof value === "string" ? value : ""); } catch {
+      return pagesTextResponse(`域名格式无效: ${String(value).slice(0, 100)}`, 400);
+    }
+    if (!domains.includes(domain)) domains.push(domain);
+  }
+  const current = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
+  const configured = isPlainObject(current) ? current : {};
+  const deleted = [];
+  for (const domain of domains) {
+    if (Object.prototype.hasOwnProperty.call(configured, domain)) {
+      delete configured[domain];
+      deleted.push(domain);
+    }
+  }
+  if (deleted.length) {
+    await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
+    subscriptions.clearAggregateCache();
+  }
+  return pagesJsonResponse({ ok: true, deleted: deleted.length, missing: domains.filter((domain) => !deleted.includes(domain)) });
+}
+
+async function handleImportPreferredDomains(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  if (!isPlainObject(body)) return pagesTextResponse("配置必须是 JSON 对象", 400);
+  const entries = Object.entries(body);
+  if (entries.length > MAX_CONFIG_ENTRIES) {
+    return pagesTextResponse(`优选域名不能超过 ${MAX_CONFIG_ENTRIES} 个`, 400);
+  }
+  const current = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
+  const configured = isPlainObject(current) ? current : {};
+  for (const [rawDomain, rawEntry] of entries) {
+    let domain;
+    try { domain = normalizePreferredDomain(rawDomain); } catch {
+      return pagesTextResponse(`域名格式无效: ${String(rawDomain).slice(0, 100)}`, 400);
+    }
+    const normalized = normalizeKvData({ [domain]: isPlainObject(rawEntry) ? rawEntry : { remark: "" } }, "domains")[domain];
+    if (!normalized) return pagesTextResponse(`域名配置无效: ${String(rawDomain).slice(0, 100)}`, 400);
+    configured[domain] = { domain, ...normalized };
+  }
+  await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
+  subscriptions.clearAggregateCache();
+  return pagesJsonResponse({ ok: true, count: entries.length });
 }
 
 async function handleDeletePreferredDomain(request, env) {
@@ -765,6 +837,12 @@ export default {
           if (method === "POST") return await handlePostPreferredDomain(request, env);
           if (method === "DELETE") return await handleDeletePreferredDomain(request, env);
           return pagesMethodNotAllowed("GET, POST, DELETE");
+        case "/api/preferred-domains/delete-batch":
+          if (method === "POST") return await handleDeletePreferredDomainsBatch(request, env);
+          return pagesMethodNotAllowed("POST");
+        case "/api/preferred-domains/import":
+          if (method === "POST") return await handleImportPreferredDomains(request, env);
+          return pagesMethodNotAllowed("POST");
         case "/api/source-raw":
           if (method === "POST") return await handleSourceRaw(request, env);
           return pagesMethodNotAllowed("POST");

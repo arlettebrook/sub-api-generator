@@ -637,6 +637,119 @@ test("manages preferred domains and resolves A, AAAA, and CNAME records", async 
   }
 });
 
+test("updates remark without re-resolving DNS records", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  let dnsRequests = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    if (url.searchParams.get("name") !== undefined && url.searchParams.get("type")) dnsRequests += 1;
+    const type = url.searchParams.get("type");
+    const payloads = {
+      A: { Status: 0, Answer: [{ type: 1, data: "1.2.3.4" }] },
+      AAAA: { Status: 0, Answer: [{ type: 28, data: "2001:db8::1" }] },
+      CNAME: { Status: 0, Answer: [{ type: 5, data: "edge.example.net." }] },
+    };
+    return new Response(JSON.stringify(payloads[type]), { status: 200 });
+  };
+  try {
+    const added = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+      method: "POST", headers, body: JSON.stringify({ domain: "remark.example.com", remark: "旧备注" }),
+    }), runtime);
+    assert.equal(added.status, 200);
+    const resolvedCount = dnsRequests;
+    assert.ok(resolvedCount >= 3);
+
+    const updated = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+      method: "POST", headers, body: JSON.stringify({ domain: "remark.example.com", remark: "新备注", resolve: false }),
+    }), runtime);
+    assert.equal(updated.status, 200);
+    const entry = await updated.json();
+    assert.equal(entry.remark, "新备注");
+    assert.deepEqual(entry.records.A, ["1.2.3.4"]);
+    assert.equal(dnsRequests, resolvedCount);
+    assert.equal(values.preferred_domains["remark.example.com"].remark, "新备注");
+    assert.deepEqual(values.preferred_domains["remark.example.com"].records.A, ["1.2.3.4"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deletes preferred domains in one batch request", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    const type = url.searchParams.get("type");
+    return new Response(JSON.stringify({ Status: 0, Answer: [{ type: type === "A" ? 1 : type === "AAAA" ? 28 : 5, data: "1.2.3.4" }] }), { status: 200 });
+  };
+  try {
+    for (const domain of ["batch-one.example.com", "batch-two.example.com"]) {
+      await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+        method: "POST", headers, body: JSON.stringify({ domain }),
+      }), runtime);
+    }
+    const batch = await worker.fetch(new Request("https://example.test/api/preferred-domains/delete-batch", {
+      method: "POST", headers, body: JSON.stringify({ domains: ["batch-one.example.com", "batch-two.example.com", "missing.example.com"] }),
+    }), runtime);
+    assert.equal(batch.status, 200);
+    const result = await batch.json();
+    assert.equal(result.deleted, 2);
+    assert.deepEqual(result.missing, ["missing.example.com"]);
+    assert.deepEqual(values.preferred_domains, {});
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("imports preferred domains without triggering DNS resolution", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  let dnsRequests = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    if (url.searchParams.get("name") !== undefined && url.searchParams.get("type")) dnsRequests += 1;
+    return new Response(JSON.stringify({ Status: 0, Answer: [] }), { status: 200 });
+  };
+  try {
+    const imported = await worker.fetch(new Request("https://example.test/api/preferred-domains/import", {
+      method: "POST", headers,
+      body: JSON.stringify({
+        "import-one.example.com": { remark: "一", records: { A: ["1.1.1.1"] }, checkedAt: 1700000000000 },
+        "import-two.example.com": { remark: "二" },
+        "invalid domain": { remark: "坏" },
+      }),
+    }), runtime);
+    assert.equal(imported.status, 400);
+
+    const okImport = await worker.fetch(new Request("https://example.test/api/preferred-domains/import", {
+      method: "POST", headers,
+      body: JSON.stringify({
+        "import-one.example.com": { remark: "一", records: { A: ["1.1.1.1"] }, checkedAt: 1700000000000 },
+        "import-two.example.com": { remark: "二" },
+      }),
+    }), runtime);
+    assert.equal(okImport.status, 200);
+    assert.equal(dnsRequests, 0);
+    const stored = values.preferred_domains;
+    assert.equal(stored["import-one.example.com"].remark, "一");
+    assert.deepEqual(stored["import-one.example.com"].records.A, ["1.1.1.1"]);
+    assert.equal(stored["import-one.example.com"].checkedAt, 1700000000000);
+    assert.equal(stored["import-two.example.com"].remark, "二");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("refreshes preferred domain status after detection instead of keeping preview data", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });
