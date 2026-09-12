@@ -1511,6 +1511,7 @@ function sourceEntries() {
 let sourceStatuses = { subs: {}, apis: {}, domains: {} };
 let sourceStatusRequestVersion = 0;
 let preferredDomains = {};
+let preferredDomainStatuses = {};
 
 function formatPreferredDomainTime(value) {
   if (!value) return '尚未解析';
@@ -1563,9 +1564,7 @@ function renderPreferredDomains() {
       await savePreferredDomain(nextDomain, entry?.remark || '', domain);
     };
     const checked = document.createElement('small');
-    const configuredDomainStatus = preferredDomainEntryStatus(entry);
-    const runtimeDomainStatus = sourceStatuses.domains?.[normalizeSourceKeyClient('domains', domain)];
-    const domainStatus = runtimeDomainStatus && runtimeDomainStatus.state !== 'idle' ? runtimeDomainStatus : configuredDomainStatus;
+    const domainStatus = getPreferredDomainStatus(domain, entry);
     checked.textContent = '最后解析：' + formatPreferredDomainTime(domainStatus.lastAttemptAt || entry?.checkedAt);
     identity.append(domainInput, checked);
 
@@ -1596,6 +1595,7 @@ function renderPreferredDomains() {
       try {
         await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
         delete preferredDomains[domain];
+        delete preferredDomainStatuses[normalizeSourceKeyClient('domains', domain)];
         renderPreferredDomains();
         showToast('已删除优选域名', 'success');
       } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
@@ -1606,21 +1606,18 @@ function renderPreferredDomains() {
   container.appendChild(fragment);
 }
 
-function healthForPreferredDomain(domain) {
-  return createSourceHealth('domains', domain);
-}
-
 async function savePreferredDomain(domain, remark = '', previousDomain = '') {
   try {
     const entry = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark }) });
     if (previousDomain && previousDomain !== entry.domain) {
       await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(previousDomain), '旧域名删除', { method: 'DELETE' });
       delete preferredDomains[previousDomain];
+      delete preferredDomainStatuses[normalizeSourceKeyClient('domains', previousDomain)];
     }
     preferredDomains[entry.domain] = entry;
-    syncPreferredDomainStatus(entry);
+    setPreferredDomainStatus(entry.domain, preferredDomainEntryStatus(entry));
     renderPreferredDomains();
-    await loadSourceStatuses('read');
+    refreshRenderedSourceStatuses([{ type: 'domains', key: entry.domain }]);
     showToast('优选域名已保存并重新解析', 'success');
     return true;
   } catch (error) {
@@ -1638,6 +1635,7 @@ async function deletePreferredDomains(keys, trigger = null) {
     for (const domain of keys) {
       await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(domain), '域名删除', { method: 'DELETE' });
       delete preferredDomains[domain];
+      delete preferredDomainStatuses[normalizeSourceKeyClient('domains', domain)];
     }
     renderPreferredDomains();
     showToast('已删除 ' + keys.length + ' 个优选域名', 'success');
@@ -1682,7 +1680,15 @@ async function loadPreferredDomains() {
   try {
     const data = await readJsonResponse('/api/preferred-domains', '优选域名配置');
     preferredDomains = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-    Object.values(preferredDomains).forEach((entry) => syncPreferredDomainStatus(entry));
+    const configuredStatuses = {};
+    Object.entries(preferredDomains).forEach(([domain, entry]) => {
+      const normalizedDomain = normalizeSourceKeyClient('domains', domain);
+      const currentStatus = preferredDomainStatuses[normalizedDomain];
+      configuredStatuses[normalizedDomain] = currentStatus && currentStatus.state !== 'idle'
+        ? currentStatus
+        : preferredDomainEntryStatus(entry);
+    });
+    preferredDomainStatuses = configuredStatuses;
     renderPreferredDomains();
   } catch (error) {
     renderLoadError('preferredDomainsList', error.message, loadPreferredDomains);
@@ -1701,11 +1707,11 @@ async function addPreferredDomain() {
   try {
     const entry = await readJsonResponse('/api/preferred-domains', '域名解析', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark: remarkInput?.value.trim() || '' }) });
     preferredDomains[entry.domain] = entry;
-    syncPreferredDomainStatus(entry);
+    setPreferredDomainStatus(entry.domain, preferredDomainEntryStatus(entry));
     input.value = '';
     if (remarkInput) remarkInput.value = '';
     renderPreferredDomains();
-    await loadSourceStatuses('read');
+    refreshRenderedSourceStatuses([{ type: 'domains', key: entry.domain }]);
     showToast('域名添加成功，解析结果已保存', 'success');
   } catch (error) {
     setInputError(input, error.message);
@@ -1715,13 +1721,12 @@ async function addPreferredDomain() {
 
 function getSourceStatus(type, key) {
   const normalizedKey = normalizeSourceKeyClient(type, key);
-  const status = sourceStatuses[type]?.[normalizedKey];
-  if (type === 'domains' && preferredDomains[normalizedKey]) {
-    // 初始化请求可能留下 idle 占位状态；域名配置中的解析结果更具体，不能被占位覆盖。
-    if (!status || status.state === 'idle') return { ...preferredDomainEntryStatus(preferredDomains[normalizedKey]), ...(status?.remark ? { remark: status.remark } : {}) };
-  }
-  if (status) return status;
-  return { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
+  return sourceStatuses[type]?.[normalizedKey] || { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
+}
+
+function getPreferredDomainStatus(domain, entry = preferredDomains[normalizeSourceKeyClient('domains', domain)]) {
+  const normalizedDomain = normalizeSourceKeyClient('domains', domain);
+  return preferredDomainStatuses[normalizedDomain] || preferredDomainEntryStatus(entry);
 }
 
 function preferredDomainEntryStatus(entry) {
@@ -1753,11 +1758,13 @@ function preferredDomainEntryStatus(entry) {
   };
 }
 
-function syncPreferredDomainStatus(entry) {
-  const domain = normalizeSourceKeyClient('domains', entry?.domain);
-  if (!domain) return;
+function setPreferredDomainStatus(domain, status) {
+  const normalizedDomain = normalizeSourceKeyClient('domains', domain);
+  if (!normalizedDomain) return;
+  const nextStatus = { ...status };
+  preferredDomainStatuses[normalizedDomain] = nextStatus;
   sourceStatuses.domains ||= {};
-  sourceStatuses.domains[domain] = { ...preferredDomainEntryStatus(entry), remark: entry?.remark || '' };
+  sourceStatuses.domains[normalizedDomain] = { ...nextStatus };
 }
 
 function createSourceHealth(type, key, statusOverride = null) {
@@ -1822,7 +1829,11 @@ function refreshSourceHealthRows(type, sourceKeys = null) {
   list.querySelectorAll('.row[data-source-key]').forEach((row) => {
     if (normalizedKeys && !normalizedKeys.has(normalizeSourceKeyClient(type, row.dataset.sourceKey || ''))) return;
     const health = row.querySelector('.source-health');
-    if (health) health.replaceWith(createSourceHealth(type, row.dataset.sourceKey || ''));
+    if (health) {
+      const key = row.dataset.sourceKey || '';
+      const status = type === 'domains' ? getPreferredDomainStatus(key) : null;
+      health.replaceWith(createSourceHealth(type, key, status));
+    }
   });
 }
 
@@ -1894,6 +1905,8 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
       if (!mergedStatuses.domains[normalizedDomain] || mergedStatuses.domains[normalizedDomain].state === 'idle') {
         mergedStatuses.domains[normalizedDomain] = { ...configuredStatus, remark: entry?.remark || '' };
       }
+      const status = mergedStatuses.domains[normalizedDomain];
+      if (status && status.state !== 'idle') setPreferredDomainStatus(normalizedDomain, status);
     }
     sourceStatuses = mergedStatuses;
     refreshRenderedSourceStatuses();
@@ -1921,9 +1934,9 @@ async function checkPreferredDomain(domain) {
     body: JSON.stringify({ domain, remark: typeof entry.remark === 'string' ? entry.remark : '' }),
   });
   preferredDomains[updated.domain] = updated;
-  syncPreferredDomainStatus(updated);
+  setPreferredDomainStatus(updated.domain, preferredDomainEntryStatus(updated));
   renderPreferredDomains();
-  await loadSourceStatuses('read');
+  refreshRenderedSourceStatuses([{ type: 'domains', key: updated.domain }]);
 }
 
 function createSourceCheckButton(type, key) {
@@ -3514,6 +3527,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
     saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), records: sourceRawRecords, unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
+    if (type === 'domains') setPreferredDomainStatus(normalizedKey, nextStatus);
     renderSourceRawSummary(nextStatus);
     renderSourceRawCacheStatus('本次检测完成：' + formatSourceRawTime(Date.now()), sourceRawSourceErrors.size ? 'warning' : '');
     if (type === 'customApis') {
@@ -3535,6 +3549,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
       ? '本次检测失败；当前显示最近一次检测结果：' + formatSourceRawTime(cachedResult.savedAt)
       : '本次检测失败：' + failedStatus.error, 'warning');
     if (isManagedSource) sourceStatuses[type][normalizedKey] = failedStatus;
+    if (type === 'domains') setPreferredDomainStatus(normalizedKey, failedStatus);
     if (cachedResult && sourceRawNodes.length) {
       renderSourceRawSummary(cachedResult.status);
       renderSourceRawProcess(cachedResult.status?.filterStats || {});

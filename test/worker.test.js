@@ -676,6 +676,46 @@ test("refreshes preferred domain status after detection instead of keeping previ
   }
 });
 
+test("keeps preferred domain statuses isolated when checking one domain", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const addresses = { "one-isolated.example": "192.0.2.11", "two-isolated.example": "192.0.2.22" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    const domain = url.searchParams.get("name");
+    const type = url.searchParams.get("type");
+    const address = addresses[domain] || "192.0.2.99";
+    const answer = type === "A"
+      ? [{ type: 1, data: address }]
+      : type === "AAAA"
+        ? [{ type: 28, data: `2001:db8::${address.endsWith("11") ? "11" : address.endsWith("22") ? "22" : "99"}` }]
+        : [{ type: 5, data: `target.${domain}.` }];
+    return new Response(JSON.stringify({ Status: 0, Answer: answer }), { status: 200 });
+  };
+  try {
+    for (const domain of Object.keys(addresses)) {
+      await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+        method: "POST", headers, body: JSON.stringify({ domain }),
+      }), runtime);
+    }
+    const before = await (await worker.fetch(new Request("https://example.test/api/source-status", { headers }), runtime)).json();
+    addresses["one-isolated.example"] = "192.0.2.111";
+    const checked = await worker.fetch(new Request("https://example.test/api/source-status/check", {
+      method: "POST", headers, body: JSON.stringify({ scope: "selected", sources: [{ type: "domains", key: "one-isolated.example" }] }),
+    }), runtime);
+    assert.equal(checked.status, 200);
+    const after = await checked.json();
+    assert.equal(after.domains["one-isolated.example"].dnsRecords.A[0], "192.0.2.111");
+    assert.equal(after.domains["two-isolated.example"].dnsRecords.A[0], before.domains["two-isolated.example"].dnsRecords.A[0]);
+    assert.equal(after.domains["two-isolated.example"].lastAttemptAt, before.domains["two-isolated.example"].lastAttemptAt);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("uses DNS provider failover and short cache with classified errors", async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
