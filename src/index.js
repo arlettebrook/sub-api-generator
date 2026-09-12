@@ -51,6 +51,7 @@ import {
   webdavListBackupEntries,
   webdavListBackups,
   webdavPruneBackups,
+  webdavTestConnection,
   webdavUpload,
 } from "./webdav.js";
 
@@ -763,6 +764,20 @@ async function handleWebdavBackupUpload(env) {
   return pagesJsonResponse({ ok: true, filename, pruned });
 }
 
+async function handleWebdavBackupTest(request, env) {
+  // 优先测试表单中未保存的配置（密码留空时沿用已保存的密码）；无表单则测试已保存配置。
+  const raw = await request.json().catch(() => null);
+  let config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
+  if (isPlainObject(raw) && typeof raw.url === "string" && raw.url.trim()) {
+    let form;
+    try { form = validateWebdavConfigPayload(raw); } catch (error) { return pagesTextResponse(error.message, 400); }
+    if (!form.password && form.url) form.password = config.password;
+    config = form;
+  }
+  if (!isWebdavConfigured(config)) return pagesTextResponse("请先填写 WebDAV 地址", 400);
+  return pagesJsonResponse(await webdavTestConnection(config));
+}
+
 async function handleWebdavBackupList(env) {
   const config = normalizeWebdavConfig(await env.KV.get(KV_KEY_WEBDAV_BACKUP, "json"));
   if (!isWebdavConfigured(config)) return pagesTextResponse("请先配置并保存 WebDAV 地址", 400);
@@ -1125,6 +1140,9 @@ export default {
           if (method === "GET") return await handleGetWebdavBackupConfig(env);
           if (method === "POST") return await handlePostWebdavBackupConfig(request, env);
           return pagesMethodNotAllowed("GET, POST");
+        case "/api/backup/webdav/test":
+          if (method === "POST") return await handleWebdavBackupTest(request, env);
+          return pagesMethodNotAllowed("POST");
         case "/api/backup/webdav/list":
           if (method === "GET") return await handleWebdavBackupList(env);
           return pagesMethodNotAllowed("GET");

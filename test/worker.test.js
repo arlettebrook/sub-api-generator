@@ -652,12 +652,18 @@ test("configures WebDAV and backs up and restores through it", async () => {
 
   const defaultResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav", { headers: authHeaders }), runtime);
   assert.equal(defaultResponse.status, 200);
-  assert.deepEqual(await defaultResponse.json(), { url: "", username: "", filename: "sub-api-backup.json", passwordSet: false });
+  assert.deepEqual(await defaultResponse.json(), { url: "", username: "", filename: "sub-api-generator-backup.json", passwordSet: false });
 
   const notConfigured = await worker.fetch(new Request("https://example.test/api/backup/webdav/upload", {
     method: "POST", headers: authHeaders,
   }), runtime);
   assert.equal(notConfigured.status, 400);
+
+  const testUnconfigured = await worker.fetch(new Request("https://example.test/api/backup/webdav/test", {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({}),
+  }), runtime);
+  assert.equal(testUnconfigured.status, 400);
 
   const saveResponse = await worker.fetch(new Request("https://example.test/api/backup/webdav", {
     method: "POST", headers: jsonHeaders,
@@ -692,7 +698,7 @@ test("configures WebDAV and backs up and restores through it", async () => {
   const storedFiles = {};
   const oldBackupNames = ["my-backup.json"];
   for (let i = 1; i <= 11; i += 1) {
-    oldBackupNames.push(`my-backup_202501${String(i).padStart(2, "0")}_000001.json`);
+    oldBackupNames.push(`my-backup-202501${String(i).padStart(2, "0")}-000001.json`);
   }
   const xmlListing = () => '<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">'
     + [...oldBackupNames, ...Object.keys(storedFiles).map((url) => url.split("/").pop())]
@@ -726,11 +732,11 @@ test("configures WebDAV and backs up and restores through it", async () => {
     }), runtime);
     assert.equal(uploadResponse.status, 200);
     const uploadJson = await uploadResponse.json();
-    assert.match(uploadJson.filename, /^my-backup_\d{8}_\d{6}\.json$/);
+    assert.match(uploadJson.filename, /^my-backup-\d{8}-\d{6}\.json$/);
     assert.equal(putAttempts, 2);
     assert.ok(webdavRequests.some((request) => request.method === "MKCOL" && request.url === "https://dav.example.com/backup/"));
     const put = webdavRequests.find((request) => request.method === "PUT");
-    assert.match(put.url, /^https:\/\/dav\.example\.com\/backup\/my-backup_\d{8}_\d{6}\.json$/);
+    assert.match(put.url, /^https:\/\/dav\.example\.com\/backup\/my-backup-\d{8}-\d{6}\.json$/);
     assert.equal(put.headers.Authorization, "Basic " + btoa("user:pass"));
     const uploaded = JSON.parse(put.body);
     assert.equal(uploaded.version, 1);
@@ -740,8 +746,35 @@ test("configures WebDAV and backs up and restores through it", async () => {
     const deletes = webdavRequests.filter((request) => request.method === "DELETE").map((request) => request.url);
     assert.equal(deletes.length, 3);
     assert.ok(deletes.includes("https://dav.example.com/backup/my-backup.json"));
-    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup_20250101_000001.json"));
-    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup_20250102_000001.json"));
+    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup-20250101-000001.json"));
+    assert.ok(deletes.includes("https://dav.example.com/backup/my-backup-20250102-000001.json"));
+
+    // 连接测试：密码留空时沿用已保存密码；401 提示账号密码错误；407 类失败返回 ok:false；非法地址返回 400。
+    const savedFetchMock = globalThis.fetch;
+    globalThis.fetch = async () => new Response(null, { status: 401 });
+    const unauthorizedTest = await worker.fetch(new Request("https://example.test/api/backup/webdav/test", {
+      method: "POST", headers: jsonHeaders,
+      body: JSON.stringify({ url: "https://dav.example.com/backup/", username: "user", password: "", filename: "my-backup.json" }),
+    }), runtime);
+    assert.equal(unauthorizedTest.status, 200);
+    const unauthorizedJson = await unauthorizedTest.json();
+    assert.equal(unauthorizedJson.ok, false);
+    assert.match(unauthorizedJson.message, /账号或密码错误/);
+
+    globalThis.fetch = async () => new Response(null, { status: 207 });
+    const okTest = await worker.fetch(new Request("https://example.test/api/backup/webdav/test", {
+      method: "POST", headers: jsonHeaders,
+      body: JSON.stringify({ url: "https://dav.example.com/backup/", username: "user", password: "", filename: "my-backup.json" }),
+    }), runtime);
+    assert.equal(okTest.status, 200);
+    assert.equal((await okTest.json()).ok, true);
+
+    const invalidUrlTest = await worker.fetch(new Request("https://example.test/api/backup/webdav/test", {
+      method: "POST", headers: jsonHeaders,
+      body: JSON.stringify({ url: "ftp://dav.example.com/" }),
+    }), runtime);
+    assert.equal(invalidUrlTest.status, 400);
+    globalThis.fetch = savedFetchMock;
 
     const restoreValues = {};
     restoreValues.webdav_backup = values.webdav_backup;
@@ -775,7 +808,7 @@ test("configures WebDAV and backs up and restores through it", async () => {
     assert.ok(listJson.items.length >= 10);
 
     // 手动选择指定备份恢复：恢复更旧的一份。
-    const olderFilename = "my-backup_20250103_000001.json";
+    const olderFilename = "my-backup-20250103-000001.json";
     storedFiles[`https://dav.example.com/backup/${olderFilename}`] = JSON.stringify({
       app: "sub-api-generator",
       version: 1,

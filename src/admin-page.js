@@ -640,14 +640,15 @@ export const adminHTML = `
           </label>
           <label class="form-field">
             <span>备份文件名</span>
-            <input id="webdavFilename" type="text" maxlength="128" placeholder="sub-api-backup.json" autocomplete="off" />
-            <small>每次上传生成带北京时间戳的新文件，云端自动保留最近 10 份，更早的自动删除。</small>
+            <input id="webdavFilename" type="text" maxlength="128" placeholder="sub-api-generator-backup.json" autocomplete="off" />
+            <small>每次上传生成带北京时间戳的新文件（如 sub-api-generator-backup-20260913-123045.json），云端自动保留最近 10 份，更早的自动删除。</small>
           </label>
         </div>
         <div class="settings-inline-footer webdav-footer">
           <span class="save-status" id="webdavSaveStatus">配置已保存</span>
           <div class="backup-actions">
             <button class="btn-outline" id="saveWebdavConfigButton" type="button" onclick="saveWebdavConfig()">💾 保存 WebDAV 配置</button>
+            <button class="btn-outline" id="webdavTestButton" type="button" onclick="testWebdavConfig(this)">🔌 测试连接</button>
             <button class="btn-outline" id="webdavUploadButton" type="button" onclick="uploadWebdavBackup(this)" disabled>☁️ 备份到 WebDAV</button>
             <button class="btn-outline" id="webdavRestoreRemoteButton" type="button" onclick="restoreWebdavBackup()" disabled>☁️ 从 WebDAV 恢复</button>
           </div>
@@ -657,7 +658,7 @@ export const adminHTML = `
             <div class="setting-copy"><strong>云端备份列表</strong><p>最多保留最近 10 份，可选择任意一份恢复或下载。</p></div>
             <button class="btn-subtle" id="webdavRefreshListButton" type="button" onclick="refreshWebdavRemoteList()">🔄 刷新列表</button>
           </div>
-          <div id="webdavRemoteList" class="webdav-remote-list"></div>
+          <div id="webdavRemoteList" class="webdav-remote-list"><div class="webdav-remote-empty">点击"🔄 刷新列表"获取云端备份。</div></div>
         </div>
       </div>
       <dialog class="confirm-dialog" id="restoreConfirmDialog" aria-labelledby="restoreConfirmTitle" aria-describedby="restoreConfirmMessage">

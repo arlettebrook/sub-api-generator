@@ -22,6 +22,11 @@ export const adminStyle = `
     --danger: #ef4444;
     --danger-hover: #dc2626;
     --danger-light: rgba(239, 68, 68, 0.08);
+    --warning: #b45309;
+    --warning-strong: #92400e;
+    --warning-light: rgba(245, 158, 11, 0.1);
+    --warning-border: rgba(217, 119, 6, 0.35);
+    --warning-hover-bg: rgba(245, 158, 11, 0.16);
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --shadow-md: 0 4px 18px rgba(15, 23, 42, 0.09);
     --shadow-lg: 0 14px 36px rgba(15, 23, 42, 0.13);
@@ -53,6 +58,11 @@ export const adminStyle = `
     --danger: #f87171;
     --danger-hover: #ef4444;
     --danger-light: rgba(248, 113, 113, 0.12);
+    --warning: #fbbf24;
+    --warning-strong: #fcd34d;
+    --warning-light: rgba(251, 191, 36, 0.09);
+    --warning-border: rgba(251, 191, 36, 0.3);
+    --warning-hover-bg: rgba(251, 191, 36, 0.16);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.25);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -1275,17 +1285,17 @@ export const adminStyle = `
   .source-error-notice,
   .data-source-error {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 12px;
     min-width: 0;
     max-width: 100%;
-    flex-wrap: wrap;
-    padding: 10px 12px;
-    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 12px 14px;
+    border: 1px solid var(--warning-border);
     border-radius: var(--radius-md);
-    background: rgba(245, 158, 11, 0.08);
-    color: #b45309;
+    background: var(--warning-light);
+    color: var(--warning);
     font-size: 13px;
+    line-height: 1.5;
   }
 
   .source-load-status[hidden],
@@ -1293,36 +1303,95 @@ export const adminStyle = `
     display: none;
   }
 
+  .notice-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    color: var(--warning);
+  }
+
+  .notice-icon svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .notice-body {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+    align-content: start;
+  }
+
   .source-load-status strong,
-  .source-error-notice strong {
-    color: #92400e;
+  .source-error-notice strong,
+  .data-source-error strong {
+    color: var(--warning-strong);
+    font-weight: 600;
     max-width: 100%;
   }
 
   .source-load-status ul,
   .source-error-notice ul {
-    display: grid;
-    gap: 2px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
     min-width: 0;
     margin: 0;
-    padding-left: 18px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .source-load-status li,
+  .source-error-notice li {
+    position: relative;
+    padding-left: 13px;
+    opacity: 0.95;
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 
+  .source-load-status li::before,
+  .source-error-notice li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.65;
+  }
+
   .source-load-status button,
-  .source-error-notice button {
+  .source-error-notice button,
+  .data-source-error button {
     flex-shrink: 0;
+    align-self: center;
     margin-left: auto;
     height: 30px;
-    padding: 0 10px;
-    color: #92400e;
-    border-color: rgba(180, 83, 9, 0.35);
+    padding: 0 14px;
+    border: 1px solid var(--warning-border);
+    border-radius: 8px;
+    color: var(--warning-strong);
     background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: var(--transition);
+  }
+
+  .source-load-status button:hover,
+  .source-error-notice button:hover {
+    color: var(--warning-strong);
+    border-color: var(--warning);
+    background: var(--warning-hover-bg);
   }
 
   .data-source-error {
-    justify-content: space-between;
     color: var(--danger);
     border-color: rgba(239, 68, 68, 0.28);
     background: var(--danger-light);
@@ -1330,9 +1399,20 @@ export const adminStyle = `
     word-break: break-word;
   }
 
+  .data-source-error .notice-icon,
+  .data-source-error strong {
+    color: var(--danger);
+  }
+
   .data-source-error button {
-    height: 30px;
-    padding: 0 12px;
+    border-color: rgba(239, 68, 68, 0.35);
+    color: var(--danger);
+  }
+
+  .data-source-error button:hover {
+    color: var(--danger-hover);
+    border-color: var(--danger);
+    background: var(--danger-light);
   }
 
   .section-heading {
@@ -4909,17 +4989,12 @@ export const adminStyle = `
     .source-load-status,
     .source-error-notice,
     .data-source-error {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-    .source-load-status ul,
-    .source-error-notice ul {
-      width: 100%;
+      flex-wrap: wrap;
     }
     .source-load-status button,
     .source-error-notice button,
     .data-source-error button {
-      margin-left: 0;
+      margin-left: 30px;
     }
     .source-status-metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));

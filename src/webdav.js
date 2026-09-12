@@ -1,6 +1,6 @@
 import { isPlainObject } from "./config.js";
 
-export const DEFAULT_WEBDAV_FILENAME = "sub-api-backup.json";
+export const DEFAULT_WEBDAV_FILENAME = "sub-api-generator-backup.json";
 export const MAX_WEBDAV_URL_LENGTH = 2048;
 export const MAX_WEBDAV_USERNAME_LENGTH = 200;
 export const MAX_WEBDAV_PASSWORD_LENGTH = 200;
@@ -14,6 +14,34 @@ export const EMPTY_WEBDAV_CONFIG = {
   password: "",
   filename: DEFAULT_WEBDAV_FILENAME,
 };
+
+// 连通性测试：PROPFIND 目录验证地址、账号密码是否可用；404 视为"连接成功但目录未创建"（上传时会自动创建）。
+export async function webdavTestConnection(config) {
+  const authHeader = webdavAuthHeader(config);
+  const collectionUrl = config.url.replace(/\/+$/, "") + "/";
+  let response;
+  try {
+    response = await fetch(collectionUrl, {
+      method: "PROPFIND",
+      headers: {
+        ...(authHeader ? { Authorization: authHeader } : {}),
+        Depth: "1",
+      },
+    });
+  } catch (error) {
+    return { ok: false, message: "无法连接到 WebDAV 服务器：" + (error.message || "网络异常") };
+  }
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false, message: `连接失败：账号或密码错误（HTTP ${response.status}）` };
+  }
+  if (response.status === 404) {
+    return { ok: true, message: "连接成功，目录尚不存在（首次上传备份时会自动创建）" };
+  }
+  if (!response.ok) {
+    return { ok: false, message: `连接失败（HTTP ${response.status}），请检查地址是否为 WebDAV 服务` };
+  }
+  return { ok: true, message: "连接成功" };
+}
 
 function normalizeWebdavUrl(value) {
   if (value === undefined || value === null) return "";
@@ -152,19 +180,20 @@ export async function webdavDownload(config, filename) {
   return response.text();
 }
 
-// 备份文件名统一使用北京时间（UTC+8）时间戳，例如 sub-api-backup_20260913_123045.json。
+// 备份文件名统一使用北京时间（UTC+8）时间戳，例如 sub-api-generator-backup-20260913-123045.json。
 export function beijingBackupToken(date = new Date()) {
   const stamp = new Date(date.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, "");
-  return `${stamp.slice(0, 8)}_${stamp.slice(8)}`;
+  return `${stamp.slice(0, 8)}-${stamp.slice(8)}`;
 }
 
 export function timestampedBackupFilename(baseFilename, date = new Date()) {
-  return `${baseFilename.replace(/\.json$/i, "")}_${beijingBackupToken(date)}.json`;
+  return `${baseFilename.replace(/\.json$/i, "")}-${beijingBackupToken(date)}.json`;
 }
 
 function backupFilenamePattern(baseFilename) {
   const stem = baseFilename.replace(/\.json$/i, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${stem}(?:_(\\d{8}_\\d{6}))?\\.json$`, "i");
+  // 兼容旧命名：时间戳部分同时接受 - 和 _ 连接符。
+  return new RegExp(`^${stem}(?:[-_](\\d{8}[-_]\\d{6}))?\\.json$`, "i");
 }
 
 export function isValidBackupFilename(baseFilename, filename) {
@@ -173,7 +202,7 @@ export function isValidBackupFilename(baseFilename, filename) {
 
 // 按时间戳倒序（最新在前）；不带时间戳的旧文件视为最旧。
 export function sortBackupFilenames(filenames) {
-  const token = (filename) => filename.match(/_(\d{8}_\d{6})\.json$/i)?.[1] || "";
+  const token = (filename) => filename.match(/[-_](\d{8}[-_]\d{6})\.json$/i)?.[1] || "";
   return [...filenames].sort((left, right) => token(right).localeCompare(token(left)));
 }
 
@@ -225,7 +254,7 @@ export async function webdavListBackupEntries(config, baseFilename) {
 
 // 按时间戳倒序（最新在前）；不带时间戳的旧文件视为最旧。
 export function sortBackupEntries(entries) {
-  const token = (name) => name.match(/_(\d{8}_\d{6})\.json$/i)?.[1] || "";
+  const token = (name) => name.match(/[-_](\d{8}[-_]\d{6})\.json$/i)?.[1] || "";
   return [...entries].sort((left, right) => token(right.name).localeCompare(token(left.name)));
 }
 

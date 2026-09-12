@@ -193,20 +193,39 @@ async function readJsonResponse(url, label, options = {}) {
   }
 }
 
+function noticeIconMarkup(kind = 'warning') {
+  const path = kind === 'danger'
+    ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
+    : '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>';
+  const icon = document.createElement('span');
+  icon.className = 'notice-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg>';
+  return icon;
+}
+
+function noticeBodyMarkup() {
+  const body = document.createElement('div');
+  body.className = 'notice-body';
+  return body;
+}
+
 function renderLoadError(containerId, message, retry) {
   const container = $(containerId);
   if (!container) return;
   container.innerHTML = '';
   const notice = document.createElement('div');
   notice.className = 'data-source-error';
+  const body = noticeBodyMarkup();
   const text = document.createElement('span');
   text.textContent = message;
+  body.appendChild(text);
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn-outline';
   button.textContent = '重试';
   button.onclick = retry;
-  notice.append(text, button);
+  notice.append(noticeIconMarkup('danger'), body, button);
   container.appendChild(notice);
 }
 
@@ -232,9 +251,10 @@ function renderSourceLoadStatus(errors = []) {
   notice.innerHTML = '';
   notice.hidden = errors.length === 0;
   if (!errors.length) return;
+  const body = noticeBodyMarkup();
   const title = document.createElement('strong');
   title.textContent = '部分数据源配置加载失败';
-  notice.appendChild(title);
+  body.appendChild(title);
   const list = document.createElement('ul');
   errors.forEach((error) => {
     const item = document.createElement('li');
@@ -242,13 +262,13 @@ function renderSourceLoadStatus(errors = []) {
     item.textContent = sourceName + '：' + error.message;
     list.appendChild(item);
   });
-  notice.appendChild(list);
+  body.appendChild(list);
   const retry = document.createElement('button');
   retry.type = 'button';
   retry.className = 'btn-outline';
   retry.textContent = '重新加载数据源';
   retry.onclick = () => loadCustomApis(true).catch((error) => showToast(error.message, 'error'));
-  notice.appendChild(retry);
+  notice.append(noticeIconMarkup(), body, retry);
 }
 
 function parseSourceErrors(value) {
@@ -267,9 +287,10 @@ function renderPreviewSourceErrors(errors = []) {
   notice.innerHTML = '';
   notice.hidden = errors.length === 0;
   if (!errors.length) return;
+  const body = noticeBodyMarkup();
   const title = document.createElement('strong');
   title.textContent = '部分数据源暂时不可用，已展示其他来源的数据';
-  notice.appendChild(title);
+  body.appendChild(title);
   const list = document.createElement('ul');
   errors.forEach((error) => {
     const item = document.createElement('li');
@@ -277,13 +298,13 @@ function renderPreviewSourceErrors(errors = []) {
     item.textContent = sourceName + '：' + error.message;
     list.appendChild(item);
   });
-  notice.appendChild(list);
+  body.appendChild(list);
   const retry = document.createElement('button');
   retry.type = 'button';
   retry.className = 'btn-outline';
   retry.textContent = '重试';
   retry.onclick = fetchNodes;
-  notice.appendChild(retry);
+  notice.append(noticeIconMarkup(), body, retry);
 }
 
 function formatSourceTime(value) {
@@ -4652,7 +4673,7 @@ const BACKUP_SECTION_LABELS = {  subs: '订阅源',
 // 备份文件名统一使用北京时间（UTC+8），与服务端 WebDAV 备份保持一致。
 function backupFileName() {
   const stamp = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, '');
-  return 'sub-api-backup_' + stamp.slice(0, 8) + '_' + stamp.slice(8) + '.json';
+  return 'sub-api-generator-backup-' + stamp.slice(0, 8) + '-' + stamp.slice(8) + '.json';
 }
 
 async function exportBackup(button) {
@@ -4755,7 +4776,7 @@ function initBackupRestore() {
 }
 
 // ======================== WebDAV 云备份 ========================
-let webdavBackupConfig = { url: '', username: '', filename: 'sub-api-backup.json', passwordSet: false };
+let webdavBackupConfig = { url: '', username: '', filename: 'sub-api-generator-backup.json', passwordSet: false };
 
 function readWebdavConfigForm() {
   return {
@@ -4792,9 +4813,11 @@ async function loadWebdavBackupConfig() {
     if ($('webdavUrl')) $('webdavUrl').value = webdavBackupConfig.url || '';
     if ($('webdavUsername')) $('webdavUsername').value = webdavBackupConfig.username || '';
     if ($('webdavPassword')) $('webdavPassword').value = '';
-    if ($('webdavFilename')) $('webdavFilename').value = webdavBackupConfig.filename || 'sub-api-backup.json';
+    if ($('webdavFilename')) $('webdavFilename').value = webdavBackupConfig.filename || 'sub-api-generator-backup.json';
     updateWebdavBackupUi(false);
-    if (isWebdavConfiguredClient()) void refreshWebdavRemoteList();
+    // 云端备份列表仅在用户点击"刷新列表"时获取。
+    const remoteList = $('webdavRemoteList');
+    if (remoteList) remoteList.innerHTML = '<div class="webdav-remote-empty">点击"🔄 刷新列表"获取云端备份。</div>';
   } catch (error) {
     updateWebdavBackupUi(false);
     showToast(error.message, 'error');
@@ -4828,11 +4851,30 @@ async function saveWebdavConfig() {
     });
     if ($('webdavPassword')) $('webdavPassword').value = '';
     updateWebdavBackupUi(false);
-    void refreshWebdavRemoteList();
+    const remoteList = $('webdavRemoteList');
+    if (remoteList) remoteList.innerHTML = '<div class="webdav-remote-empty">点击"🔄 刷新列表"获取云端备份。</div>';
     showToast('WebDAV 配置已保存', 'success');
   } catch (error) {
     updateWebdavBackupUi(true);
     showToast(error.message || 'WebDAV 配置保存失败', 'error', saveWebdavConfig);
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function testWebdavConfig(button) {
+  const form = readWebdavConfigForm();
+  if (!form.url) {
+    showToast('请先填写 WebDAV 地址', 'error');
+    return;
+  }
+  setButtonBusy(button, true, '测试中…');
+  try {
+    // 密码留空时服务端会沿用已保存的密码进行测试。
+    const result = await webdavAction('/api/backup/webdav/test', 'WebDAV 连接测试', form);
+    showToast(result.message || (result.ok ? '连接成功' : '连接失败'), result.ok ? 'success' : 'error');
+  } catch (error) {
+    showToast(error.message || 'WebDAV 连接测试失败', 'error', () => testWebdavConfig(button));
   } finally {
     setButtonBusy(button, false);
   }
@@ -4858,7 +4900,6 @@ async function uploadWebdavBackup(button) {
   try {
     const result = await webdavAction('/api/backup/webdav/upload', 'WebDAV 备份');
     showToast('备份已上传：' + (result.filename || '') + (result.pruned ? '，已清理 ' + result.pruned + ' 份旧备份' : ''), 'success');
-    void refreshWebdavRemoteList();
   } catch (error) {
     showToast(error.message || 'WebDAV 备份失败', 'error', () => uploadWebdavBackup(button));
   } finally {
@@ -4882,7 +4923,7 @@ async function applyWebdavRestore(filename) {
   }
 }
 
-function restoreWebdavBackup(filename) {
+async function restoreWebdavBackup(filename) {
   if (!isWebdavConfiguredClient()) {
     showToast('请先配置并保存 WebDAV 地址', 'error');
     return;
@@ -4891,12 +4932,28 @@ function restoreWebdavBackup(filename) {
     openRestoreConfirm('<span><strong>WebDAV</strong>' + filename + '</span>', () => applyWebdavRestore(filename));
     return;
   }
-  openRestoreConfirm('<span><strong>WebDAV</strong>最近一份备份</span>', () => applyWebdavRestore());
+  // 未指定文件名时先获取云端列表，确认框中展示将要恢复的具体文件。
+  const button = $('webdavRestoreRemoteButton');
+  setButtonBusy(button, true, '获取中…');
+  try {
+    const result = await readJsonResponse('/api/backup/webdav/list', '获取云端备份列表');
+    const newest = Array.isArray(result.items) && result.items.length ? result.items[0].filename : '';
+    if (!newest) {
+      showToast('WebDAV 上没有找到备份文件', 'error');
+      return;
+    }
+    openRestoreConfirm('<span><strong>WebDAV</strong>' + newest + '</span>', () => applyWebdavRestore(newest));
+  } catch (error) {
+    showToast(error.message || '获取云端备份列表失败', 'error', () => restoreWebdavBackup());
+  } finally {
+    setButtonBusy(button, false);
+  }
 }
 
 // ======================== WebDAV 云端备份列表 ========================
+// 兼容旧命名：时间戳部分同时接受 - 和 _ 连接符。
 function formatBackupFilenameTime(filename) {
-  const match = String(filename || '').match(/_(\d{8})_(\d{6})\.json$/i);
+  const match = String(filename || '').match(/[-_](\d{8})[-_](\d{6})\.json$/i);
   if (!match) return '';
   const date = match[1];
   const time = match[2];
