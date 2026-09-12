@@ -115,9 +115,30 @@ function setButtonBusy(button, busy, busyText = '保存中…') {
   }
 }
 
+// 数据源/优选 API 通用的启用开关：滑动开关 + 状态文字，样式见 admin-style 的 .source-switch。
+function createSourceSwitch({ checked, title, ariaLabel, onChange }) {
+  const label = document.createElement('label');
+  label.className = 'source-switch';
+  label.title = title || (checked ? '已启用，点击禁用' : '已禁用，点击启用');
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.setAttribute('role', 'switch');
+  input.checked = checked === true;
+  input.setAttribute('aria-label', ariaLabel || label.title);
+  const track = document.createElement('span');
+  track.className = 'source-switch-track';
+  const text = document.createElement('span');
+  text.className = 'source-switch-text';
+  text.textContent = input.checked ? '已启用' : '已禁用';
+  label.append(input, track, text);
+  if (typeof onChange === 'function') {
+    input.onchange = () => onChange(input, text);
+  }
+  return { label, input, text };
+}
+
 function setInputError(input, message) {
-  if (!input) return;
-  const field = input.closest('.form-field') || input.parentElement;
+  if (!input) return;  const field = input.closest('.form-field') || input.parentElement;
   let hint = field?.querySelector('.inline-error');
   if (!hint) {
     hint = document.createElement('small');
@@ -1577,9 +1598,9 @@ function importCustomApis(event) {
 
 function sourceEntries() {
   return [
-    ...Object.entries(subs).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
+    // 已禁用的订阅源/优选域名不作为可选数据源展示，也不参与输出。
+    ...Object.entries(subs).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
     ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
-    // 已禁用的优选域名不作为可选数据源展示，也不参与输出。
     ...Object.entries(preferredDomains).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'domains', key, label: value.remark || key })),
   ];
 }
@@ -1632,13 +1653,19 @@ function renderPreferredDomains() {
   entries.forEach(([domain, entry]) => {
     const disabled = entry?.enabled === false;
     const row = document.createElement('div');
-    row.className = 'row preferred-domain-row' + (disabled ? ' preferred-domain-disabled' : '');
+    row.className = 'row preferred-domain-row' + (disabled ? ' source-disabled-row' : '');
     row.dataset.sourceKey = domain;
     const select = document.createElement('input');
     select.type = 'checkbox';
     select.className = 'source-select';
     select.dataset.key = domain;
     select.setAttribute('aria-label', '选择优选域名 ' + domain);
+    // 启用开关紧跟复选框：禁用的域名不参与优选 API 输出，也不出现在数据源选择列表。
+    const enabledSwitch = createSourceSwitch({
+      checked: !disabled,
+      ariaLabel: '启用优选域名 ' + domain,
+      onChange: (input, text) => setPreferredDomainEnabled(domain, input.checked, { input, text }),
+    });
     const remarkInput = document.createElement('input');
     remarkInput.className = 'remark-input';
     remarkInput.value = entry?.remark || '';
@@ -1667,14 +1694,6 @@ function renderPreferredDomains() {
     const domainStatus = getPreferredDomainStatus(domain, entry);
     checked.textContent = (disabled ? '已禁用 · ' : '') + '最后解析：' + formatPreferredDomainTime(domainStatus.lastAttemptAt || entry?.checkedAt);
     identity.append(domainInput, checked);
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.type = 'button';
-    toggleBtn.className = 'btn-outline icon-action source-toggle-button';
-    toggleBtn.textContent = disabled ? '▶ 启用' : '⏸ 禁用';
-    toggleBtn.setAttribute('aria-label', (disabled ? '启用优选域名 ' : '禁用优选域名 ') + domain);
-    toggleBtn.setAttribute('aria-pressed', String(disabled));
-    toggleBtn.onclick = () => setPreferredDomainEnabled(domain, disabled, toggleBtn);
 
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
@@ -1712,7 +1731,7 @@ function renderPreferredDomains() {
         } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
       }
     });
-    row.append(select, remarkInput, identity, toggleBtn, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
+    row.append(select, enabledSwitch.label, remarkInput, identity, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
     fragment.appendChild(row);
   });
   container.appendChild(fragment);
@@ -1742,19 +1761,25 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
   }
 }
 
-async function setPreferredDomainEnabled(domain, enabled, trigger = null) {
+async function setPreferredDomainEnabled(domain, enabled, switchUI = null) {
   const entry = preferredDomains[domain] || {};
-  if (trigger) setButtonBusy(trigger, true, enabled ? '启用中…' : '禁用中…');
+  if (switchUI) {
+    switchUI.input.disabled = true;
+    switchUI.text.textContent = '处理中…';
+  }
   try {
-    // 禁用/启用只改状态：resolve=false 保留已有解析结果，enabled 未传时后端保留原状态。
+    // 禁用/启用只改状态：resolve=false 保留已有解析结果。
     const updated = await readJsonResponse('/api/preferred-domains', '优选域名状态更新', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark: entry.remark || '', resolve: false, enabled }) });
     preferredDomains[updated.domain] = updated;
     renderPreferredDomains();
     showToast(enabled ? '优选域名已启用' : '优选域名已禁用，将不再参与优选 API 输出', 'success');
   } catch (error) {
     showToast(error.message, 'error');
+    renderPreferredDomains();
   } finally {
-    if (trigger) setButtonBusy(trigger, false);
+    if (switchUI) {
+      switchUI.input.disabled = false;
+    }
   }
 }
 
@@ -2333,7 +2358,7 @@ function renderCustomApis() {
   }
   entries.forEach(([path, entry]) => {
     const row = document.createElement('div');
-    row.className = 'row custom-api-row';
+    row.className = 'row custom-api-row' + (entry.enabled === true ? '' : ' source-disabled-row');
     row.dataset.path = path;
 
     const main = document.createElement('div');
@@ -2436,9 +2461,10 @@ function renderCustomApis() {
     delBtn.type = 'button';
     delBtn.setAttribute('aria-label', '🗑 删除');
     delBtn.onclick = () => confirmCustomApiDelete(path);
-    actions.append(switchLabel, editBtn, viewBtn, downloadBtn, openBtn, delBtn, copyBtn);
+    actions.append(editBtn, viewBtn, downloadBtn, openBtn, delBtn, copyBtn);
 
-    row.append(main, actions);
+    // 启用开关放在行首（优选 API 行没有复选框，与订阅源/优选域名的行首开关位置保持一致）。
+    row.append(switchLabel, main, actions);
     el.appendChild(row);
   });
 }
@@ -2812,10 +2838,27 @@ function renderSubs() {
   if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
   const fragment = document.createDocumentFragment();
   entries.forEach(([host, entry]) => {
+    const disabled = entry?.enabled === false;
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = 'row' + (disabled ? ' source-disabled-row' : '');
     row.dataset.sourceKey = host;
     const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'source-select'; select.checked = false; select.dataset.key = host; select.setAttribute('aria-label', '选择订阅源 ' + host);
+
+    // 启用开关紧跟复选框：禁用的订阅源不参与优选 API 输出，也不出现在数据源选择列表。
+    const enabledSwitch = createSourceSwitch({
+      checked: !disabled,
+      ariaLabel: '启用订阅源 ' + host,
+      onChange: async (input, text) => {
+        const previous = !input.checked;
+        input.disabled = true;
+        text.textContent = '处理中…';
+        subs[host].enabled = input.checked;
+        const saved = await queueSubsSave();
+        if (!saved) subs[host].enabled = previous;
+        renderSubs();
+        if (saved) showToast(input.checked ? '订阅源已启用' : '订阅源已禁用，将不再参与优选 API 输出', 'success');
+      },
+    });
 
     const remarkInput = document.createElement('input');
     remarkInput.className = 'remark-input';
@@ -2866,7 +2909,7 @@ function renderSubs() {
       void queueSubsSave();
     };
 
-    row.appendChild(select); row.appendChild(remarkInput);
+    row.appendChild(select); row.appendChild(enabledSwitch.label); row.appendChild(remarkInput);
     row.appendChild(hostInput);
     row.appendChild(createCopyButton(host, '订阅源地址'));
     row.appendChild(health);

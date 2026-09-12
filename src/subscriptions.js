@@ -649,7 +649,10 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     };
     const blacklistRegex = getBlacklistRegex(blacklist);
     const sourceTasks = [];
-    selectedEntries(subsConfig, "subs").forEach(([host, entry]) => sourceTasks.push(async () => {
+    // 禁用的订阅源不参与任何输出，无论是全部数据源还是手动选择模式。
+    selectedEntries(subsConfig, "subs")
+      .filter(([, entry]) => !(isPlainObject(entry) && entry.enabled === false))
+      .forEach(([host, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchPreferredSubs(host, filterRules);

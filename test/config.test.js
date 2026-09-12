@@ -20,10 +20,12 @@ test("normalizes legacy boolean KV entries", () => {
   assert.deepEqual(normalizeKvData({
     "one.example": true,
     "two.example": { enabled: false, remark: "test" },
+    "three.example": { enabled: "no", remark: "kept" },
     ignored: "invalid",
   }), {
     "one.example": { remark: "" },
-    "two.example": { remark: "test" },
+    "two.example": { remark: "test", enabled: false },
+    "three.example": { remark: "kept" },
   });
 });
 
@@ -31,9 +33,11 @@ test("validates and normalizes configuration payloads", () => {
   assert.deepEqual(validateConfigPayload({
     "one.example": true,
     "two.example": { enabled: 1, remark: "x".repeat(250) },
+    "three.example": { enabled: false, remark: "y" },
   }), {
     "one.example": { remark: "" },
     "two.example": { remark: "x".repeat(200) },
+    "three.example": { remark: "y", enabled: false },
   });
   assert.throws(() => validateConfigPayload([]), /配置必须是 JSON 对象/);
   assert.throws(() => validateConfigPayload({ bad: null }), /配置项无效/);

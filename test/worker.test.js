@@ -1042,9 +1042,9 @@ test("disabling a preferred domain hides it from custom API output", async () =>
 
     assert.ok((await previewNodes(paths[0])).length > 0);
 
-    // 管理端脚本提供启用/禁用开关，并在优选 API 源选择中过滤禁用域名。
+    // 管理端脚本提供启用开关，并在优选 API 源选择中过滤禁用域名。
     assert.match(adminClientScript, /setPreferredDomainEnabled/);
-    assert.match(adminClientScript, /preferred-domain-disabled/);
+    assert.match(adminClientScript, /source-disabled-row/);
 
     // 禁用时 resolve:false 保留解析结果，仅切换状态。
     const disabled = await postDomain({ domain: "toggle.example.com", remark: "备注", resolve: false, enabled: false });
@@ -1071,6 +1071,48 @@ test("disabling a preferred domain hides it from custom API output", async () =>
     const invalid = await postDomain({ domain: "toggle.example.com", resolve: false, enabled: "yes" });
     assert.equal(invalid.status, 400);
     assert.match(await invalid.text(), /启用状态必须是布尔值/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("disabling a preferred subscription hides it from custom API output", async () => {
+  // 预览接口对同一路径有冷却限制，两个阶段各用一个路径避免被限流。
+  const paths = ["subs_api_a", "subs_api_b"];
+  const values = {
+    subs: {},
+    apis: {},
+    preferred_domains: {},
+    custom_apis: Object.fromEntries(paths.map((path) => [path, { enabled: true, remark: "", sourceMode: "all", sources: [] }])),
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("vless://00000000-0000-4000-8000-000000000000@1.2.3.4:443?security=tls&sni=example.com#sub", { status: 200 });
+  const postSubs = (body) => worker.fetch(new Request("https://example.test/api/subs", {
+    method: "POST", headers, body: JSON.stringify(body),
+  }), runtime);
+  const preview = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST", headers, body: JSON.stringify({ path }),
+  }), runtime);
+  const previewNodes = async (path) => (await (await preview(path)).json()).nodes || [];
+  try {
+    // 禁用的订阅源不参与优选 API 输出。
+    const saved = await postSubs({ "sub.example.com": { remark: "订阅源", enabled: false } });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await previewNodes(paths[0]), []);
+
+    // 重新启用后节点恢复输出，GET 配置时 enabled 字段保留。
+    const enabled = await postSubs({ "sub.example.com": { remark: "订阅源", enabled: true } });
+    assert.equal(enabled.status, 200);
+    assert.ok((await previewNodes(paths[1])).length > 0);
+    const list = await worker.fetch(new Request("https://example.test/api/subs", { headers }), runtime);
+    assert.equal((await list.json())["sub.example.com"].enabled, true);
+
+    // 仅改备注时 enabled 缺省视为启用（兼容旧数据）。
+    await postSubs({ "sub.example.com": { remark: "新备注" } });
+    assert.equal(values.subs["sub.example.com"].enabled, undefined);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -1874,7 +1874,9 @@ export const adminStyle = `
     flex-wrap: wrap;
   }
 
-  .custom-api-switch {
+  /* 启用开关：优选 API 行用 .custom-api-switch（兼容既有选择器），数据源行用 .source-switch，样式一致。 */
+  .custom-api-switch,
+  .source-switch {
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -1884,9 +1886,11 @@ export const adminStyle = `
     font-weight: 600;
     cursor: pointer;
     user-select: none;
+    flex: 0 0 auto;
   }
 
-  .custom-api-switch input {
+  .custom-api-switch input,
+  .source-switch input {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1894,7 +1898,8 @@ export const adminStyle = `
     pointer-events: none;
   }
 
-  .custom-api-switch-track {
+  .custom-api-switch-track,
+  .source-switch-track {
     position: relative;
     width: 42px;
     height: 24px;
@@ -1904,7 +1909,8 @@ export const adminStyle = `
     transition: var(--transition);
   }
 
-  .custom-api-switch-track::after {
+  .custom-api-switch-track::after,
+  .source-switch-track::after {
     position: absolute;
     top: 3px;
     left: 3px;
@@ -1916,22 +1922,26 @@ export const adminStyle = `
     transition: var(--transition);
   }
 
-  .custom-api-switch input:checked + .custom-api-switch-track {
+  .custom-api-switch input:checked + .custom-api-switch-track,
+  .source-switch input:checked + .source-switch-track {
     border-color: var(--success);
     background: rgba(16, 185, 129, 0.2);
   }
 
-  .custom-api-switch input:checked + .custom-api-switch-track::after {
+  .custom-api-switch input:checked + .custom-api-switch-track::after,
+  .source-switch input:checked + .source-switch-track::after {
     left: 21px;
     background: var(--success);
   }
 
-  .custom-api-switch input:focus-visible + .custom-api-switch-track {
+  .custom-api-switch input:focus-visible + .custom-api-switch-track,
+  .source-switch input:focus-visible + .source-switch-track {
     outline: 3px solid var(--accent-light);
     outline-offset: 2px;
   }
 
-  .custom-api-switch-text {
+  .custom-api-switch-text,
+  .source-switch-text {
     min-width: 24px;
   }
 
@@ -3372,13 +3382,13 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
-  /* 已禁用的优选域名整行置灰，按钮与“已禁用”标识提示可通过“启用”恢复。 */
-  .preferred-domain-row.preferred-domain-disabled {
+  /* 已禁用的数据源/优选 API 整行置灰，开关与“已禁用”标识提示可通过开关恢复。 */
+  .row.source-disabled-row {
     opacity: 0.55;
   }
 
-  .preferred-domain-row.preferred-domain-disabled .host-input,
-  .preferred-domain-row.preferred-domain-disabled .remark-input {
+  .row.source-disabled-row .host-input,
+  .row.source-disabled-row .remark-input {
     text-decoration: line-through;
     color: var(--text-tertiary);
   }
@@ -3387,9 +3397,9 @@ export const adminStyle = `
      否则网格无法收缩、整行会溢出卡片边缘。 */
   @media screen and (min-width: 1001px) {
     .preferred-domain-row {
-      /* 固定网格列：复选框 | 备注 | 域名 | 启用/禁用 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
+      /* 固定网格列：复选框 | 启用开关 | 备注 | 域名 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
       display: grid;
-      grid-template-columns: auto minmax(90px, 140px) minmax(120px, 1.2fr) auto 32px minmax(160px, 1.4fr) auto auto auto auto;
+      grid-template-columns: auto auto minmax(90px, 140px) minmax(120px, 1.2fr) 32px minmax(160px, 1.4fr) auto auto auto auto;
       align-items: center;
       gap: 12px;
     }
@@ -4484,8 +4494,7 @@ export const adminStyle = `
       min-height: 34px;
       padding: 0 10px;
     }
-    .custom-api-actions .custom-api-switch {
-      order: -1;
+    .custom-api-row > .custom-api-switch {
       width: 100%;
       justify-content: flex-start;
       padding-bottom: 2px;

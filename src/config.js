@@ -57,8 +57,8 @@ export function normalizeKvData(data, sourceType) {
       const normalizedEntry = {
         remark: typeof value.remark === "string" ? value.remark : "",
       };
+      if (typeof value.enabled === "boolean") normalizedEntry.enabled = value.enabled;
       if (sourceType === "domains") {
-        if (typeof value.enabled === "boolean") normalizedEntry.enabled = value.enabled;
         if (isPlainObject(value.records)) {
           normalizedEntry.records = Object.fromEntries(["A", "AAAA", "CNAME"].map((type) => [
             type,
@@ -250,6 +250,8 @@ export function validateConfigPayload(body, sourceType) {
     }
     normalized[normalizedKey] = {
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
+      // 订阅源/优选域名的启用状态需要随配置保存，不能在保存时被剥离。
+      ...(typeof value.enabled === "boolean" ? { enabled: value.enabled } : {}),
     };
   }
   return normalized;
