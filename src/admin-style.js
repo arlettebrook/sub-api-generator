@@ -3125,9 +3125,8 @@ export const adminStyle = `
   }
 
   .preferred-domain-row {
-    /* 固定网格列：复选框 | 备注 | 域名 | 复制 | 健康状态 | 检测/查看/下载/删除，保证多行横向对齐。 */
-    display: grid;
-    grid-template-columns: auto 140px minmax(180px, 1.2fr) 32px minmax(220px, 1.4fr) auto auto auto auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 14px;
     padding: 12px;
@@ -3136,27 +3135,37 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
-  /* 覆盖 .row input 的 flex/min-width，避免网格列被撑开。 */
-  .preferred-domain-row .source-select { width: 16px; min-width: 16px; margin: 0; }
-  .preferred-domain-row .remark-input,
-  .preferred-domain-row .host-input { min-width: 0; width: auto; }
-  .preferred-domain-row .source-delete-button { white-space: nowrap; }
-  /* 列表为共享列宽的网格：检测按钮在“检测/检测中…”两种文案间切换，
-     固定其最小宽度可避免点击检测时整列变宽、所有行横向伸缩。 */
-  .preferred-domain-row .source-check-button { min-width: 84px; }
-  #preferredDomainsList .source-health { max-width: none; min-width: 0; }
-  #preferredDomainsList .source-health strong {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  #preferredDomainsList .source-health-error-detail {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    max-width: none;
+  /* 网格对齐仅在容器足够宽时启用：列的最小宽度之和必须小于卡片内容宽度，
+     否则网格无法收缩、整行会溢出卡片边缘。 */
+  @media screen and (min-width: 1001px) {
+    .preferred-domain-row {
+      /* 固定网格列：复选框 | 备注 | 域名 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
+      display: grid;
+      grid-template-columns: auto minmax(90px, 140px) minmax(120px, 1.2fr) 32px minmax(160px, 1.4fr) auto auto auto auto;
+      align-items: center;
+      gap: 12px;
+    }
+    /* 覆盖 .row input 的 flex/min-width，避免网格列被撑开。 */
+    .preferred-domain-row .source-select { width: 16px; min-width: 16px; margin: 0; }
+    .preferred-domain-row .remark-input,
+    .preferred-domain-row .host-input { min-width: 0; width: auto; }
+    .preferred-domain-row .source-delete-button { white-space: nowrap; }
+    /* 检测按钮在“检测/检测中…”两种文案间切换，固定最小宽度避免点击检测时整列变宽、所有行横向伸缩。 */
+    .preferred-domain-row .source-check-button { min-width: 84px; }
+    #preferredDomainsList .source-health { max-width: none; min-width: 0; }
+    #preferredDomainsList .source-health strong {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    #preferredDomainsList .source-health-error-detail {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-width: none;
+    }
   }
 
   .preferred-domain-identity,
