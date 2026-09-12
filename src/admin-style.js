@@ -3026,12 +3026,6 @@ export const adminStyle = `
   .source-health strong { font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
   .source-health small { color: var(--text-tertiary); font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
   .source-health-error-detail { color: var(--danger) !important; max-width: 320px; }
-  .source-health-dns-records {
-    max-width: 360px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .source-health-success {
     border-color: rgba(16, 185, 129, 0.35);

@@ -321,10 +321,6 @@ function dnsErrorCodeLabel(code) {
   }[code] || code || 'DNS 错误';
 }
 
-function dnsProviderLabel(provider) {
-  return { cloudflare: 'Cloudflare', google: 'Google', quad9: 'Quad9' }[provider] || provider || '未知服务商';
-}
-
 function renderSourceStatusSummary() {
   const summary = $('sourceStatusSummary');
   if (!summary) return;
@@ -1796,21 +1792,6 @@ function createSourceHealth(type, key, statusOverride = null) {
       + ' · ' + (status.durationMs === null || status.durationMs === undefined ? '--' : status.durationMs + ' ms')
       + ' · 原始 ' + (status.rawNodeCount || 0) + ' · 过滤后 ' + (status.nodeCount || 0);
   health.append(primary, checked, diagnostics);
-  if (isDomain) {
-    const records = status.dnsRecords || {};
-    const recordText = ['A', 'AAAA', 'CNAME'].map((recordType) => {
-      const values = Array.isArray(records[recordType]) ? records[recordType] : [];
-      const error = status.dnsErrors?.[recordType];
-      const code = status.dnsErrorCodes?.[recordType];
-      const provider = status.dnsProviders?.[recordType];
-      return recordType + ': ' + (values.length ? values.join('、') + '（' + dnsProviderLabel(provider) + '）' : (error ? dnsErrorCodeLabel(code) + ' · ' + error : '无记录'));
-    }).join(' · ');
-    const recordDetail = document.createElement('small');
-    recordDetail.className = 'source-health-dns-records';
-    recordDetail.textContent = recordText;
-    recordDetail.title = recordText;
-    health.appendChild(recordDetail);
-  }
   if (status.error) {
     const error = document.createElement('small');
     error.className = 'source-health-error-detail';
