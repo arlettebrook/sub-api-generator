@@ -1598,9 +1598,9 @@ function importCustomApis(event) {
 
 function sourceEntries() {
   return [
-    // 已禁用的订阅源/优选域名不作为可选数据源展示，也不参与输出。
+    // 已禁用的订阅源/API 源/优选域名不作为可选数据源展示，也不参与输出。
     ...Object.entries(subs).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
-    ...Object.entries(apis).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
+    ...Object.entries(apis).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
     ...Object.entries(preferredDomains).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'domains', key, label: value.remark || key })),
   ];
 }
@@ -3092,10 +3092,27 @@ function renderApis() {
   if (sort === 'name-asc' || sort === 'name-desc') entries.sort((a, b) => a[0].localeCompare(b[0], 'zh-CN') * (sort === 'name-desc' ? -1 : 1));
   const fragment = document.createDocumentFragment();
   entries.forEach(([url, entry]) => {
+    const disabled = entry?.enabled === false;
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = 'row' + (disabled ? ' source-disabled-row' : '');
     row.dataset.sourceKey = url;
     const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'source-select'; select.dataset.key = url; select.setAttribute('aria-label', '选择 API 源 ' + url);
+
+    // 启用开关紧跟复选框：禁用的 API 源不参与优选 API 输出，也不出现在数据源选择列表。
+    const enabledSwitch = createSourceSwitch({
+      checked: !disabled,
+      ariaLabel: '启用 API 源 ' + url,
+      onChange: async (input, text) => {
+        const previous = !input.checked;
+        input.disabled = true;
+        text.textContent = '处理中…';
+        apis[url].enabled = input.checked;
+        const saved = await queueApisSave();
+        if (!saved) apis[url].enabled = previous;
+        renderApis();
+        if (saved) showToast(input.checked ? 'API 源已启用' : 'API 源已禁用，将不再参与优选 API 输出', 'success');
+      },
+    });
 
     const remarkInput = document.createElement('input');
     remarkInput.className = 'remark-input';
@@ -3146,7 +3163,7 @@ function renderApis() {
       void queueApisSave();
     };
 
-    row.appendChild(select); row.appendChild(remarkInput);
+    row.appendChild(select); row.appendChild(enabledSwitch.label); row.appendChild(remarkInput);
     row.appendChild(urlInput);
     row.appendChild(createCopyButton(url, 'API 地址'));
     row.appendChild(health);

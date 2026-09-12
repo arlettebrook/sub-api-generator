@@ -1874,6 +1874,21 @@ export const adminStyle = `
     flex-wrap: wrap;
   }
 
+  /* 宽屏下优选 API 行与数据源行使用同样的固定网格：
+     启用开关 | 标识（标题/路径/来源摘要） | 访问地址 | 操作按钮，
+     通过 display:contents 把 main/actions 的子元素提升为网格项。 */
+  @media screen and (min-width: 1001px) {
+    .custom-api-row {
+      display: grid;
+      grid-template-columns: auto minmax(180px, 1.2fr) minmax(220px, 1.1fr) auto auto auto auto auto auto;
+      align-items: center;
+      gap: 12px;
+    }
+    .custom-api-row .custom-api-row-main,
+    .custom-api-row .custom-api-actions { display: contents; }
+    .custom-api-row .custom-api-url { width: auto; min-width: 0; }
+  }
+
   /* 启用开关：优选 API 行用 .custom-api-switch（兼容既有选择器），数据源行用 .source-switch，样式一致。 */
   .custom-api-switch,
   .source-switch {
@@ -3396,22 +3411,38 @@ export const adminStyle = `
   /* 网格对齐仅在容器足够宽时启用：列的最小宽度之和必须小于卡片内容宽度，
      否则网格无法收缩、整行会溢出卡片边缘。 */
   @media screen and (min-width: 1001px) {
-    .preferred-domain-row {
-      /* 固定网格列：复选框 | 启用开关 | 备注 | 域名 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
+    .preferred-domain-row,
+    #subsList .row,
+    #apisList .row {
+      /* 固定网格列：复选框 | 启用开关 | 备注 | 域名/主机 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
       display: grid;
       grid-template-columns: auto auto minmax(90px, 140px) minmax(120px, 1.2fr) 32px minmax(160px, 1.4fr) auto auto auto auto;
       align-items: center;
       gap: 12px;
     }
     /* 覆盖 .row input 的 flex/min-width，避免网格列被撑开。 */
-    .preferred-domain-row .source-select { width: 16px; min-width: 16px; margin: 0; }
+    .preferred-domain-row .source-select,
+    #subsList .row .source-select,
+    #apisList .row .source-select { width: 16px; min-width: 16px; margin: 0; }
     .preferred-domain-row .remark-input,
-    .preferred-domain-row .host-input { min-width: 0; width: auto; }
-    .preferred-domain-row .source-delete-button { white-space: nowrap; }
+    .preferred-domain-row .host-input,
+    #subsList .row .remark-input,
+    #subsList .row .host-input,
+    #apisList .row .remark-input,
+    #apisList .row .host-input { min-width: 0; width: auto; }
+    .preferred-domain-row .source-delete-button,
+    #subsList .row .source-delete-button,
+    #apisList .row .source-delete-button { white-space: nowrap; }
     /* 检测按钮在“检测/检测中…”两种文案间切换，固定最小宽度避免点击检测时整列变宽、所有行横向伸缩。 */
-    .preferred-domain-row .source-check-button { min-width: 84px; }
-    #preferredDomainsList .source-health { max-width: none; min-width: 0; }
-    #preferredDomainsList .source-health strong {
+    .preferred-domain-row .source-check-button,
+    #subsList .row .source-check-button,
+    #apisList .row .source-check-button { min-width: 84px; }
+    #preferredDomainsList .source-health,
+    #subsList .source-health,
+    #apisList .source-health { max-width: none; min-width: 0; }
+    #preferredDomainsList .source-health strong,
+    #subsList .source-health strong,
+    #apisList .source-health strong {
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;

@@ -1118,6 +1118,36 @@ test("disabling a preferred subscription hides it from custom API output", async
   }
 });
 
+test("disabling a preferred API source hides it from custom API output", async () => {
+  const paths = ["apis_api_a", "apis_api_b"];
+  const values = {
+    subs: {},
+    apis: { "https://api.example.com/data": { remark: "API 源", enabled: false } },
+    preferred_domains: {},
+    custom_apis: Object.fromEntries(paths.map((path) => [path, { enabled: true, remark: "", sourceMode: "all", sources: [] }])),
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("5.6.7.8:443#api", { status: 200 });
+  const preview = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST", headers, body: JSON.stringify({ path }),
+  }), runtime);
+  const previewNodes = async (path) => (await (await preview(path)).json()).nodes || [];
+  try {
+    assert.deepEqual(await previewNodes(paths[0]), []);
+
+    const enabled = await worker.fetch(new Request("https://example.test/api/apis", {
+      method: "POST", headers, body: JSON.stringify({ "https://api.example.com/data": { remark: "API 源", enabled: true } }),
+    }), runtime);
+    assert.equal(enabled.status, 200);
+    assert.ok((await previewNodes(paths[1])).length > 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("deletes preferred domains in one batch request", async () => {
   const values = {};
   const runtime = env({ KV: createKv(values) });

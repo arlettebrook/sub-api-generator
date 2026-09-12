@@ -691,7 +691,10 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           throw failure;
         }
       }));
-    selectedEntries(apisConfig, "apis").forEach(([apiUrl, entry]) => sourceTasks.push(async () => {
+    // 禁用的 API 源不参与任何输出，无论是全部数据源还是手动选择模式。
+    selectedEntries(apisConfig, "apis")
+      .filter(([, entry]) => !(isPlainObject(entry) && entry.enabled === false))
+      .forEach(([apiUrl, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
           const rawValues = await fetchApiSubs(apiUrl);
