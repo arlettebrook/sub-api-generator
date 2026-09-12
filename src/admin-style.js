@@ -1303,6 +1303,10 @@ export const adminStyle = `
     display: none;
   }
 
+  .source-error-notice {
+    margin-bottom: 18px;
+  }
+
   .notice-icon {
     flex-shrink: 0;
     display: inline-flex;
