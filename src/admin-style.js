@@ -2574,20 +2574,13 @@ export const adminStyle = `
   }
 
   .source-raw-body {
-    display: flex;
-    flex-direction: column;
+    display: grid;
     gap: 14px;
-    min-height: 0;
     max-height: calc(100vh - 132px);
     padding: 16px;
     overflow: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-  }
-
-  /* 摘要、标签栏、工具栏、底部操作等固定区块不参与伸缩，滚动只发生在标签内容区 */
-  .source-raw-body > :not(.source-raw-content) {
-    flex: 0 0 auto;
   }
 
   html.source-raw-scroll-locked,
@@ -2868,14 +2861,14 @@ export const adminStyle = `
     font: 12px/1.65 'SF Mono', Monaco, 'Cascadia Code', monospace;
     white-space: pre-wrap;
     overflow: auto;
-    overscroll-behavior: contain;
+    /* 列表滚到顶/底后允许滚动传递给弹窗主体 */
+    overscroll-behavior: auto;
     overflow-wrap: anywhere;
   }
 
   .source-raw-content {
-    flex: 1 1 auto;
     min-height: 180px;
-    max-height: none;
+    max-height: min(52vh, 520px);
     overflow-y: auto;
     white-space: normal;
   }
