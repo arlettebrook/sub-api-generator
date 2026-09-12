@@ -1848,6 +1848,18 @@ async function loadSourceStatuses(mode = 'read', sources = []) {
   return { ok: true };
 }
 
+async function checkPreferredDomain(domain) {
+  const entry = preferredDomains[domain] || {};
+  const updated = await readJsonResponse('/api/preferred-domains', 'DNS 检测', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain, remark: typeof entry.remark === 'string' ? entry.remark : '' }),
+  });
+  preferredDomains[updated.domain] = updated;
+  renderPreferredDomains();
+  await loadSourceStatuses('read');
+}
+
 function createSourceCheckButton(type, key) {
   const button = document.createElement('button');
   button.type = 'button';
@@ -1858,7 +1870,9 @@ function createSourceCheckButton(type, key) {
     button.disabled = true;
     const idleText = button.textContent;
     button.textContent = '⏳ 检测中…';
-    const result = await loadSourceStatuses('selected', [{ type, key }]);
+    const result = type === 'domains'
+      ? await checkPreferredDomain(key).then(() => ({ ok: true })).catch((error) => ({ ok: false, error }))
+      : await loadSourceStatuses('selected', [{ type, key }]);
     if (result?.ok) showToast(type === 'domains' ? 'DNS 记录检测完成' : '数据源检测完成', 'success');
     else showToast(result?.error?.message || '检测失败，请稍后重试', 'error');
     button.disabled = false;
