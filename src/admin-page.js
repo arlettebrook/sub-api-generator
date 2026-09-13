@@ -58,6 +58,16 @@ export const adminHTML = `
   </div>
 </dialog>
 
+<dialog class="confirm-dialog" id="sourceChangeDialog" aria-labelledby="sourceChangeTitle" aria-describedby="sourceChangeMessage">
+  <div class="confirm-dialog-icon" aria-hidden="true">?</div>
+  <h3 id="sourceChangeTitle">确认修改？</h3>
+  <p id="sourceChangeMessage">保存后修改将立即生效。</p>
+  <div class="confirm-dialog-actions">
+    <button class="btn-outline" type="button" id="cancelSourceChangeButton">取消</button>
+    <button class="btn-primary" type="button" id="confirmSourceChangeButton">确认修改</button>
+  </div>
+</dialog>
+
 <!-- ADMIN_SECTION:customApiDialog:START -->
 <dialog class="confirm-dialog" id="customApiDeleteDialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
   <div class="confirm-dialog-icon" aria-hidden="true">!</div>

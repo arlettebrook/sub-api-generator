@@ -1196,6 +1196,7 @@ let blacklistDirty = false;
 let filterRulesDirty = false;
 let pendingCustomApiDelete = null;
 let pendingSourceDeleteAction = null;
+let pendingSourceChangeAction = null;
 let sourceRawRequest = null;
 let sourceRawSelection = null;
 let sourceRawNodes = [];
@@ -1670,8 +1671,17 @@ function renderPreferredDomains() {
     remarkInput.className = 'remark-input';
     remarkInput.value = entry?.remark || '';
     remarkInput.placeholder = '备注（可选）';
-    remarkInput.onchange = async () => {
-      await savePreferredDomain(domain, remarkInput.value);
+    remarkInput.onchange = () => {
+      const nextRemark = remarkInput.value;
+      if (nextRemark === (entry?.remark || '')) return;
+      remarkInput.value = entry?.remark || '';
+      confirmSourceChange({
+        title: '确认修改备注？',
+        message: '确定保存优选域名“' + domain + '”的备注修改吗？',
+        onConfirm: async () => {
+          await savePreferredDomain(domain, nextRemark);
+        },
+      });
     };
     const identity = document.createElement('div');
     identity.className = 'preferred-domain-identity';
@@ -1680,14 +1690,17 @@ function renderPreferredDomains() {
     domainInput.value = domain;
     domainInput.title = domain;
     domainInput.setAttribute('aria-label', '域名 ' + domain);
-    domainInput.onchange = async () => {
+    domainInput.onchange = () => {
       const nextDomain = domainInput.value.trim();
       if (!nextDomain || nextDomain.toLowerCase() === domain) { domainInput.value = domain; return; }
-      if (!window.confirm('确定将域名 "' + domain + '" 改为 "' + nextDomain + '" 吗？\\n新域名将重新解析 DNS 记录，旧域名的解析结果会被删除，此操作不可撤销。')) {
-        domainInput.value = domain;
-        return;
-      }
-      await savePreferredDomain(nextDomain, entry?.remark || '', domain);
+      domainInput.value = domain;
+      confirmSourceChange({
+        title: '确认修改域名？',
+        message: '确定将域名“' + domain + '”改为“' + nextDomain + '”吗？新域名将重新解析 DNS 记录，旧域名的解析结果会被删除，此操作不可撤销。',
+        onConfirm: async () => {
+          await savePreferredDomain(nextDomain, entry?.remark || '', domain);
+        },
+      });
     };
     const checked = document.createElement('small');
     const domainStatus = getPreferredDomainStatus(domain, entry);
@@ -2499,6 +2512,43 @@ function confirmSourceDelete({ title, message, onConfirm }) {
   dialog.showModal();
 }
 
+function confirmSourceChange({ title, message, onConfirm }) {
+  const dialog = $('sourceChangeDialog');
+  if (!dialog || dialog.open || typeof onConfirm !== 'function') return false;
+  const titleEl = $('sourceChangeTitle');
+  const messageEl = $('sourceChangeMessage');
+  if (titleEl) titleEl.textContent = title || '确认修改？';
+  if (messageEl) messageEl.textContent = message || '保存后修改将立即生效。';
+  pendingSourceChangeAction = onConfirm;
+  dialog.showModal();
+  return true;
+}
+
+function initSourceChangeDialog() {
+  const dialog = $('sourceChangeDialog');
+  if (!dialog || dialog.dataset.initSourceChange === 'true') return;
+  dialog.dataset.initSourceChange = 'true';
+  $('cancelSourceChangeButton')?.addEventListener('click', () => {
+    pendingSourceChangeAction = null;
+    dialog.close();
+  });
+  $('confirmSourceChangeButton')?.addEventListener('click', async () => {
+    const action = pendingSourceChangeAction;
+    pendingSourceChangeAction = null;
+    if (dialog.open) dialog.close();
+    if (action) await action();
+  });
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) {
+      pendingSourceChangeAction = null;
+      dialog.close();
+    }
+  });
+  dialog.addEventListener('close', () => {
+    pendingSourceChangeAction = null;
+  });
+}
+
 function initSourceDeleteDialog() {
   const dialog = $('sourceDeleteDialog');
   if (!dialog || dialog.dataset.initSourceDelete === 'true') return;
@@ -2866,17 +2916,36 @@ function renderSubs() {
 
     hostInput.onchange = () => {
       const newHost = hostInput.value.trim();
-      if (!newHost || newHost === host) return;
-      const entryCopy = subs[host];
-      delete subs[host];
-      subs[newHost] = entryCopy;
-      renderSubs();
-      void queueSubsSave();
+      if (!newHost || newHost === host) { hostInput.value = host; return; }
+      hostInput.value = host;
+      confirmSourceChange({
+        title: '确认修改订阅源地址？',
+        message: '确定将订阅源地址“' + host + '”改为“' + newHost + '”吗？保存后修改立即生效。',
+        onConfirm: () => {
+          const entryCopy = subs[host];
+          if (!entryCopy) return;
+          delete subs[host];
+          subs[newHost] = entryCopy;
+          renderSubs();
+          void queueSubsSave();
+        },
+      });
     };
 
     remarkInput.onchange = () => {
-      subs[host].remark = remarkInput.value;
-      void queueSubsSave();
+      const nextRemark = remarkInput.value;
+      if (nextRemark === (subs[host]?.remark || '')) return;
+      remarkInput.value = subs[host]?.remark || '';
+      confirmSourceChange({
+        title: '确认修改备注？',
+        message: '确定保存订阅源“' + host + '”的备注修改吗？',
+        onConfirm: () => {
+          if (!subs[host]) return;
+          subs[host].remark = nextRemark;
+          renderSubs();
+          void queueSubsSave();
+        },
+      });
     };
 
     row.appendChild(select); row.appendChild(enabledSwitch.label); row.appendChild(remarkInput);
@@ -3119,17 +3188,36 @@ function renderApis() {
 
     urlInput.onchange = () => {
       const newUrl = urlInput.value.trim();
-      if (!newUrl || newUrl === url) return;
-      const entryCopy = apis[url];
-      delete apis[url];
-      apis[newUrl] = entryCopy;
-      renderApis();
-      void queueApisSave();
+      if (!newUrl || newUrl === url) { urlInput.value = url; return; }
+      urlInput.value = url;
+      confirmSourceChange({
+        title: '确认修改 API 地址？',
+        message: '确定将 API 地址“' + url + '”改为“' + newUrl + '”吗？保存后修改立即生效。',
+        onConfirm: () => {
+          const entryCopy = apis[url];
+          if (!entryCopy) return;
+          delete apis[url];
+          apis[newUrl] = entryCopy;
+          renderApis();
+          void queueApisSave();
+        },
+      });
     };
 
     remarkInput.onchange = () => {
-      apis[url].remark = remarkInput.value;
-      void queueApisSave();
+      const nextRemark = remarkInput.value;
+      if (nextRemark === (apis[url]?.remark || '')) return;
+      remarkInput.value = apis[url]?.remark || '';
+      confirmSourceChange({
+        title: '确认修改备注？',
+        message: '确定保存 API 源“' + url + '”的备注修改吗？',
+        onConfirm: () => {
+          if (!apis[url]) return;
+          apis[url].remark = nextRemark;
+          renderApis();
+          void queueApisSave();
+        },
+      });
     };
 
     row.appendChild(select); row.appendChild(enabledSwitch.label); row.appendChild(remarkInput);
@@ -5222,6 +5310,7 @@ async function performWebdavDelete(filename, button) {
 
 function loadActivePage(page) {
   initSourceDeleteDialog();
+  initSourceChangeDialog();
   if (page === 'settings') {
     initSettingsEnhancements();
     initCamouflageSettings();
