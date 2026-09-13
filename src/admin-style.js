@@ -1559,6 +1559,80 @@ export const adminStyle = `
     line-height: 1.6;
   }
 
+  .source-change-details {
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    text-align: left;
+  }
+
+  .source-change-field {
+    margin-bottom: 10px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .source-change-values {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .source-change-value {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--surface-solid);
+  }
+
+  .source-change-value span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .source-change-value code {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .source-change-before code { color: var(--text-secondary); }
+  .source-change-after { border-color: var(--accent-border); }
+  .source-change-after code { color: var(--accent-hover); font-weight: 700; }
+
+  .source-change-arrow {
+    align-self: center;
+    color: var(--accent-primary);
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .source-change-details > small {
+    display: block;
+    margin-top: 10px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 520px) {
+    .source-change-values { grid-template-columns: 1fr; }
+    .source-change-arrow { transform: rotate(90deg); justify-self: center; }
+  }
+
   .confirm-dialog-actions {
     display: flex;
     justify-content: center;

@@ -58,10 +58,25 @@ export const adminHTML = `
   </div>
 </dialog>
 
-<dialog class="confirm-dialog" id="sourceChangeDialog" aria-labelledby="sourceChangeTitle" aria-describedby="sourceChangeMessage">
+<dialog class="confirm-dialog" id="sourceChangeDialog" aria-labelledby="sourceChangeTitle" aria-describedby="sourceChangeMessage sourceChangeDetails">
   <div class="confirm-dialog-icon" aria-hidden="true">?</div>
   <h3 id="sourceChangeTitle">确认修改？</h3>
-  <p id="sourceChangeMessage">保存后修改将立即生效。</p>
+  <p id="sourceChangeMessage">请确认以下变更，确认后立即生效。</p>
+  <div class="source-change-details" id="sourceChangeDetails" hidden>
+    <div class="source-change-field" id="sourceChangeField"></div>
+    <div class="source-change-values">
+      <div class="source-change-value source-change-before">
+        <span>修改前</span>
+        <code id="sourceChangeBefore"></code>
+      </div>
+      <span class="source-change-arrow" aria-hidden="true">→</span>
+      <div class="source-change-value source-change-after">
+        <span>修改后</span>
+        <code id="sourceChangeAfter"></code>
+      </div>
+    </div>
+    <small id="sourceChangeNote" hidden></small>
+  </div>
   <div class="confirm-dialog-actions">
     <button class="btn-outline" type="button" id="cancelSourceChangeButton">取消</button>
     <button class="btn-primary" type="button" id="confirmSourceChangeButton">确认修改</button>

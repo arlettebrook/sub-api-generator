@@ -1677,7 +1677,8 @@ function renderPreferredDomains() {
       remarkInput.value = entry?.remark || '';
       confirmSourceChange({
         title: '确认修改？',
-        message: '确定保存优选域名“' + domain + '”的备注吗？保存后立即生效。',
+        message: '请确认备注变更，确认后立即生效。',
+        change: { field: '备注', before: entry?.remark || '', after: nextRemark },
         onConfirm: async () => {
           await savePreferredDomain(domain, nextRemark);
         },
@@ -1703,7 +1704,8 @@ function renderPreferredDomains() {
       domainInput.value = domain;
       confirmSourceChange({
         title: '确认修改？',
-        message: '确定将优选域名“' + domain + '”修改为“' + nextDomain + '”吗？保存后将重新解析 DNS，修改立即生效。',
+        message: '请确认域名变更，确认后立即生效。',
+        change: { field: '域名', before: domain, after: nextDomain, note: '保存后将重新解析 DNS。' },
         onConfirm: async () => {
           await savePreferredDomain(nextDomain, entry?.remark || '', domain);
         },
@@ -2526,18 +2528,36 @@ function confirmSourceDelete({ title, message, onConfirm }) {
   dialog.showModal();
 }
 
-function confirmSourceChange({ title, message, onConfirm }) {
+function confirmSourceChange({ title, message, change, onConfirm }) {
   const dialog = $('sourceChangeDialog');
   if (!dialog || dialog.open || typeof onConfirm !== 'function') return false;
   const titleEl = $('sourceChangeTitle');
   const messageEl = $('sourceChangeMessage');
+  const detailsEl = $('sourceChangeDetails');
+  const fieldEl = $('sourceChangeField');
+  const beforeEl = $('sourceChangeBefore');
+  const afterEl = $('sourceChangeAfter');
+  const noteEl = $('sourceChangeNote');
   if (titleEl) titleEl.textContent = title || '确认修改？';
-  if (messageEl) messageEl.textContent = message || '保存后修改将立即生效。';
+  if (messageEl) messageEl.textContent = message || '请确认以下变更，确认后立即生效。';
+  if (detailsEl) detailsEl.hidden = !change;
+  if (fieldEl) fieldEl.textContent = change?.field || '';
+  if (beforeEl) beforeEl.textContent = formatSourceChangeValue(change?.before);
+  if (afterEl) afterEl.textContent = formatSourceChangeValue(change?.after);
+  if (noteEl) {
+    noteEl.textContent = change?.note || '';
+    noteEl.hidden = !change?.note;
+  }
   pendingSourceChangeAction = onConfirm;
   dialog.showModal();
   // showModal 默认聚焦第一个可聚焦按钮（取消），这里改为聚焦确认按钮，Enter 即确认修改。
   $('confirmSourceChangeButton')?.focus();
   return true;
+}
+
+function formatSourceChangeValue(value) {
+  const text = String(value ?? '').trim();
+  return text || '（空）';
 }
 
 function initSourceChangeDialog() {
@@ -2936,7 +2956,8 @@ function renderSubs() {
       hostInput.value = host;
       confirmSourceChange({
         title: '确认修改？',
-        message: '确定将订阅源地址“' + host + '”修改为“' + newHost + '”吗？保存后立即生效。',
+        message: '请确认地址变更，确认后立即生效。',
+        change: { field: '地址', before: host, after: newHost },
         onConfirm: () => {
           const entryCopy = subs[host];
           if (!entryCopy) return;
@@ -2961,7 +2982,8 @@ function renderSubs() {
       remarkInput.value = subs[host]?.remark || '';
       confirmSourceChange({
         title: '确认修改？',
-        message: '确定保存订阅源“' + host + '”的备注吗？保存后立即生效。',
+        message: '请确认备注变更，确认后立即生效。',
+        change: { field: '备注', before: subs[host]?.remark || '', after: nextRemark },
         onConfirm: () => {
           if (!subs[host]) return;
           subs[host].remark = nextRemark;
@@ -3222,7 +3244,8 @@ function renderApis() {
       urlInput.value = url;
       confirmSourceChange({
         title: '确认修改？',
-        message: '确定将 API 地址“' + url + '”修改为“' + newUrl + '”吗？保存后立即生效。',
+        message: '请确认地址变更，确认后立即生效。',
+        change: { field: '地址', before: url, after: newUrl },
         onConfirm: () => {
           const entryCopy = apis[url];
           if (!entryCopy) return;
@@ -3247,7 +3270,8 @@ function renderApis() {
       remarkInput.value = apis[url]?.remark || '';
       confirmSourceChange({
         title: '确认修改？',
-        message: '确定保存 API 源“' + url + '”的备注吗？保存后立即生效。',
+        message: '请确认备注变更，确认后立即生效。',
+        change: { field: '备注', before: apis[url]?.remark || '', after: nextRemark },
         onConfirm: () => {
           if (!apis[url]) return;
           apis[url].remark = nextRemark;
