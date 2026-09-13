@@ -1676,8 +1676,8 @@ function renderPreferredDomains() {
       if (nextRemark === (entry?.remark || '')) return;
       remarkInput.value = entry?.remark || '';
       confirmSourceChange({
-        title: '确认修改备注？',
-        message: '确定保存优选域名“' + domain + '”的备注修改吗？',
+        title: '确认修改？',
+        message: '确定保存优选域名“' + domain + '”的备注吗？保存后立即生效。',
         onConfirm: async () => {
           await savePreferredDomain(domain, nextRemark);
         },
@@ -1702,8 +1702,8 @@ function renderPreferredDomains() {
       if (!nextDomain || nextDomain.toLowerCase() === domain) { domainInput.value = domain; return; }
       domainInput.value = domain;
       confirmSourceChange({
-        title: '确认修改域名？',
-        message: '确定将域名“' + domain + '”改为“' + nextDomain + '”吗？新域名将重新解析 DNS 记录，旧域名的解析结果会被删除，此操作不可撤销。',
+        title: '确认修改？',
+        message: '确定将优选域名“' + domain + '”修改为“' + nextDomain + '”吗？保存后将重新解析 DNS，修改立即生效。',
         onConfirm: async () => {
           await savePreferredDomain(nextDomain, entry?.remark || '', domain);
         },
@@ -2635,7 +2635,6 @@ function closeCustomApiEditDialog() {
 
 async function saveCustomApiEdit() {
   if (!editingCustomApiPath || !customApis[editingCustomApiPath]) return;
-  const originalPath = editingCustomApiPath;
   const pathInput = $('editCustomApiPath');
   const remarkInput = $('editCustomApiRemark');
   const suffixInput = $('editCustomApiSuffix');
@@ -2650,7 +2649,7 @@ async function saveCustomApiEdit() {
     return;
   }
   setInputError(pathInput, '');
-  const entry = customApis[originalPath];
+  const entry = customApis[editingCustomApiPath];
   const selection = editingCustomApiPicker ? readSourcePickerSelection(editingCustomApiPicker) : {
     sourceMode: entry.sourceMode === 'selected' ? 'selected' : 'all',
     sources: Array.isArray(entry.sources) ? entry.sources : [],
@@ -2665,64 +2664,28 @@ async function saveCustomApiEdit() {
     showToast(error.message, 'error');
     return;
   }
-  const nextRemark = remarkInput?.value.trim() || '';
-  const pathChanged = newPath !== originalPath;
-  const remarkChanged = nextRemark !== (entry.remark || '');
-
-  const commit = async () => {
-    // The edit dialog may have been closed while a confirmation was open.
-    if (editingCustomApiPath !== originalPath || !customApis[originalPath]) return;
-    const nextEntry = {
-      ...entry,
-      remark: nextRemark,
-      prefix: outputSettings.prefix,
-      suffix: outputSettings.suffix,
-      suffixStrategy: ['append', 'replace', 'skip'].includes(suffixStrategyInput?.value) ? suffixStrategyInput.value : 'skip',
-      sourceMode: selection.sourceMode,
-      sources: selection.sources,
-    };
-    if (pathChanged) {
-      customApis[newPath] = nextEntry;
-      delete customApis[originalPath];
-      editingCustomApiPath = newPath;
-    } else {
-      customApis[originalPath] = nextEntry;
-    }
-    setCustomApisDirty(true);
-    renderCustomApis();
-    renderCustomApiSelect();
-    const saveButton = $('saveCustomApiEditButton');
-    setButtonBusy(saveButton, true, '保存中…');
-    const saved = await saveCustomApis(false);
-    setButtonBusy(saveButton, false);
-    if (saved) {
-      closeCustomApiEditDialog();
-      showToast('优选 API 配置已保存', 'success');
-    }
-  };
-
-  const confirmRemark = () => {
-    if (!remarkChanged) return void commit();
-    confirmSourceChange({
-      title: '确认修改优选 API 备注？',
-      message: '确定保存优选 API“/' + originalPath + '”的备注修改吗？',
-      onConfirm: commit,
-    });
-  };
-
-  if (pathChanged) {
-    confirmSourceChange({
-      title: '确认修改优选 API 地址？',
-      message: '确定将优选 API 地址“/' + originalPath + '”改为“/' + newPath + '”吗？保存后修改立即生效。',
-      onConfirm: confirmRemark,
-    });
-    return;
+  entry.remark = remarkInput?.value.trim() || '';
+  entry.prefix = outputSettings.prefix;
+  entry.suffix = outputSettings.suffix;
+  entry.suffixStrategy = ['append', 'replace', 'skip'].includes(suffixStrategyInput?.value) ? suffixStrategyInput.value : 'skip';
+  entry.sourceMode = selection.sourceMode;
+  entry.sources = selection.sources;
+  if (newPath !== editingCustomApiPath) {
+    customApis[newPath] = entry;
+    delete customApis[editingCustomApiPath];
+    editingCustomApiPath = newPath;
   }
-  if (remarkChanged) {
-    confirmRemark();
-    return;
+  setCustomApisDirty(true);
+  renderCustomApis();
+  renderCustomApiSelect();
+  const saveButton = $('saveCustomApiEditButton');
+  setButtonBusy(saveButton, true, '保存中…');
+  const saved = await saveCustomApis(false);
+  setButtonBusy(saveButton, false);
+  if (saved) {
+    closeCustomApiEditDialog();
+    showToast('优选 API 配置已保存', 'success');
   }
-  await commit();
 }
 
 function addCustomApi() {
@@ -2972,8 +2935,8 @@ function renderSubs() {
       if (!newHost || newHost === host) { hostInput.value = host; return; }
       hostInput.value = host;
       confirmSourceChange({
-        title: '确认修改订阅源地址？',
-        message: '确定将订阅源地址“' + host + '”改为“' + newHost + '”吗？保存后修改立即生效。',
+        title: '确认修改？',
+        message: '确定将订阅源地址“' + host + '”修改为“' + newHost + '”吗？保存后立即生效。',
         onConfirm: () => {
           const entryCopy = subs[host];
           if (!entryCopy) return;
@@ -2997,8 +2960,8 @@ function renderSubs() {
       if (nextRemark === (subs[host]?.remark || '')) return;
       remarkInput.value = subs[host]?.remark || '';
       confirmSourceChange({
-        title: '确认修改备注？',
-        message: '确定保存订阅源“' + host + '”的备注修改吗？',
+        title: '确认修改？',
+        message: '确定保存订阅源“' + host + '”的备注吗？保存后立即生效。',
         onConfirm: () => {
           if (!subs[host]) return;
           subs[host].remark = nextRemark;
@@ -3258,8 +3221,8 @@ function renderApis() {
       if (!newUrl || newUrl === url) { urlInput.value = url; return; }
       urlInput.value = url;
       confirmSourceChange({
-        title: '确认修改 API 地址？',
-        message: '确定将 API 地址“' + url + '”改为“' + newUrl + '”吗？保存后修改立即生效。',
+        title: '确认修改？',
+        message: '确定将 API 地址“' + url + '”修改为“' + newUrl + '”吗？保存后立即生效。',
         onConfirm: () => {
           const entryCopy = apis[url];
           if (!entryCopy) return;
@@ -3283,8 +3246,8 @@ function renderApis() {
       if (nextRemark === (apis[url]?.remark || '')) return;
       remarkInput.value = apis[url]?.remark || '';
       confirmSourceChange({
-        title: '确认修改备注？',
-        message: '确定保存 API 源“' + url + '”的备注修改吗？',
+        title: '确认修改？',
+        message: '确定保存 API 源“' + url + '”的备注吗？保存后立即生效。',
         onConfirm: () => {
           if (!apis[url]) return;
           apis[url].remark = nextRemark;
