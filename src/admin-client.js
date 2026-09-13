@@ -1677,7 +1677,7 @@ function renderPreferredDomains() {
       remarkInput.value = entry?.remark || '';
       confirmSourceChange({
         title: '确认修改？',
-        message: '请确认备注变更，确认后立即生效。',
+        message: '备注仅用于显示和识别，不会影响优选 API 输出，可放心修改。',
         change: { field: '备注', before: entry?.remark || '', after: nextRemark },
         onConfirm: async () => {
           await savePreferredDomain(domain, nextRemark);
@@ -1704,8 +1704,8 @@ function renderPreferredDomains() {
       domainInput.value = domain;
       confirmSourceChange({
         title: '确认修改？',
-        message: '请确认域名变更，确认后立即生效。',
-        change: { field: '域名', before: domain, after: nextDomain, note: '保存后将重新解析 DNS。' },
+        message: '保存后，原域名将被移除并替换为新域名。',
+        change: { field: '域名', before: domain, after: nextDomain, note: '保存后将重新解析 DNS，解析完成前继续沿用当前解析结果。' },
         onConfirm: async () => {
           await savePreferredDomain(nextDomain, entry?.remark || '', domain);
         },
@@ -2539,7 +2539,7 @@ function confirmSourceChange({ title, message, change, onConfirm }) {
   const afterEl = $('sourceChangeAfter');
   const noteEl = $('sourceChangeNote');
   if (titleEl) titleEl.textContent = title || '确认修改？';
-  if (messageEl) messageEl.textContent = message || '请确认以下变更，确认后立即生效。';
+  if (messageEl) messageEl.textContent = message || '请核对以下变更，确认后立即保存。';
   if (detailsEl) detailsEl.hidden = !change;
   if (fieldEl) fieldEl.textContent = change?.field || '';
   if (beforeEl) beforeEl.textContent = formatSourceChangeValue(change?.before);
@@ -2956,7 +2956,7 @@ function renderSubs() {
       hostInput.value = host;
       confirmSourceChange({
         title: '确认修改？',
-        message: '请确认地址变更，确认后立即生效。',
+        message: '保存后，订阅数据将改从新地址获取，原地址不再使用。',
         change: { field: '地址', before: host, after: newHost },
         onConfirm: () => {
           const entryCopy = subs[host];
@@ -2982,7 +2982,7 @@ function renderSubs() {
       remarkInput.value = subs[host]?.remark || '';
       confirmSourceChange({
         title: '确认修改？',
-        message: '请确认备注变更，确认后立即生效。',
+        message: '备注仅用于显示和识别，不会影响订阅聚合结果，可放心修改。',
         change: { field: '备注', before: subs[host]?.remark || '', after: nextRemark },
         onConfirm: () => {
           if (!subs[host]) return;
@@ -3244,7 +3244,7 @@ function renderApis() {
       urlInput.value = url;
       confirmSourceChange({
         title: '确认修改？',
-        message: '请确认地址变更，确认后立即生效。',
+        message: '保存后，数据将改从新地址获取，原地址不再使用。',
         change: { field: '地址', before: url, after: newUrl },
         onConfirm: () => {
           const entryCopy = apis[url];
@@ -3270,7 +3270,7 @@ function renderApis() {
       remarkInput.value = apis[url]?.remark || '';
       confirmSourceChange({
         title: '确认修改？',
-        message: '请确认备注变更，确认后立即生效。',
+        message: '备注仅用于显示和识别，不会影响数据获取，可放心修改。',
         change: { field: '备注', before: apis[url]?.remark || '', after: nextRemark },
         onConfirm: () => {
           if (!apis[url]) return;
