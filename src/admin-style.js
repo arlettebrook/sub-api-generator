@@ -1524,54 +1524,101 @@ export const adminStyle = `
     background: var(--surface-solid);
     color: var(--text-primary);
     box-shadow: var(--shadow-lg);
-    text-align: center;
+    text-align: left;
   }
 
   .confirm-dialog::backdrop {
     background: rgba(2, 6, 23, 0.66);
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
+    animation: confirm-backdrop-in 160ms ease-out both;
+  }
+
+  .confirm-dialog[open] {
+    animation: confirm-dialog-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes confirm-dialog-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes confirm-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .confirm-dialog[open],
+    .confirm-dialog::backdrop {
+      animation: none;
+    }
+  }
+
+  .confirm-dialog-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .confirm-dialog-head h3 {
+    margin-bottom: 0;
+    font-size: 16px;
   }
 
   .confirm-dialog-icon {
     display: grid;
     place-items: center;
-    width: 42px;
-    height: 42px;
-    margin: 0 auto 12px;
-    border: 1px solid rgba(239, 68, 68, 0.42);
-    border-radius: 50%;
-    background: var(--danger-light);
-    color: var(--danger);
-    font-size: 24px;
-    font-weight: 800;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
   }
 
-  .confirm-dialog h3 {
-    justify-content: center;
-    margin-bottom: 8px;
-    font-size: 17px;
+  .confirm-dialog-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* 危险操作（删除）用红色徽章，普通确认（修改/恢复/导入）用品牌色徽章。 */
+  .confirm-dialog-icon--danger {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: var(--danger-light);
+    color: var(--danger);
+  }
+
+  .confirm-dialog-icon--accent {
+    border-color: var(--accent-border);
+    background: var(--accent-light);
+    color: var(--accent-primary);
   }
 
   .confirm-dialog p {
+    margin: 0;
     color: var(--text-secondary);
     font-size: 13px;
-    line-height: 1.6;
+    line-height: 1.65;
   }
 
   .source-change-details {
-    margin-top: 16px;
+    margin-top: 14px;
     padding: 12px;
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     background: var(--bg-tertiary);
-    text-align: left;
   }
 
   .source-change-field {
+    display: inline-flex;
+    align-items: center;
     margin-bottom: 10px;
-    color: var(--text-secondary);
-    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    font-size: 11px;
     font-weight: 700;
   }
 
@@ -1589,7 +1636,7 @@ export const adminStyle = `
     gap: 5px;
     padding: 9px 10px;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--surface-solid);
   }
 
@@ -1610,19 +1657,24 @@ export const adminStyle = `
   }
 
   .source-change-before code { color: var(--text-secondary); }
-  .source-change-after { border-color: var(--accent-border); }
+  .source-change-after {
+    border-color: var(--accent-border);
+    background: var(--accent-light);
+  }
   .source-change-after code { color: var(--accent-hover); font-weight: 700; }
 
   .source-change-arrow {
     align-self: center;
     color: var(--accent-primary);
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
   }
 
   .source-change-details > small {
     display: block;
     margin-top: 10px;
+    padding-left: 9px;
+    border-left: 2px solid var(--accent-border);
     color: var(--text-tertiary);
     font-size: 11px;
     line-height: 1.5;
@@ -1635,9 +1687,13 @@ export const adminStyle = `
 
   .confirm-dialog-actions {
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
     gap: 10px;
     margin-top: 20px;
+  }
+
+  .confirm-dialog-actions button {
+    min-width: 96px;
   }
 
   .btn-danger {
@@ -4458,6 +4514,14 @@ export const adminStyle = `
       width: calc(100vw - 24px);
       max-height: calc(100dvh - 24px);
       padding: 20px 16px max(20px, env(safe-area-inset-bottom, 0px));
+    }
+    .confirm-dialog-head {
+      gap: 10px;
+    }
+    .confirm-dialog-actions button {
+      flex: 1;
+      min-width: 0;
+      min-height: 42px;
     }
     .source-raw-dialog {
       width: calc(100vw - 16px);

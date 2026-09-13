@@ -48,9 +48,11 @@ export const adminHTML = `
 <p class="page-intro" id="pageIntro">集中查看订阅聚合结果和节点状态。</p>
 
 <main id="adminPageContent">
-<dialog class="confirm-dialog" id="sourceDeleteDialog" aria-labelledby="sourceDeleteTitle" aria-describedby="sourceDeleteMessage">
-  <div class="confirm-dialog-icon" aria-hidden="true">!</div>
-  <h3 id="sourceDeleteTitle">确认删除？</h3>
+<dialog class="confirm-dialog" id="sourceDeleteDialog" role="alertdialog" aria-labelledby="sourceDeleteTitle" aria-describedby="sourceDeleteMessage">
+  <div class="confirm-dialog-head">
+    <div class="confirm-dialog-icon confirm-dialog-icon--danger" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></div>
+    <h3 id="sourceDeleteTitle">确认删除？</h3>
+  </div>
   <p id="sourceDeleteMessage">此操作不可撤销。</p>
   <div class="confirm-dialog-actions">
     <button class="btn-outline" type="button" id="cancelSourceDeleteButton">取消</button>
@@ -58,9 +60,11 @@ export const adminHTML = `
   </div>
 </dialog>
 
-<dialog class="confirm-dialog" id="sourceChangeDialog" aria-labelledby="sourceChangeTitle" aria-describedby="sourceChangeMessage sourceChangeDetails">
-  <div class="confirm-dialog-icon" aria-hidden="true">?</div>
-  <h3 id="sourceChangeTitle">确认修改？</h3>
+<dialog class="confirm-dialog" id="sourceChangeDialog" role="alertdialog" aria-labelledby="sourceChangeTitle" aria-describedby="sourceChangeMessage sourceChangeDetails">
+  <div class="confirm-dialog-head">
+    <div class="confirm-dialog-icon confirm-dialog-icon--accent" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+    <h3 id="sourceChangeTitle">确认修改？</h3>
+  </div>
   <p id="sourceChangeMessage">请核对以下变更，确认后立即保存。</p>
   <div class="source-change-details" id="sourceChangeDetails" hidden>
     <div class="source-change-field" id="sourceChangeField"></div>
@@ -84,9 +88,11 @@ export const adminHTML = `
 </dialog>
 
 <!-- ADMIN_SECTION:customApiDialog:START -->
-<dialog class="confirm-dialog" id="customApiDeleteDialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
-  <div class="confirm-dialog-icon" aria-hidden="true">!</div>
-  <h3 id="customApiDeleteTitle">删除优选 API？</h3>
+<dialog class="confirm-dialog" id="customApiDeleteDialog" role="alertdialog" aria-labelledby="customApiDeleteTitle" aria-describedby="customApiDeleteMessage">
+  <div class="confirm-dialog-head">
+    <div class="confirm-dialog-icon confirm-dialog-icon--danger" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></div>
+    <h3 id="customApiDeleteTitle">删除优选 API？</h3>
+  </div>
   <p id="customApiDeleteMessage">此操作会移除当前访问路径及其数据源配置。</p>
   <div class="confirm-dialog-actions">
     <button class="btn-outline" type="button" id="cancelCustomApiDeleteButton">取消</button>
@@ -689,9 +695,11 @@ export const adminHTML = `
           <div id="webdavRemoteList" class="webdav-remote-list"><div class="webdav-remote-empty">点击"🔄 刷新列表"获取云端备份。</div></div>
         </div>
       </div>
-      <dialog class="confirm-dialog" id="restoreConfirmDialog" aria-labelledby="restoreConfirmTitle" aria-describedby="restoreConfirmMessage">
-        <div class="confirm-dialog-icon" aria-hidden="true">↓</div>
-        <h3 id="restoreConfirmTitle">恢复备份</h3>
+      <dialog class="confirm-dialog" id="restoreConfirmDialog" role="alertdialog" aria-labelledby="restoreConfirmTitle" aria-describedby="restoreConfirmMessage">
+        <div class="confirm-dialog-head">
+          <div class="confirm-dialog-icon confirm-dialog-icon--accent" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></div>
+          <h3 id="restoreConfirmTitle">恢复备份</h3>
+        </div>
         <p id="restoreConfirmMessage">确认后将覆盖备份文件中包含的配置，未保存的修改会丢失。</p>
         <div class="import-preview-stats" id="restoreConfirmStats"></div>
         <div class="confirm-dialog-actions">
@@ -699,21 +707,25 @@ export const adminHTML = `
           <button class="btn-primary" type="button" id="confirmRestoreButton">确认恢复</button>
         </div>
       </dialog>
-      <dialog class="confirm-dialog" id="webdavDeleteDialog" aria-labelledby="webdavDeleteTitle" aria-describedby="webdavDeleteMessage">
-        <div class="confirm-dialog-icon" aria-hidden="true">🗑</div>
-        <h3 id="webdavDeleteTitle">删除云端备份</h3>
+      <dialog class="confirm-dialog" id="webdavDeleteDialog" role="alertdialog" aria-labelledby="webdavDeleteTitle" aria-describedby="webdavDeleteMessage">
+        <div class="confirm-dialog-head">
+          <div class="confirm-dialog-icon confirm-dialog-icon--danger" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></div>
+          <h3 id="webdavDeleteTitle">删除云端备份</h3>
+        </div>
         <p id="webdavDeleteMessage">删除后无法恢复，请确认要删除的备份。</p>
         <div class="import-preview-stats" id="webdavDeleteStats"></div>
         <div class="confirm-dialog-actions">
           <button class="btn-outline" type="button" id="cancelWebdavDeleteButton">取消</button>
-          <button class="btn-primary" type="button" id="confirmWebdavDeleteButton">确认删除</button>
+          <button class="btn-danger" type="button" id="confirmWebdavDeleteButton">确认删除</button>
         </div>
       </dialog>
     </div>
   </div>
-  <dialog class="confirm-dialog rule-import-dialog" id="ruleImportPreviewDialog" aria-labelledby="ruleImportPreviewTitle" aria-describedby="ruleImportPreviewMessage">
-    <div class="confirm-dialog-icon" aria-hidden="true">↓</div>
-    <h3 id="ruleImportPreviewTitle">导入预览</h3>
+  <dialog class="confirm-dialog rule-import-dialog" id="ruleImportPreviewDialog" role="alertdialog" aria-labelledby="ruleImportPreviewTitle" aria-describedby="ruleImportPreviewMessage">
+    <div class="confirm-dialog-head">
+      <div class="confirm-dialog-icon confirm-dialog-icon--accent" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg></div>
+      <h3 id="ruleImportPreviewTitle">导入预览</h3>
+    </div>
     <p id="ruleImportPreviewMessage"></p>
     <div class="import-preview-stats" id="ruleImportPreviewStats"></div>
     <div class="confirm-dialog-actions">
