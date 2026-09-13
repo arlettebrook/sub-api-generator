@@ -127,9 +127,9 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page).toHaveURL(/\/admin\/custom-apis$/);
   await expect(page.locator("#saveCustomApisButton")).toHaveCount(0);
   await expect(page.locator("#customApiSaveStatus")).toHaveCount(0);
-  const apiSwitch = page.locator("#customApisList .custom-api-switch input").last();
+  const apiSwitch = page.locator("#customApisList .source-switch input").last();
   await expect(apiSwitch).toBeChecked();
-  await page.locator("#customApisList .custom-api-switch").last().click();
+  await page.locator("#customApisList .source-switch").last().click();
   await expect(apiSwitch).not.toBeChecked();
   await expect.poll(async () => page.evaluate(async (path) => {
     const response = await fetch('/api/custom-apis', { cache: 'no-store' });

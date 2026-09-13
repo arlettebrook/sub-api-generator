@@ -2361,6 +2361,7 @@ function renderCustomApis() {
     row.className = 'row custom-api-row' + (entry.enabled === true ? '' : ' source-disabled-row');
     row.dataset.path = path;
 
+    // 行结构对齐优选管理数据源行：开关 | 标识（备注 + 元信息）| 访问地址 | 复制 | 操作按钮。
     const main = document.createElement('div');
     main.className = 'custom-api-row-main custom-api-row-summary';
     const identity = document.createElement('div');
@@ -2368,21 +2369,16 @@ function renderCustomApis() {
     const title = document.createElement('strong');
     title.className = 'custom-api-row-title';
     title.textContent = entry.remark || '/' + path;
-    const pathText = document.createElement('code');
-    pathText.className = 'custom-api-row-path';
-    pathText.textContent = '/' + path;
-    const sourceSummary = document.createElement('span');
-    sourceSummary.className = 'custom-api-source-summary';
-    sourceSummary.textContent = entry.sourceMode === 'selected'
+    const metaParts = ['/' + path, entry.sourceMode === 'selected'
       ? '已选择 ' + (Array.isArray(entry.sources) ? entry.sources.length : 0) + ' 个数据源'
-      : '跟随全部数据源';
-    identity.append(title, pathText, sourceSummary);
+      : '跟随全部数据源'];
     if (entry.prefix || entry.suffix) {
-      const outputSummary = document.createElement('span');
-      outputSummary.className = 'custom-api-source-summary';
-      outputSummary.textContent = '输出：' + (entry.prefix ? '前缀「' + entry.prefix + '」' : '') + (entry.suffix ? (entry.prefix ? ' · ' : '') + '后缀「' + entry.suffix + '」' : '');
-      identity.appendChild(outputSummary);
+      metaParts.push('输出：' + (entry.prefix ? '前缀「' + entry.prefix + '」' : '') + (entry.suffix ? (entry.prefix ? ' · ' : '') + '后缀「' + entry.suffix + '」' : ''));
     }
+    const meta = document.createElement('small');
+    meta.className = 'custom-api-row-meta';
+    meta.textContent = metaParts.join(' · ');
+    identity.append(title, meta);
     const url = document.createElement('code');
     url.className = 'custom-api-url';
     url.textContent = window.location.origin + '/' + path;
@@ -2391,32 +2387,22 @@ function renderCustomApis() {
     const actions = document.createElement('div');
     actions.className = 'custom-api-actions';
 
-    const switchLabel = document.createElement('label');
-    switchLabel.className = 'custom-api-switch';
-    switchLabel.title = entry.enabled ? '已启用，点击禁用' : '已禁用，点击启用';
-    const statusSwitch = document.createElement('input');
-    statusSwitch.type = 'checkbox';
-    statusSwitch.role = 'switch';
-    statusSwitch.checked = entry.enabled === true;
-    statusSwitch.setAttribute('aria-label', (entry.remark || '/' + path) + (entry.enabled ? ' 已启用' : ' 已禁用'));
-    const switchTrack = document.createElement('span');
-    switchTrack.className = 'custom-api-switch-track';
-    const switchText = document.createElement('span');
-    switchText.className = 'custom-api-switch-text';
-    switchText.textContent = entry.enabled ? '已启用' : '已禁用';
-    switchLabel.append(statusSwitch, switchTrack, switchText);
-    statusSwitch.onchange = async () => {
-      const previous = !statusSwitch.checked;
-      statusSwitch.disabled = true;
-      switchText.textContent = '处理中…';
-      customApis[path].enabled = statusSwitch.checked;
-      setCustomApisDirty();
-      renderCustomApiSelect();
-      const saved = await persistCustomApis(statusSwitch.checked ? '优选 API 已启用' : '优选 API 已禁用');
-      if (!saved && customApis[path]) customApis[path].enabled = previous;
-      renderCustomApis();
-      renderCustomApiSelect();
-    };
+    const enabledSwitch = createSourceSwitch({
+      checked: entry.enabled === true,
+      ariaLabel: '启用优选 API /' + path,
+      onChange: async (statusSwitch, switchText) => {
+        const previous = !statusSwitch.checked;
+        statusSwitch.disabled = true;
+        switchText.textContent = '处理中…';
+        customApis[path].enabled = statusSwitch.checked;
+        setCustomApisDirty();
+        renderCustomApiSelect();
+        const saved = await persistCustomApis(statusSwitch.checked ? '优选 API 已启用' : '优选 API 已禁用');
+        if (!saved && customApis[path]) customApis[path].enabled = previous;
+        renderCustomApis();
+        renderCustomApiSelect();
+      },
+    });
 
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
@@ -2424,11 +2410,7 @@ function renderCustomApis() {
     editBtn.textContent = '✎ 编辑';
     editBtn.onclick = () => openCustomApiEditDialog(path);
 
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.className = 'btn-outline icon-action';
-    copyBtn.textContent = '📋 复制地址';
-    copyBtn.onclick = () => copyCustomApiUrl(path);
+    const copyBtn = createCopyButton(window.location.origin + '/' + path, '地址');
 
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
@@ -2461,10 +2443,10 @@ function renderCustomApis() {
     delBtn.type = 'button';
     delBtn.setAttribute('aria-label', '🗑 删除');
     delBtn.onclick = () => confirmCustomApiDelete(path);
-    actions.append(editBtn, viewBtn, downloadBtn, openBtn, delBtn, copyBtn);
+    actions.append(editBtn, viewBtn, downloadBtn, openBtn, delBtn);
 
-    // 启用开关放在行首（优选 API 行没有复选框，与订阅源/优选域名的行首开关位置保持一致）。
-    row.append(switchLabel, main, actions);
+    // 行首启用开关，其后依次为标识、地址、复制按钮和操作按钮，与优选管理行一致。
+    row.append(enabledSwitch.label, main, copyBtn, actions);
     el.appendChild(row);
   });
 }
@@ -2638,16 +2620,6 @@ async function saveCustomApiEdit() {
   if (saved) {
     closeCustomApiEditDialog();
     showToast('优选 API 配置已保存', 'success');
-  }
-}
-
-async function copyCustomApiUrl(path) {
-  const url = window.location.origin + '/' + path;
-  try {
-    await navigator.clipboard.writeText(url);
-    showToast('访问地址已复制', 'success');
-  } catch (error) {
-    showToast('复制失败：' + error.message, 'error');
   }
 }
 

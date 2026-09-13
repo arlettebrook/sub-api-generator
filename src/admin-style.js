@@ -1836,15 +1836,10 @@ export const adminStyle = `
     font-size: 14px;
   }
 
-  .custom-api-row-path {
+  .custom-api-row-meta {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text-tertiary);
-    font-size: 12px;
-  }
-
-  .custom-api-source-summary {
     color: var(--text-tertiary);
     font-size: 11px;
   }
@@ -1874,23 +1869,24 @@ export const adminStyle = `
     flex-wrap: wrap;
   }
 
-  /* 宽屏下优选 API 行与数据源行使用同样的固定网格：
-     启用开关 | 标识（标题/路径/来源摘要） | 访问地址 | 操作按钮，
-     通过 display:contents 把 main/actions 的子元素提升为网格项。 */
+  /* 宽屏下优选 API 行与优选管理数据源行使用同样的固定网格：
+     启用开关 | 标识（备注/元信息） | 访问地址 | 复制 | 操作按钮，
+     通过 display:contents 把 main/actions 的子元素提升为网格项。
+     用 ID 选择器提高优先级，避免被后定义的 .row flex 布局覆盖。 */
   @media screen and (min-width: 1001px) {
-    .custom-api-row {
+    #customApisList .custom-api-row {
       display: grid;
-      grid-template-columns: auto minmax(180px, 1.2fr) minmax(220px, 1.1fr) auto auto auto auto auto auto;
+      grid-template-columns: auto minmax(150px, 1fr) minmax(200px, 1.1fr) 30px auto auto auto auto auto;
       align-items: center;
       gap: 12px;
     }
-    .custom-api-row .custom-api-row-main,
-    .custom-api-row .custom-api-actions { display: contents; }
-    .custom-api-row .custom-api-url { width: auto; min-width: 0; }
+    #customApisList .custom-api-row .custom-api-row-main,
+    #customApisList .custom-api-row .custom-api-actions { display: contents; }
+    #customApisList .custom-api-row .custom-api-url { width: auto; min-width: 0; }
+    #customApisList .custom-api-row .custom-api-actions { flex-wrap: nowrap; }
   }
 
-  /* 启用开关：优选 API 行用 .custom-api-switch（兼容既有选择器），数据源行用 .source-switch，样式一致。 */
-  .custom-api-switch,
+  /* 启用开关：与数据源行共用 .source-switch 样式。 */
   .source-switch {
     display: inline-flex;
     align-items: center;
@@ -1904,7 +1900,6 @@ export const adminStyle = `
     flex: 0 0 auto;
   }
 
-  .custom-api-switch input,
   .source-switch input {
     position: absolute;
     width: 1px;
@@ -1913,7 +1908,6 @@ export const adminStyle = `
     pointer-events: none;
   }
 
-  .custom-api-switch-track,
   .source-switch-track {
     position: relative;
     width: 42px;
@@ -1924,7 +1918,6 @@ export const adminStyle = `
     transition: var(--transition);
   }
 
-  .custom-api-switch-track::after,
   .source-switch-track::after {
     position: absolute;
     top: 3px;
@@ -1937,25 +1930,21 @@ export const adminStyle = `
     transition: var(--transition);
   }
 
-  .custom-api-switch input:checked + .custom-api-switch-track,
   .source-switch input:checked + .source-switch-track {
     border-color: var(--success);
     background: rgba(16, 185, 129, 0.2);
   }
 
-  .custom-api-switch input:checked + .custom-api-switch-track::after,
   .source-switch input:checked + .source-switch-track::after {
     left: 21px;
     background: var(--success);
   }
 
-  .custom-api-switch input:focus-visible + .custom-api-switch-track,
   .source-switch input:focus-visible + .source-switch-track {
     outline: 3px solid var(--accent-light);
     outline-offset: 2px;
   }
 
-  .custom-api-switch-text,
   .source-switch-text {
     min-width: 24px;
   }
@@ -4525,10 +4514,23 @@ export const adminStyle = `
       min-height: 34px;
       padding: 0 10px;
     }
-    .custom-api-row > .custom-api-switch {
+    .custom-api-row > .source-switch {
       width: 100%;
       justify-content: flex-start;
       padding-bottom: 2px;
+    }
+    .custom-api-row > .copy-source-button {
+      flex: 0 0 30px;
+      width: 30px;
+      min-width: 30px;
+      height: 30px;
+      padding: 0;
+    }
+    /* 复制按钮与操作按钮同行，避免窄屏下单独占一行。 */
+    .custom-api-row .custom-api-actions {
+      width: auto;
+      flex: 1 1 calc(100% - 42px);
+      min-width: 0;
     }
     .custom-api-row .del-btn {
       opacity: 1;
