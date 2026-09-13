@@ -1683,6 +1683,13 @@ function renderPreferredDomains() {
         },
       });
     };
+    remarkInput.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        remarkInput.blur();
+      }
+    };
+    remarkInput.onblur = () => remarkInput.dispatchEvent(new Event('change'));
     const identity = document.createElement('div');
     identity.className = 'preferred-domain-identity';
     const domainInput = document.createElement('input');
@@ -1702,6 +1709,13 @@ function renderPreferredDomains() {
         },
       });
     };
+    domainInput.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        domainInput.blur();
+      }
+    };
+    domainInput.onblur = () => domainInput.dispatchEvent(new Event('change'));
     const checked = document.createElement('small');
     const domainStatus = getPreferredDomainStatus(domain, entry);
     checked.textContent = (disabled ? '已禁用 · ' : '') + '最后解析：' + formatPreferredDomainTime(domainStatus.lastAttemptAt || entry?.checkedAt);
@@ -2521,6 +2535,8 @@ function confirmSourceChange({ title, message, onConfirm }) {
   if (messageEl) messageEl.textContent = message || '保存后修改将立即生效。';
   pendingSourceChangeAction = onConfirm;
   dialog.showModal();
+  // showModal 默认聚焦第一个可聚焦按钮（取消），这里改为聚焦确认按钮，Enter 即确认修改。
+  $('confirmSourceChangeButton')?.focus();
   return true;
 }
 
@@ -2619,6 +2635,7 @@ function closeCustomApiEditDialog() {
 
 async function saveCustomApiEdit() {
   if (!editingCustomApiPath || !customApis[editingCustomApiPath]) return;
+  const originalPath = editingCustomApiPath;
   const pathInput = $('editCustomApiPath');
   const remarkInput = $('editCustomApiRemark');
   const suffixInput = $('editCustomApiSuffix');
@@ -2633,7 +2650,7 @@ async function saveCustomApiEdit() {
     return;
   }
   setInputError(pathInput, '');
-  const entry = customApis[editingCustomApiPath];
+  const entry = customApis[originalPath];
   const selection = editingCustomApiPicker ? readSourcePickerSelection(editingCustomApiPicker) : {
     sourceMode: entry.sourceMode === 'selected' ? 'selected' : 'all',
     sources: Array.isArray(entry.sources) ? entry.sources : [],
@@ -2648,28 +2665,64 @@ async function saveCustomApiEdit() {
     showToast(error.message, 'error');
     return;
   }
-  entry.remark = remarkInput?.value.trim() || '';
-  entry.prefix = outputSettings.prefix;
-  entry.suffix = outputSettings.suffix;
-  entry.suffixStrategy = ['append', 'replace', 'skip'].includes(suffixStrategyInput?.value) ? suffixStrategyInput.value : 'skip';
-  entry.sourceMode = selection.sourceMode;
-  entry.sources = selection.sources;
-  if (newPath !== editingCustomApiPath) {
-    customApis[newPath] = entry;
-    delete customApis[editingCustomApiPath];
-    editingCustomApiPath = newPath;
+  const nextRemark = remarkInput?.value.trim() || '';
+  const pathChanged = newPath !== originalPath;
+  const remarkChanged = nextRemark !== (entry.remark || '');
+
+  const commit = async () => {
+    // The edit dialog may have been closed while a confirmation was open.
+    if (editingCustomApiPath !== originalPath || !customApis[originalPath]) return;
+    const nextEntry = {
+      ...entry,
+      remark: nextRemark,
+      prefix: outputSettings.prefix,
+      suffix: outputSettings.suffix,
+      suffixStrategy: ['append', 'replace', 'skip'].includes(suffixStrategyInput?.value) ? suffixStrategyInput.value : 'skip',
+      sourceMode: selection.sourceMode,
+      sources: selection.sources,
+    };
+    if (pathChanged) {
+      customApis[newPath] = nextEntry;
+      delete customApis[originalPath];
+      editingCustomApiPath = newPath;
+    } else {
+      customApis[originalPath] = nextEntry;
+    }
+    setCustomApisDirty(true);
+    renderCustomApis();
+    renderCustomApiSelect();
+    const saveButton = $('saveCustomApiEditButton');
+    setButtonBusy(saveButton, true, '保存中…');
+    const saved = await saveCustomApis(false);
+    setButtonBusy(saveButton, false);
+    if (saved) {
+      closeCustomApiEditDialog();
+      showToast('优选 API 配置已保存', 'success');
+    }
+  };
+
+  const confirmRemark = () => {
+    if (!remarkChanged) return void commit();
+    confirmSourceChange({
+      title: '确认修改优选 API 备注？',
+      message: '确定保存优选 API“/' + originalPath + '”的备注修改吗？',
+      onConfirm: commit,
+    });
+  };
+
+  if (pathChanged) {
+    confirmSourceChange({
+      title: '确认修改优选 API 地址？',
+      message: '确定将优选 API 地址“/' + originalPath + '”改为“/' + newPath + '”吗？保存后修改立即生效。',
+      onConfirm: confirmRemark,
+    });
+    return;
   }
-  setCustomApisDirty(true);
-  renderCustomApis();
-  renderCustomApiSelect();
-  const saveButton = $('saveCustomApiEditButton');
-  setButtonBusy(saveButton, true, '保存中…');
-  const saved = await saveCustomApis(false);
-  setButtonBusy(saveButton, false);
-  if (saved) {
-    closeCustomApiEditDialog();
-    showToast('优选 API 配置已保存', 'success');
+  if (remarkChanged) {
+    confirmRemark();
+    return;
   }
+  await commit();
 }
 
 function addCustomApi() {
@@ -2931,6 +2984,13 @@ function renderSubs() {
         },
       });
     };
+    hostInput.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        hostInput.blur();
+      }
+    };
+    hostInput.onblur = () => hostInput.dispatchEvent(new Event('change'));
 
     remarkInput.onchange = () => {
       const nextRemark = remarkInput.value;
@@ -2947,6 +3007,13 @@ function renderSubs() {
         },
       });
     };
+    remarkInput.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        remarkInput.blur();
+      }
+    };
+    remarkInput.onblur = () => remarkInput.dispatchEvent(new Event('change'));
 
     row.appendChild(select); row.appendChild(enabledSwitch.label); row.appendChild(remarkInput);
     row.appendChild(hostInput);
@@ -3203,6 +3270,13 @@ function renderApis() {
         },
       });
     };
+    urlInput.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        urlInput.blur();
+      }
+    };
+    urlInput.onblur = () => urlInput.dispatchEvent(new Event('change'));
 
     remarkInput.onchange = () => {
       const nextRemark = remarkInput.value;
@@ -3219,6 +3293,13 @@ function renderApis() {
         },
       });
     };
+    remarkInput.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        remarkInput.blur();
+      }
+    };
+    remarkInput.onblur = () => remarkInput.dispatchEvent(new Event('change'));
 
     row.appendChild(select); row.appendChild(enabledSwitch.label); row.appendChild(remarkInput);
     row.appendChild(urlInput);
