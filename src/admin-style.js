@@ -5008,11 +5008,12 @@ export const adminStyle = `
       min-width: 16px;
       margin: 0;
     }
+    /* 备注独占一行：basis 100% 保证后面的域名+复制按钮从新行开始，极窄屏也不会被挤压。 */
     #subsList .row .remark-input,
     #apisList .row .remark-input,
     #preferredDomainsList .row .remark-input {
       order: 1;
-      flex: 1 1 auto;
+      flex: 1 1 100%;
       width: auto;
       min-width: 0;
     }
@@ -5026,12 +5027,13 @@ export const adminStyle = `
       min-width: 32px;
       padding: 0;
     }
-    /* 地址不再独占一行，留出 32px 给同行末尾的复制按钮。 */
+    /* 地址不再独占一行，留出 32px 给同行末尾的复制按钮；
+       flex-basis 用 0 而非 auto，极窄屏下地址按内容收缩，复制按钮不会被挤到下一行。 */
     #subsList .row .host-input,
     #apisList .row .host-input,
     #preferredDomainsList .row .host-input {
       order: 2;
-      flex: 1 1 auto;
+      flex: 1 1 0;
       width: auto;
       min-width: 0;
     }
@@ -5078,10 +5080,11 @@ export const adminStyle = `
     .preferred-domain-row .preferred-domain-identity small {
       order: 2;
     }
-    /* identity 不再独占一行，留出 32px 给同行末尾的复制按钮。 */
+    /* identity 不再独占一行，留出 32px 给同行末尾的复制按钮；
+       flex-basis 用 0，极窄屏下复制按钮仍与域名同行。 */
     .preferred-domain-row .preferred-domain-identity,
     .preferred-domain-row .preferred-domain-records {
-      flex: 1 1 auto;
+      flex: 1 1 0;
       width: auto;
     }
     .preferred-domain-row .source-check-button,

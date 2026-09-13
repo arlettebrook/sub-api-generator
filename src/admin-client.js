@@ -1670,7 +1670,6 @@ function renderPreferredDomains() {
     remarkInput.className = 'remark-input';
     remarkInput.value = entry?.remark || '';
     remarkInput.placeholder = '备注（可选）';
-    remarkInput.style.maxWidth = '180px';
     remarkInput.onchange = async () => {
       await savePreferredDomain(domain, remarkInput.value);
     };
@@ -2836,7 +2835,6 @@ function renderSubs() {
     remarkInput.className = 'remark-input';
     remarkInput.value = entry.remark || '';
     remarkInput.placeholder = '备注（可选）';
-    remarkInput.style.maxWidth = '200px';
 
     const hostInput = document.createElement('input');
     hostInput.className = 'host-input';
@@ -3090,7 +3088,6 @@ function renderApis() {
     remarkInput.className = 'remark-input';
     remarkInput.value = entry.remark || '';
     remarkInput.placeholder = '备注（可选）';
-    remarkInput.style.maxWidth = '200px';
 
     const urlInput = document.createElement('input');
     urlInput.className = 'host-input';
