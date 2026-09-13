@@ -1815,7 +1815,8 @@ export const adminStyle = `
 
   .custom-api-row-main {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 1.1fr);
+    /* 标识 | 地址 | 复制；宽屏经 display:contents 提升为行网格列，窄屏降为单列+地址行。 */
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 1.1fr) 30px;
     align-items: center;
     gap: 10px;
     width: 100%;
@@ -4498,39 +4499,47 @@ export const adminStyle = `
     .custom-api-toolbar {
       margin-top: 12px;
     }
+    /* 窄屏信息层级：启用开关 → 标识 → 地址 + 复制 → 操作按钮两列排布。 */
     .custom-api-row-main {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr) 30px;
+      gap: 10px;
     }
-    .custom-api-actions {
-      width: 100%;
-      flex-wrap: wrap;
+    .custom-api-row .custom-api-identity {
+      grid-column: 1 / -1;
     }
-    .custom-api-actions button {
-      flex: 1;
+    .custom-api-row .custom-api-url {
+      grid-column: 1;
     }
-    .custom-api-row .custom-api-actions .custom-api-delete {
-      flex: 0 1 auto;
-      min-width: 64px;
-      min-height: 34px;
-      padding: 0 10px;
-    }
-    .custom-api-row > .source-switch {
-      width: 100%;
-      justify-content: flex-start;
-      padding-bottom: 2px;
-    }
-    .custom-api-row > .copy-source-button {
-      flex: 0 0 30px;
+    .custom-api-row .copy-source-button {
+      grid-column: 2;
+      align-self: center;
       width: 30px;
       min-width: 30px;
       height: 30px;
       padding: 0;
     }
-    /* 复制按钮与操作按钮同行，避免窄屏下单独占一行。 */
-    .custom-api-row .custom-api-actions {
-      width: auto;
-      flex: 1 1 calc(100% - 42px);
+    .custom-api-actions {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    /* 操作按钮与优选管理行一致，两列等宽，避免换行不均衡。 */
+    .custom-api-row .custom-api-actions button {
+      flex: 1 1 calc(50% - 5px);
+      width: calc(50% - 5px);
       min-width: 0;
+      min-height: 40px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+    .custom-api-row .custom-api-actions .custom-api-delete {
+      flex: 1 1 calc(50% - 5px);
+      min-width: 0;
+      min-height: 40px;
+    }
+    .custom-api-row > .source-switch {
+      width: 100%;
+      justify-content: flex-start;
+      padding-bottom: 2px;
     }
     .custom-api-row .del-btn {
       opacity: 1;

@@ -2382,7 +2382,9 @@ function renderCustomApis() {
     const url = document.createElement('code');
     url.className = 'custom-api-url';
     url.textContent = window.location.origin + '/' + path;
-    main.append(identity, url);
+    const copyBtn = createCopyButton(window.location.origin + '/' + path, '地址');
+    // 复制按钮放进 main：宽屏经 display:contents 仍排在新网格的地址列之后，窄屏与地址同行。
+    main.append(identity, url, copyBtn);
 
     const actions = document.createElement('div');
     actions.className = 'custom-api-actions';
@@ -2409,8 +2411,6 @@ function renderCustomApis() {
     editBtn.className = 'btn-primary icon-action';
     editBtn.textContent = '✎ 编辑';
     editBtn.onclick = () => openCustomApiEditDialog(path);
-
-    const copyBtn = createCopyButton(window.location.origin + '/' + path, '地址');
 
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
@@ -2446,7 +2446,7 @@ function renderCustomApis() {
     actions.append(editBtn, viewBtn, downloadBtn, openBtn, delBtn);
 
     // 行首启用开关，其后依次为标识、地址、复制按钮和操作按钮，与优选管理行一致。
-    row.append(enabledSwitch.label, main, copyBtn, actions);
+    row.append(enabledSwitch.label, main, actions);
     el.appendChild(row);
   });
 }
