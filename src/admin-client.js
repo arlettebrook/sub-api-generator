@@ -1731,7 +1731,7 @@ function renderPreferredDomains() {
         } catch (error) { showToast(error.message, 'error'); delBtn.disabled = false; delBtn.textContent = '🗑 删除'; }
       }
     });
-    row.append(select, enabledSwitch.label, remarkInput, identity, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), viewBtn, downloadBtn, delBtn);
+    row.append(select, enabledSwitch.label, remarkInput, identity, createCopyButton(domain, '域名'), createSourceHealth('domains', domain, domainStatus), createSourceCheckButton('domains', domain), delBtn, downloadBtn, viewBtn);
     fragment.appendChild(row);
   });
   container.appendChild(fragment);
@@ -2443,7 +2443,7 @@ function renderCustomApis() {
     delBtn.type = 'button';
     delBtn.setAttribute('aria-label', '🗑 删除');
     delBtn.onclick = () => confirmCustomApiDelete(path);
-    actions.append(editBtn, viewBtn, downloadBtn, openBtn, delBtn);
+    actions.append(editBtn, delBtn, downloadBtn, openBtn, viewBtn);
 
     // 行首启用开关，其后依次为标识、地址、复制按钮和操作按钮，与优选管理行一致。
     row.append(enabledSwitch.label, main, actions);
@@ -2886,6 +2886,7 @@ function renderSubs() {
     row.appendChild(createCopyButton(host, '订阅源地址'));
     row.appendChild(health);
     row.appendChild(createSourceCheckButton('subs', host));
+    row.appendChild(delBtn);
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'btn-outline icon-action source-view-button';
@@ -2897,7 +2898,6 @@ function renderSubs() {
       try { await openSourceRawDialog('subs', host); }
       finally { viewBtn.disabled = false; viewBtn.textContent = '👁 查看'; }
     };
-    row.appendChild(viewBtn);
     const downloadBtn = document.createElement('button');
     downloadBtn.type = 'button';
     downloadBtn.className = 'btn-outline icon-action source-download-button';
@@ -2905,7 +2905,7 @@ function renderSubs() {
     downloadBtn.setAttribute('aria-label', '下载订阅源节点数据 ' + host);
     downloadBtn.onclick = () => downloadSourceData('subs', host, entry, downloadBtn);
     row.appendChild(downloadBtn);
-    row.appendChild(delBtn);
+    row.appendChild(viewBtn);
     fragment.appendChild(row);
   });
   el.appendChild(fragment);
@@ -3140,6 +3140,7 @@ function renderApis() {
     row.appendChild(createCopyButton(url, 'API 地址'));
     row.appendChild(health);
     row.appendChild(createSourceCheckButton('apis', url));
+    row.appendChild(delBtn);
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'btn-outline icon-action source-view-button';
@@ -3151,7 +3152,6 @@ function renderApis() {
       try { await openSourceRawDialog('apis', url); }
       finally { viewBtn.disabled = false; viewBtn.textContent = '👁 查看'; }
     };
-    row.appendChild(viewBtn);
     const downloadBtn = document.createElement('button');
     downloadBtn.type = 'button';
     downloadBtn.className = 'btn-outline icon-action source-download-button';
@@ -3159,7 +3159,7 @@ function renderApis() {
     downloadBtn.setAttribute('aria-label', '下载 API 源节点数据 ' + url);
     downloadBtn.onclick = () => downloadSourceData('apis', url, entry, downloadBtn);
     row.appendChild(downloadBtn);
-    row.appendChild(delBtn);
+    row.appendChild(viewBtn);
     fragment.appendChild(row);
   });
   el.appendChild(fragment);

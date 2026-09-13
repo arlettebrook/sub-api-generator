@@ -3404,7 +3404,7 @@ export const adminStyle = `
     .preferred-domain-row,
     #subsList .row,
     #apisList .row {
-      /* 固定网格列：复选框 | 启用开关 | 备注 | 域名/主机 | 复制 | 健康状态 | 检测/查看/下载/删除。 */
+      /* 固定网格列：复选框 | 启用开关 | 备注 | 域名/主机 | 复制 | 健康状态 | 检测/删除/下载/查看。 */
       display: grid;
       grid-template-columns: auto auto minmax(90px, 140px) minmax(120px, 1.2fr) 32px minmax(160px, 1.4fr) auto auto auto auto;
       align-items: center;
@@ -5016,21 +5016,23 @@ export const adminStyle = `
       width: auto;
       min-width: 0;
     }
+    /* 复制按钮与地址同行（order 2），避免挤在备注后面。 */
     #subsList .row .copy-source-button,
     #apisList .row .copy-source-button,
     #preferredDomainsList .row .copy-source-button {
-      order: 1;
+      order: 2;
       flex: 0 0 32px;
       width: 32px;
       min-width: 32px;
       padding: 0;
     }
+    /* 地址不再独占一行，留出 32px 给同行末尾的复制按钮。 */
     #subsList .row .host-input,
     #apisList .row .host-input,
     #preferredDomainsList .row .host-input {
       order: 2;
-      flex: 1 1 100%;
-      width: 100%;
+      flex: 1 1 auto;
+      width: auto;
       min-width: 0;
     }
     #subsList .row .source-health,
@@ -5065,8 +5067,8 @@ export const adminStyle = `
       display: flex;
       gap: 10px;
     }
-    /* 优选域名行移动端信息层级：备注 → 域名/最后解析 → 检测结果 → 操作按钮。
-       identity 未设 order 时默认为 0，会插到备注之前，必须显式归位。 */
+    /* 优选域名行移动端信息层级：备注 → 域名/最后解析 + 复制 → 检测结果 → 操作按钮。
+       identity 与复制按钮同为 order 2，identity 在前、复制按钮紧随其后同一行。 */
     .preferred-domain-row .preferred-domain-identity {
       order: 2;
     }
@@ -5076,10 +5078,11 @@ export const adminStyle = `
     .preferred-domain-row .preferred-domain-identity small {
       order: 2;
     }
+    /* identity 不再独占一行，留出 32px 给同行末尾的复制按钮。 */
     .preferred-domain-row .preferred-domain-identity,
     .preferred-domain-row .preferred-domain-records {
-      flex: 1 1 100%;
-      width: 100%;
+      flex: 1 1 auto;
+      width: auto;
     }
     .preferred-domain-row .source-check-button,
     .preferred-domain-row .source-view-button,
