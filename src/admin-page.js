@@ -275,11 +275,12 @@ export const adminHTML = `
 <!-- ==================== 手动优选管理 ==================== -->
 <div class="card" id="preferredManualSection">
   <details class="source-status-panel preferred-manual-panel" open>
-    <summary>
+    <summary class="preferred-manual-summary">
       <div>
       <h3>✍️ 手动优选管理</h3>
       <p class="section-caption">维护手动优选节点，每行一条“地址:端口#备注”；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
       </div>
+      <button class="manual-preferred-top-button" id="preferredManualTopButton" type="button" title="返回数据顶部" aria-label="返回数据顶部"><span aria-hidden="true">↑</span><span>返回数据顶部</span></button>
     </summary>
     <div class="source-status-panel-body">
       <div class="manual-preferred-toolbar">
@@ -305,6 +306,19 @@ export const adminHTML = `
   </details>
 </div>
 <!-- ADMIN_SECTION:preferredManual:END -->
+
+<dialog class="confirm-dialog preferred-manual-dialog" id="preferredManualDialog" aria-labelledby="preferredManualDialogTitle" aria-describedby="preferredManualDialogMessage">
+  <div class="confirm-dialog-head">
+    <div class="confirm-dialog-icon confirm-dialog-icon--accent" aria-hidden="true">✍️</div>
+    <h3 id="preferredManualDialogTitle">手动优选操作</h3>
+  </div>
+  <p id="preferredManualDialogMessage"></p>
+  <textarea id="preferredManualDialogInput" class="preferred-manual-dialog-input" rows="7" spellcheck="false" hidden></textarea>
+  <div class="confirm-dialog-actions">
+    <button class="btn-outline" type="button" id="cancelPreferredManualDialogButton">取消</button>
+    <button class="btn-primary" type="button" id="confirmPreferredManualDialogButton">确认</button>
+  </div>
+</dialog>
 
 <!-- ADMIN_SECTION:preferredDomains:START -->
 <!-- ==================== 优选域名管理 ==================== -->

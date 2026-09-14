@@ -3518,6 +3518,35 @@ export const adminStyle = `
   }
 
   /* 手动优选管理：工具栏 + 等宽文本编辑器。 */
+  .preferred-manual-summary {
+    position: relative;
+    padding-right: 190px;
+  }
+
+  .preferred-manual-summary > div:first-child {
+    min-width: 0;
+  }
+
+  .manual-preferred-top-button {
+    position: absolute;
+    top: 14px;
+    right: 48px;
+    height: 34px;
+    padding: 0 11px;
+    border-radius: 999px;
+    border-color: var(--accent-border);
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: none;
+  }
+
+  .manual-preferred-top-button span:first-child {
+    font-size: 18px;
+    line-height: 1;
+  }
+
   .manual-preferred-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -3528,10 +3557,41 @@ export const adminStyle = `
   }
 
   .manual-preferred-toolbar .section-heading-actions {
+    min-width: 0;
+    flex: 1 1 620px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 8px;
+  }
+
+  .manual-preferred-toolbar .section-heading-actions > button {
+    min-width: 0;
+  }
+
+  .preferred-manual-dialog-input {
+    display: block;
+    width: 100%;
+    min-height: 150px;
+    margin-top: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    resize: vertical;
+  }
+
+  .preferred-manual-dialog-input:focus {
+    border-color: var(--accent-primary);
+    outline: none;
+    box-shadow: 0 0 0 4px var(--accent-light);
+  }
+
+  .preferred-manual-dialog-input[hidden] {
+    display: none;
   }
 
   .manual-preferred-editor {
@@ -4501,6 +4561,49 @@ export const adminStyle = `
       align-items: flex-end;
       flex-direction: column-reverse;
       gap: 6px;
+    }
+    .preferred-manual-summary {
+      padding-right: 44px;
+    }
+    .preferred-manual-summary .section-caption {
+      padding-right: 0;
+    }
+    .manual-preferred-top-button {
+      top: 12px;
+      right: 42px;
+      width: 34px;
+      padding: 0;
+      border-radius: 50%;
+    }
+    .manual-preferred-top-button span:last-child {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .manual-preferred-toolbar {
+      align-items: stretch;
+    }
+    .manual-preferred-toolbar .section-summary,
+    .manual-preferred-toolbar .section-heading-actions {
+      width: 100%;
+      flex-basis: 100%;
+    }
+    .manual-preferred-toolbar .section-heading-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      justify-content: stretch;
+    }
+    .manual-preferred-toolbar .section-heading-actions > button {
+      width: 100%;
+      min-width: 0;
+      padding-inline: 8px;
+      white-space: normal;
+    }
+    .manual-preferred-toolbar .section-heading-actions > #preferredManualSaveButton {
+      grid-column: 1 / -1;
     }
     .settings-inline-footer {
       align-items: stretch;

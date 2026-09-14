@@ -1914,6 +1914,7 @@ async function addPreferredDomain() {
 const MANUAL_NODE_REGEX = /(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+):(\\d+)/;
 let preferredManualSavedContent = '';
 let preferredManualDirty = false;
+let preferredManualDialogResolver = null;
 
 function preferredManualLines(value) {
   return String(value || '').split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
@@ -2076,13 +2077,60 @@ function sortPreferredManual() {
   showToast('已按地址、端口排序，保存后生效', 'success');
 }
 
+function openPreferredManualDialog({ title, message, input = false, value = '', confirmLabel = '确认' }) {
+  return new Promise((resolve) => {
+    const dialog = $('preferredManualDialog');
+    const titleEl = $('preferredManualDialogTitle');
+    const messageEl = $('preferredManualDialogMessage');
+    const inputEl = $('preferredManualDialogInput');
+    const confirmButton = $('confirmPreferredManualDialogButton');
+    if (!dialog || !titleEl || !messageEl || !inputEl || !confirmButton) { resolve(input ? null : false); return; }
+    preferredManualDialogResolver = resolve;
+    dialog.dataset.mode = input ? 'input' : 'confirm';
+    titleEl.textContent = title || '手动优选操作';
+    messageEl.textContent = message || '';
+    inputEl.hidden = !input;
+    inputEl.value = input ? value : '';
+    confirmButton.textContent = confirmLabel;
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+    window.setTimeout(() => (input ? inputEl : confirmButton).focus(), 0);
+  });
+}
+
+function closePreferredManualDialog(result) {
+  const dialog = $('preferredManualDialog');
+  const resolver = preferredManualDialogResolver;
+  preferredManualDialogResolver = null;
+  if (dialog?.open && typeof dialog.close === 'function') dialog.close();
+  else dialog?.removeAttribute('open');
+  // 等待 close 事件和浏览器的对话框状态更新，再继续可能打开下一个弹窗的操作。
+  if (resolver) window.setTimeout(() => resolver(result), 40);
+}
+
+function initPreferredManualDialog() {
+  const dialog = $('preferredManualDialog');
+  if (!dialog || dialog.dataset.bound === 'true') return;
+  dialog.dataset.bound = 'true';
+  $('cancelPreferredManualDialogButton')?.addEventListener('click', () => closePreferredManualDialog(dialog.dataset.mode === 'input' ? null : false));
+  $('confirmPreferredManualDialogButton')?.addEventListener('click', () => {
+    closePreferredManualDialog(dialog.dataset.mode === 'input' ? $('preferredManualDialogInput')?.value || '' : true);
+  });
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) closePreferredManualDialog(dialog.dataset.mode === 'input' ? null : false);
+  });
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closePreferredManualDialog(dialog.dataset.mode === 'input' ? null : false);
+  });
+}
+
 async function readClipboardOrPrompt(promptText) {
   try {
     if (navigator.clipboard?.readText) return await navigator.clipboard.readText();
     throw new Error('unsupported');
   } catch {
-    const fallback = window.prompt(promptText);
-    return fallback === null ? null : fallback;
+    return openPreferredManualDialog({ title: '手动粘贴内容', message: promptText, input: true, confirmLabel: '使用此内容' });
   }
 }
 
@@ -2095,18 +2143,30 @@ async function overwritePastePreferredManual() {
   if (!pasted.length) { showToast('剪贴板中没有可识别的条目', 'warning'); return; }
   const current = preferredManualLines(textarea.value);
   const dirty = textarea.value.replace(/\\s+$/, '') !== preferredManualSavedContent.replace(/\\s+$/, '');
-  if (current.length && !window.confirm('确定用剪贴板的 ' + pasted.length + ' 条内容覆盖当前 ' + current.length + ' 条吗？' + (dirty ? '\\n未保存的修改将丢失。' : ''))) return;
+  if (current.length) {
+    const confirmed = await openPreferredManualDialog({
+      title: '确认覆盖内容',
+      message: '确定用剪贴板的 ' + pasted.length + ' 条内容覆盖当前 ' + current.length + ' 条吗？' + (dirty ? ' 未保存的修改将丢失。' : ''),
+      confirmLabel: '确认覆盖',
+    });
+    if (!confirmed) return;
+  }
   textarea.value = pasted.join('\\n');
   updatePreferredManualMeta();
   showToast('已用剪贴板内容覆盖，共 ' + pasted.length + ' 条，保存后生效', 'success');
 }
 
-function clearPreferredManual() {
+async function clearPreferredManual() {
   const textarea = $('preferredManualText');
   if (!textarea) return;
   const current = preferredManualLines(textarea.value);
   if (!current.length) { showToast('文本框已经是空的', 'info'); return; }
-  if (!window.confirm('确定清空当前 ' + current.length + ' 条内容吗？\\n清空后仍可点击“撤销更改”恢复到已保存的版本。')) return;
+  const confirmed = await openPreferredManualDialog({
+    title: '确认清空内容',
+    message: '确定清空当前 ' + current.length + ' 条内容吗？清空后仍可点击“撤销更改”恢复到已保存的版本。',
+    confirmLabel: '确认清空',
+  });
+  if (!confirmed) return;
   textarea.value = '';
   updatePreferredManualMeta();
   showToast('已清空，保存后生效', 'success');
@@ -2131,8 +2191,13 @@ function initPreferredManualEditor() {
   $('preferredManualAppendButton')?.addEventListener('click', () => void appendPastePreferredManual());
   $('preferredManualOverwriteButton')?.addEventListener('click', () => void overwritePastePreferredManual());
   $('preferredManualSortButton')?.addEventListener('click', sortPreferredManual);
-  $('preferredManualClearButton')?.addEventListener('click', clearPreferredManual);
+  $('preferredManualClearButton')?.addEventListener('click', () => void clearPreferredManual());
   $('preferredManualUndoButton')?.addEventListener('click', undoPreferredManualChanges);
+  $('preferredManualTopButton')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    scrollElementToTop(document.scrollingElement || document.documentElement, window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth');
+  });
 }
 
 function getSourceStatus(type, key) {
@@ -5171,6 +5236,7 @@ function bindPageControls() {
     importPreferredDomainsButton.addEventListener('click', () => importPreferredDomainsFile.click());
     importPreferredDomainsFile.addEventListener('change', importPreferredDomains);
   }
+  initPreferredManualDialog();
   initPreferredManualEditor();
 }
 
