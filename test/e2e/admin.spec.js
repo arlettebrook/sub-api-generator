@@ -91,8 +91,10 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.getByRole("button", { name: "新建优选 API" }).click();
   await expect(page.locator("#customApiDialog")).toBeVisible();
   await expect.poll(() => page.locator("#newCustomApiPath").evaluate((input) => getComputedStyle(input).boxShadow)).toBe("none");
-  await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(2);
-  await expect(page.locator("#newCustomApiSources .source-group-title")).toHaveCount(2);
+  // 数据源选择器：订阅源 + API 源 + 手动优选（优选域名未配置时不显示）。
+  await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(3);
+  await expect(page.locator("#newCustomApiSources .source-group-title")).toHaveCount(3);
+  await expect(page.locator("#newCustomApiSources .source-group-title").last()).toHaveText("手动优选 · 1");
   await expect(page.locator("#newCustomApiSources .source-option").first()).not.toContainText("订阅源 ·");
   await expect(page.locator("#newCustomApiSources .source-option").last()).not.toContainText("API 源 ·");
   await expect(page.locator("#newCustomApiSources")).not.toContainText("已启用");
@@ -104,7 +106,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#newCustomApiSources").getByRole("button", { name: "仅显示已选" }).click();
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(0);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "全选" }).click();
-  await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(2);
+  await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(3);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "清空" }).click();
   await page.locator("#newCustomApiPath").fill("bad path");
   await expect(page.locator("#newCustomApiPathHint")).toHaveClass(/error/);
@@ -137,9 +139,10 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   }, customPath)).toBe(false);
   await page.locator("#customApisList .custom-api-row").last().getByRole("button", { name: "✎ 编辑" }).click();
   await expect(page.locator("#customApiEditDialog")).toBeVisible();
-  await expect(page.locator("#editCustomApiSources input[type=checkbox]")).toHaveCount(2);
+  // 编辑面板数据源：订阅源 + API 源 + 手动优选。
+  await expect(page.locator("#editCustomApiSources input[type=checkbox]")).toHaveCount(3);
   await page.locator("#editCustomApiSources").getByRole("button", { name: "清空" }).click();
-  await page.locator("#editCustomApiSources input[type=checkbox]").last().check();
+  await page.locator("#editCustomApiSources input[type=checkbox]").nth(1).check();
   await page.locator("#saveCustomApiEditButton").click();
   await expect(page.locator("#customApiEditDialog")).not.toBeVisible();
   const savedConfig = await page.evaluate(async (path) => {
@@ -244,6 +247,8 @@ test.describe("manual preferred editor", () => {
   test("sorts, saves, copies, and append-pastes manual preferred entries", async ({ page }, testInfo) => {
     // 手动优选在服务端只有一个 KV 槽位，两个项目并行跑会互相覆盖，只在桌面项目执行。
     test.skip(testInfo.project.name !== "chromium", "手动优选测试依赖共享 KV 状态，仅在桌面项目运行");
+    // 完整覆盖排序/保存/刷新/追加/复制/覆盖/清空/撤销，流程较长，放宽单用例时限。
+    test.setTimeout(90_000);
     await login(page);
     await page.locator('a[data-nav-page="manage"]').click();
     await expect(page).toHaveURL(/\/admin\/manage$/);
@@ -299,6 +304,32 @@ test.describe("manual preferred editor", () => {
     await page.locator("#preferredManualCopyButton").click();
     await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n"))
       .toBe(await textarea.inputValue());
+
+    // 覆盖粘贴：用剪贴板内容整体替换（带确认弹窗，自动接受）。
+    page.on("dialog", (dialog) => dialog.accept());
+    const savedValue = await textarea.inputValue();
+    await page.evaluate(async (suffix) => {
+      await navigator.clipboard.writeText(["7.7.7.7:443#over-" + suffix, "8.8.8.8:443#over-" + suffix].join("\n"));
+    }, marker);
+    await page.locator("#preferredManualOverwriteButton").click();
+    await expect(textarea).toHaveValue([
+      "7.7.7.7:443#over-" + marker,
+      "8.8.8.8:443#over-" + marker,
+    ].join("\n"));
+    await expect(page.locator("#toast")).toContainText("已用剪贴板内容覆盖，共 2 条");
+
+    // 一键清空：确认后清空文本框，撤销按钮可用。
+    await page.locator("#preferredManualClearButton").click();
+    await expect(textarea).toHaveValue("");
+    await expect(page.locator("#preferredManualStats")).toHaveText("共 0 条");
+    await expect(page.locator("#preferredManualClearButton")).toBeDisabled();
+    await expect(page.locator("#preferredManualUndoButton")).toBeEnabled();
+
+    // 撤销更改：恢复到上次保存的版本。
+    await page.locator("#preferredManualUndoButton").click();
+    await expect(textarea).toHaveValue(savedValue);
+    await expect(page.locator("#preferredManualUndoButton")).toBeDisabled();
+    await expect(page.locator("#toast")).toContainText("已恢复到上次保存的版本");
   });
 });
 

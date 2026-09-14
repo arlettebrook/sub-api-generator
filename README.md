@@ -124,7 +124,7 @@ npm run test:e2e
 - `/api/settings`：伪装首页和管理入口设置接口，需要登录
 - `/api/custom-apis`：优选 API 路径和数据源配置接口，需要登录
 - `/api/preferred-domains`：优选域名数据源管理接口，需要登录；管理页添加或刷新域名时查询 A、AAAA、CNAME 记录，优选 API 调用时实时解析并使用 443 端口
-- `/api/preferred-manual`：手动优选管理接口（一行一条 `地址:端口#备注`），需要登录；保存的非空内容会经过黑名单和备注过滤规则后追加到所有优选 API 输出末尾
+- `/api/preferred-manual`：手动优选管理接口（一行一条 `地址:端口#备注`），需要登录；优选 API 为全部数据源模式时自动追加到输出末尾，手动选择模式需在数据源中勾选“手动优选”；输出同样经过黑名单和备注过滤规则
 - `/api/detection-history`：D1 检测历史分页接口，需要登录（未绑定 D1 时返回空列表）
 
 认证、订阅抓取和 KV 读写全部运行在 Pages Functions 的 Worker 运行时中，不需要额外的服务器。

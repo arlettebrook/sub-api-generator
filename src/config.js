@@ -286,10 +286,11 @@ export function validateApiPathPayload(body) {
     const sources = Array.isArray(value.sources) ? value.sources : [];
     const normalizedSources = [];
     for (const source of sources) {
-      if (!isPlainObject(source) || !["subs", "apis", "domains"].includes(source.type) || typeof source.key !== "string") {
+      if (!isPlainObject(source) || !["subs", "apis", "domains", "manual"].includes(source.type) || typeof source.key !== "string") {
         throw new Error(`数据源配置无效: ${rawPath}`);
       }
-      const key = normalizeSourceKey(source.type, source.key);
+      // 手动优选是全局唯一条目，key 固定为 manual。
+      const key = source.type === "manual" ? "manual" : normalizeSourceKey(source.type, source.key);
       if (!key || key.length > MAX_CONFIG_KEY_LENGTH) throw new Error(`数据源配置无效: ${rawPath}`);
       if (!normalizedSources.some((item) => item.type === source.type && item.key === key)) {
         normalizedSources.push({ type: source.type, key });
@@ -335,8 +336,8 @@ export function normalizeCustomApiData(data) {
         ...(suffixStrategy !== "skip" ? { suffixStrategy } : {}),
         sourceMode,
         sources: sourceMode === SOURCE_MODE_SELECTED && Array.isArray(value.sources)
-          ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis", "domains"].includes(source.type) && typeof source.key === "string")
-              .map((source) => ({ type: source.type, key: normalizeSourceKey(source.type, source.key) }))
+          ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis", "domains", "manual"].includes(source.type) && typeof source.key === "string")
+              .map((source) => ({ type: source.type, key: source.type === "manual" ? "manual" : normalizeSourceKey(source.type, source.key) }))
           : [],
       };
     }

@@ -123,8 +123,11 @@ test("serves separate responsive admin pages", async () => {
       assert.match(html, /id="preferredManualSection"/);
       assert.match(html, /id="preferredManualText"/);
       assert.match(html, /id="preferredManualAppendButton"/);
+      assert.match(html, /id="preferredManualOverwriteButton"/);
       assert.match(html, /id="preferredManualSortButton"/);
       assert.match(html, /id="preferredManualCopyButton"/);
+      assert.match(html, /id="preferredManualClearButton"/);
+      assert.match(html, /id="preferredManualUndoButton"/);
       assert.match(html, /data-nav-page="manage"/);
       assert.ok(html.indexOf('id="sourceStatusSection"') < html.indexOf('id="subsSection"'));
       assert.ok(html.indexOf('id="sourceStatusSection"') < html.indexOf('id="preferredDomainsSection"'));
@@ -180,7 +183,7 @@ test("creates and serves custom API access paths", async () => {
     body: JSON.stringify({ "/my-api": {
       enabled: true,
       remark: "测试 API",
-      sources: [{ type: "subs", key: "sub.example.com" }],
+      sources: [{ type: "subs", key: "sub.example.com" }, { type: "manual", key: "任意值" }],
     } }),
   }), runtime);
   assert.equal(saveResponse.status, 200);
@@ -193,13 +196,21 @@ test("creates and serves custom API access paths", async () => {
       enabled: true,
       remark: "测试 API",
       sourceMode: "selected",
-      sources: [{ type: "subs", key: "sub.example.com" }],
+      // 手动优选是全局唯一数据源，key 统一归一为 manual。
+      sources: [{ type: "subs", key: "sub.example.com" }, { type: "manual", key: "manual" }],
     },
   });
 
   const publicResponse = await worker.fetch(new Request("https://example.test/my-api"), runtime);
   assert.equal(publicResponse.status, 500);
   assert.match(await publicResponse.text(), /KV 未配置 subs/);
+
+  const invalidSource = await worker.fetch(new Request("https://example.test/api/custom-apis", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ "/bad-api": { enabled: true, sources: [{ type: "unknown", key: "x" }] } }),
+  }), runtime);
+  assert.equal(invalidSource.status, 400);
 });
 
 test("keeps multiple custom API paths independently usable", async () => {
@@ -1064,21 +1075,37 @@ test("saves and serves manual preferred entries", async () => {
   assert.equal(invalid.status, 400);
 });
 
-test("merges manual preferred entries into custom API output", async () => {
+test("merges manual preferred entries into custom API output by source mode", async () => {
   const values = {
     subs: {},
     apis: { "https://api.example/source": { remark: "api" } },
     blacklist: ["blocked"],
     preferred_manual: { content: "104.156.239.15:443#manual1\n1.2.3.4:443#api\n2.2.2.2:443\nnot-an-entry\n3.3.3.3:443#blocked" },
-    custom_apis: { manual_api: { enabled: true, remark: "", sourceMode: "selected", sources: [{ type: "apis", key: "https://api.example/source" }] } },
+    custom_apis: {
+      // 手动选择模式未勾选“手动优选”：手动条目不参与输出。
+      sel_api: { enabled: true, remark: "", sourceMode: "selected", sources: [{ type: "apis", key: "https://api.example/source" }] },
+      // 手动选择模式勾选“手动优选”：仅输出手动条目。
+      sel_manual: { enabled: true, remark: "", sourceMode: "selected", sources: [{ type: "manual", key: "manual" }] },
+      // 全部数据源模式：手动条目追加到输出末尾。
+      all_api: { enabled: true, remark: "", sourceMode: "all", sources: [] },
+    },
   };
   const runtime = env({ KV: createKv(values) });
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response("1.2.3.4:443#api", { status: 200 });
   try {
-    const response = await worker.fetch(new Request("https://example.test/manual_api"), runtime);
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "1.2.3.4:443#api\n104.156.239.15:443#manual1\n2.2.2.2:443");
+    const selResponse = await worker.fetch(new Request("https://example.test/sel_api"), runtime);
+    assert.equal(selResponse.status, 200);
+    assert.equal(await selResponse.text(), "1.2.3.4:443#api");
+
+    const selManualResponse = await worker.fetch(new Request("https://example.test/sel_manual"), runtime);
+    assert.equal(selManualResponse.status, 200);
+    // 仅手动优选来源：输出手动内容本身（1.2.3.4:443#api 也是手动条目之一），无效行和黑名单行被过滤。
+    assert.equal(await selManualResponse.text(), "104.156.239.15:443#manual1\n1.2.3.4:443#api\n2.2.2.2:443");
+
+    const allResponse = await worker.fetch(new Request("https://example.test/all_api"), runtime);
+    assert.equal(allResponse.status, 200);
+    assert.equal(await allResponse.text(), "1.2.3.4:443#api\n104.156.239.15:443#manual1\n2.2.2.2:443");
   } finally {
     globalThis.fetch = originalFetch;
   }

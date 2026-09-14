@@ -518,13 +518,13 @@ function normalizeSourceSelection(sourceSelection) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualContent = "") {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualContent = "", includeManual = true) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
     domains: domainsConfig,
-    manual: manualContent,
+    manual: includeManual ? manualContent : "",
     blacklist,
     filterRules,
     outputTransform,
@@ -617,7 +617,9 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const blacklist = normalizeBlacklist(blacklistConfig);
     const filterRules = normalizeFilterRules(filterRulesConfig);
     const outputTransform = getOutputTransform(options);
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, manualContent);
+    // includeManual 由优选 API 的数据源模式决定：全部数据源时包含手动优选，手动选择模式下需显式勾选。
+    const includeManual = options.includeManual !== false;
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, manualContent, includeManual);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -821,9 +823,11 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       }
       else sourceErrors.push({ type: "domains", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
     }
-    // 手动优选是全局补充源：无论数据源是全部还是手动选择，非空内容都会追加到输出末尾，
-    // 并与其他来源一样经过黑名单、过滤规则和格式校验。
-    const manualLines = manualContent.split(/\r?\n/).filter((line) => line.trim());
+    // 手动优选是全局补充源：全部数据源模式始终追加；手动选择模式下由优选 API 配置里的
+    // “手动优选”来源勾选决定，与其他来源一样经过黑名单、过滤规则和格式校验。
+    const manualLines = includeManual
+      ? manualContent.split(/\r?\n/).filter((line) => line.trim())
+      : [];
     if (manualLines.length) {
       const manualValues = filterPreferredIps(manualLines, blacklist, blacklistRegex, filterRules);
       extra.push(...manualValues);

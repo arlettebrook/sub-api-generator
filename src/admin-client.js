@@ -1448,7 +1448,7 @@ function sourceGroupId(type, key) {
 }
 
 function sourceGroupTypeLabel(type) {
-  return type === 'apis' ? 'API 源' : type === 'domains' ? '优选域名' : type === 'subs' ? '订阅源' : '来源';
+  return type === 'apis' ? 'API 源' : type === 'domains' ? '优选域名' : type === 'manual' ? '手动优选' : type === 'subs' ? '订阅源' : '来源';
 }
 
 function sourceGroupShortName(key) {
@@ -1528,7 +1528,7 @@ async function loadCustomApis(loadSources = false) {
   }
   const requests = [readJsonResponse('/api/custom-apis', '优选 API 配置')];
   if (loadSources) {
-    requests.push(readJsonResponse('/api/subs', '订阅源配置'), readJsonResponse('/api/apis', 'API 源配置'), readJsonResponse('/api/preferred-domains', '优选域名配置'));
+    requests.push(readJsonResponse('/api/subs', '订阅源配置'), readJsonResponse('/api/apis', 'API 源配置'), readJsonResponse('/api/preferred-domains', '优选域名配置'), readJsonResponse('/api/preferred-manual', '手动优选配置'));
   }
   const results = await Promise.allSettled(requests);
   if (results[0].status === 'rejected') {
@@ -1554,6 +1554,8 @@ async function loadCustomApis(loadSources = false) {
       preferredDomains = {};
       sourceErrors.push({ type: 'domains', message: results[3].reason.message });
     }
+    // 手动优选加载失败只影响数据源选择器少一个分组，不作为数据源异常提示。
+    preferredManualCount = results[4].status === 'fulfilled' ? (Number(results[4].value?.count) || 0) : 0;
     renderSourceLoadStatus(sourceErrors);
   }
   setCustomApisDirty(false);
@@ -1603,6 +1605,8 @@ function sourceEntries() {
     ...Object.entries(subs).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
     ...Object.entries(apis).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
     ...Object.entries(preferredDomains).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'domains', key, label: value.remark || key })),
+    // 手动优选是全局唯一数据源，始终展示（条目数为 0 时勾选不产生节点）。
+    { type: 'manual', key: 'manual', label: preferredManualCount > 0 ? '手动优选（' + preferredManualCount + ' 条）' : '手动优选' },
   ];
 }
 
@@ -1610,6 +1614,8 @@ let sourceStatuses = { subs: {}, apis: {}, domains: {} };
 let sourceStatusRequestVersion = 0;
 let preferredDomains = {};
 let preferredDomainStatuses = {};
+// 手动优选在数据源选择器中的条目数；customApis 页和 manage 页共用。
+let preferredManualCount = 0;
 
 function formatPreferredDomainTime(value) {
   if (!value) return '尚未解析';
@@ -1933,6 +1939,10 @@ function updatePreferredManualMeta() {
   lines.forEach((line, index) => { if (!parseManualNodeLine(line)) invalidIndexes.push(index + 1); });
   preferredManualDirty = textarea.value.replace(/\\s+$/, '') !== preferredManualSavedContent.replace(/\\s+$/, '');
   saveButton.disabled = !preferredManualDirty;
+  const undoButton = $('preferredManualUndoButton');
+  if (undoButton) undoButton.disabled = !preferredManualDirty;
+  const clearButton = $('preferredManualClearButton');
+  if (clearButton) clearButton.disabled = !lines.length;
   stats.textContent = '共 ' + lines.length + ' 条' + (invalidIndexes.length ? '，' + invalidIndexes.length + ' 条无法识别' : '');
   if (status) {
     status.hidden = !invalidIndexes.length;
@@ -1958,6 +1968,7 @@ async function loadPreferredManual() {
     const data = await readJsonResponse('/api/preferred-manual', '手动优选配置');
     const content = typeof data.content === 'string' ? data.content : '';
     textarea.value = content;
+    preferredManualCount = Number(data.count) || 0;
     markPreferredManualSaved(content);
     updatePreferredManualMeta();
   } catch (error) {
@@ -1978,6 +1989,8 @@ async function savePreferredManual(trigger = null) {
       body: JSON.stringify({ content: textarea.value }),
     });
     markPreferredManualSaved(typeof result.content === 'string' ? result.content : textarea.value);
+    // 数据源选择器里的“手动优选（N 条）”标签跟随最新保存的条目数。
+    preferredManualCount = Number(result.count) || preferredManualLines(result.content || '').length;
     updatePreferredManualMeta();
     showToast('手动优选已保存，共 ' + (result.count ?? preferredManualLines(result.content).length) + ' 条', 'success');
   } catch (error) {
@@ -2011,15 +2024,8 @@ async function copyPreferredManual() {
 async function appendPastePreferredManual() {
   const textarea = $('preferredManualText');
   if (!textarea) return;
-  let text = '';
-  try {
-    if (navigator.clipboard?.readText) text = await navigator.clipboard.readText();
-    else throw new Error('unsupported');
-  } catch {
-    const fallback = window.prompt('无法读取剪贴板，请手动粘贴要追加的内容：');
-    if (fallback === null) return;
-    text = fallback;
-  }
+  const text = await readClipboardOrPrompt('无法读取剪贴板，请手动粘贴要追加的内容：');
+  if (text === null) return;
   const pasted = preferredManualLines(text);
   if (!pasted.length) { showToast('剪贴板中没有可追加的条目', 'warning'); return; }
   const seen = new Set(preferredManualLines(textarea.value));
@@ -2070,6 +2076,51 @@ function sortPreferredManual() {
   showToast('已按地址、端口排序，保存后生效', 'success');
 }
 
+async function readClipboardOrPrompt(promptText) {
+  try {
+    if (navigator.clipboard?.readText) return await navigator.clipboard.readText();
+    throw new Error('unsupported');
+  } catch {
+    const fallback = window.prompt(promptText);
+    return fallback === null ? null : fallback;
+  }
+}
+
+async function overwritePastePreferredManual() {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  const text = await readClipboardOrPrompt('无法读取剪贴板，请手动粘贴要覆盖的内容：');
+  if (text === null) return;
+  const pasted = preferredManualLines(text);
+  if (!pasted.length) { showToast('剪贴板中没有可识别的条目', 'warning'); return; }
+  const current = preferredManualLines(textarea.value);
+  const dirty = textarea.value.replace(/\\s+$/, '') !== preferredManualSavedContent.replace(/\\s+$/, '');
+  if (current.length && !window.confirm('确定用剪贴板的 ' + pasted.length + ' 条内容覆盖当前 ' + current.length + ' 条吗？' + (dirty ? '\\n未保存的修改将丢失。' : ''))) return;
+  textarea.value = pasted.join('\\n');
+  updatePreferredManualMeta();
+  showToast('已用剪贴板内容覆盖，共 ' + pasted.length + ' 条，保存后生效', 'success');
+}
+
+function clearPreferredManual() {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  const current = preferredManualLines(textarea.value);
+  if (!current.length) { showToast('文本框已经是空的', 'info'); return; }
+  if (!window.confirm('确定清空当前 ' + current.length + ' 条内容吗？\\n清空后仍可点击“撤销更改”恢复到已保存的版本。')) return;
+  textarea.value = '';
+  updatePreferredManualMeta();
+  showToast('已清空，保存后生效', 'success');
+}
+
+function undoPreferredManualChanges() {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  if (!preferredManualDirty) { showToast('没有需要撤销的修改', 'info'); return; }
+  textarea.value = preferredManualSavedContent;
+  updatePreferredManualMeta();
+  showToast('已恢复到上次保存的版本', 'success');
+}
+
 function initPreferredManualEditor() {
   const textarea = $('preferredManualText');
   if (!textarea || textarea.dataset.bound === 'true') return;
@@ -2078,7 +2129,10 @@ function initPreferredManualEditor() {
   $('preferredManualSaveButton')?.addEventListener('click', (event) => void savePreferredManual(event.currentTarget));
   $('preferredManualCopyButton')?.addEventListener('click', () => void copyPreferredManual());
   $('preferredManualAppendButton')?.addEventListener('click', () => void appendPastePreferredManual());
+  $('preferredManualOverwriteButton')?.addEventListener('click', () => void overwritePastePreferredManual());
   $('preferredManualSortButton')?.addEventListener('click', sortPreferredManual);
+  $('preferredManualClearButton')?.addEventListener('click', clearPreferredManual);
+  $('preferredManualUndoButton')?.addEventListener('click', undoPreferredManualChanges);
 }
 
 function getSourceStatus(type, key) {
@@ -2409,7 +2463,7 @@ function sourcePicker(selectedSources = [], title = '选择数据源', sourceMod
       updateCount();
       return;
     }
-    for (const [type, title] of [['subs', '订阅源'], ['apis', 'API 源'], ['domains', '优选域名']]) {
+    for (const [type, title] of [['subs', '订阅源'], ['apis', 'API 源'], ['domains', '优选域名'], ['manual', '手动优选']]) {
       const group = visible.filter((source) => source.type === type);
       if (!group.length) continue;
       const heading = document.createElement('div');

@@ -278,7 +278,7 @@ export const adminHTML = `
     <summary>
       <div>
       <h3>✍️ 手动优选管理</h3>
-      <p class="section-caption">维护手动优选节点，每行一条“地址:端口#备注”，保存后会追加到所有优选 API 的输出末尾。</p>
+      <p class="section-caption">维护手动优选节点，每行一条“地址:端口#备注”；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
       </div>
     </summary>
     <div class="source-status-panel-body">
@@ -286,8 +286,11 @@ export const adminHTML = `
         <span class="section-summary" id="preferredManualStats">共 0 条</span>
         <div class="section-heading-actions">
           <button class="btn-outline" type="button" id="preferredManualAppendButton" title="读取剪贴板并追加到列表末尾（自动跳过重复条目）">📥 追加粘贴</button>
+          <button class="btn-outline" type="button" id="preferredManualOverwriteButton" title="读取剪贴板并替换全部内容">📋 覆盖粘贴</button>
           <button class="btn-outline" type="button" id="preferredManualSortButton" title="按地址、端口和备注排序">⇅ 一键排序</button>
           <button class="btn-outline" type="button" id="preferredManualCopyButton" title="复制全部内容">📋 复制</button>
+          <button class="btn-subtle" type="button" id="preferredManualClearButton" title="清空文本框，可通过撤销更改恢复">🗑 一键清空</button>
+          <button class="btn-subtle" type="button" id="preferredManualUndoButton" title="恢复到上次保存的内容" disabled>↩ 撤销更改</button>
           <button class="btn-primary" type="button" id="preferredManualSaveButton" disabled>💾 保存手动优选</button>
         </div>
       </div>

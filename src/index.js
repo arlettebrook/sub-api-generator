@@ -602,6 +602,7 @@ async function handleCustomApiPreview(request, env) {
   if (guard.error) return guard.error;
   try {
   let sourceSelection = entry.sources;
+  let includeManual;
   if (entry.sourceMode !== SOURCE_MODE_SELECTED) {
     const [subs, apis, domains] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
@@ -613,11 +614,15 @@ async function handleCustomApiPreview(request, env) {
       ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
       ...Object.keys(normalizeKvData(domains, "domains")).map((key) => ({ type: "domains", key })),
     ];
+    includeManual = true;
+  } else {
+    includeManual = entry.sources.some((source) => source.type === "manual");
   }
   subscriptions.clearAggregateCache();
   const startedAt = Date.now();
   const resultOptions = {
     includeRaw: true,
+    includeManual,
     prefix: entry.prefix,
     suffix: entry.suffix,
     suffixStrategy: entry.suffixStrategy,
@@ -635,8 +640,9 @@ async function handleCustomApiPreview(request, env) {
   const snapshot = await getSourceStatusSnapshot(env, false);
   await persistPreferredDomainStatuses(env, snapshot, sourceSelection);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
-  const sourceMeta = (sourceSelection || []).map((source) => ({ type: source.type, key: source.key, remark: snapshot[source.type]?.[source.key]?.remark || "" }));
-  const selectedStatuses = (sourceSelection || []).map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
+  // 手动优选没有原始抓取数据，不进入原始数据查看的来源筛选。
+  const sourceMeta = (sourceSelection || []).filter((source) => source.type !== "manual").map((source) => ({ type: source.type, key: source.key, remark: snapshot[source.type]?.[source.key]?.remark || "" }));
+  const selectedStatuses = (sourceSelection || []).filter((source) => source.type !== "manual").map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
   const rawNodeCount = selectedStatuses.reduce((count, status) => count + (status.rawNodeCount || 0), 0);
   const errors = response.headers.get("x-source-errors");
   let errorList = [];
@@ -1025,18 +1031,26 @@ async function handleCustomApiPath(path, env) {
   if (!configured[apiPath]?.enabled) return null;
   const api = configured[apiPath];
   let sourceSelection = api.sources;
+  let includeManual;
   if (api.sourceMode !== SOURCE_MODE_SELECTED) {
-    const [subs, apis] = await Promise.all([
+    // 与 handleCustomApiPreview 保持一致：全部数据源模式跟随订阅源、API 源和优选域名。
+    const [subs, apis, domains] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
+      env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
     ]);
     sourceSelection = [
       ...Object.keys(normalizeKvData(subs, "subs")).map((key) => ({ type: "subs", key })),
       ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
+      ...Object.keys(normalizeKvData(domains, "domains")).map((key) => ({ type: "domains", key })),
     ];
+    includeManual = true;
+  } else {
+    includeManual = api.sources.some((source) => source.type === "manual");
   }
   return subscriptions.handleRoot(env, sourceSelection, {
     diagnostics: true,
+    includeManual,
     prefix: api.prefix,
     suffix: api.suffix,
     suffixStrategy: api.suffixStrategy,
