@@ -238,6 +238,70 @@ test("logs out from the dashboard", async ({ page }) => {
   await expect(page.locator('input[name="password"]')).toBeVisible();
 });
 
+test.describe("manual preferred editor", () => {
+  test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
+  test("sorts, saves, copies, and append-pastes manual preferred entries", async ({ page }, testInfo) => {
+    // 手动优选在服务端只有一个 KV 槽位，两个项目并行跑会互相覆盖，只在桌面项目执行。
+    test.skip(testInfo.project.name !== "chromium", "手动优选测试依赖共享 KV 状态，仅在桌面项目运行");
+    await login(page);
+    await page.locator('a[data-nav-page="manage"]').click();
+    await expect(page).toHaveURL(/\/admin\/manage$/);
+    await expect(page.locator("#preferredManualSection")).toBeVisible();
+
+    const textarea = page.locator("#preferredManualText");
+    const marker = "e2e-" + testInfo.project.name;
+    const unsorted = [
+      "104.156.239.27:443#" + marker,
+      "104.156.239.15:443#" + marker,
+      "2.2.2.2:8443#" + marker,
+    ];
+    await textarea.fill(unsorted.join("\n"));
+    await expect(page.locator("#preferredManualStats")).toHaveText("共 3 条");
+
+    // 一键排序：按 IPv4 各段数值排序，不按字符串比较。
+    await page.locator("#preferredManualSortButton").click();
+    await expect(textarea).toHaveValue([
+      "2.2.2.2:8443#" + marker,
+      "104.156.239.15:443#" + marker,
+      "104.156.239.27:443#" + marker,
+    ].join("\n"));
+
+    // 保存后刷新页面，内容应从服务端回读（保持排序后的顺序）。
+    await page.locator("#preferredManualSaveButton").click();
+    await expect(page.locator("#toast")).toContainText("手动优选已保存");
+    await expect(page.locator("#preferredManualSaveButton")).toBeDisabled();
+    const sorted = [
+      "2.2.2.2:8443#" + marker,
+      "104.156.239.15:443#" + marker,
+      "104.156.239.27:443#" + marker,
+    ];
+    await page.reload();
+    await expect(page.locator("#preferredManualText")).toHaveValue(sorted.join("\n"));
+
+    // 追加粘贴：新条目追加，已存在条目跳过。
+    await page.evaluate(async (existing) => {
+      await navigator.clipboard.writeText([existing, "5.6.7.8:443#new-" + existing.split("#")[1]].join("\n"));
+    }, "104.156.239.15:443#" + marker);
+    await page.locator("#preferredManualAppendButton").click();
+    await expect(textarea).toHaveValue([
+      "2.2.2.2:8443#" + marker,
+      "104.156.239.15:443#" + marker,
+      "104.156.239.27:443#" + marker,
+      "5.6.7.8:443#new-" + marker,
+    ].join("\n"));
+    await expect(page.locator("#toast")).toContainText("已追加 1 条，跳过 1 条重复");
+
+    // 复制：剪贴板内容与文本框一致（Windows 剪贴板会把换行规范成 CRLF，先归一再比较）。
+    await page.locator("#preferredManualSaveButton").click();
+    await expect(page.locator("#toast")).toContainText("手动优选已保存");
+    await page.evaluate(async () => { await navigator.clipboard.writeText("cleared"); });
+    await page.locator("#preferredManualCopyButton").click();
+    await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n"))
+      .toBe(await textarea.inputValue());
+  });
+});
+
 test.describe("mobile navigation", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true });
 

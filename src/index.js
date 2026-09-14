@@ -8,7 +8,10 @@ import {
   KV_KEY_SUBS,
   KV_KEY_SOURCE_STATUS,
   KV_KEY_PREFERRED_DOMAINS,
+  KV_KEY_PREFERRED_MANUAL,
   MAX_CONFIG_ENTRIES,
+  MAX_MANUAL_ENTRIES,
+  MAX_MANUAL_LINE_LENGTH,
   getRuntimeConfig as getPagesRuntimeConfig,
   isAllowedApiPath,
   normalizeCustomApiData,
@@ -438,6 +441,55 @@ async function handleDeletePreferredDomain(request, env) {
   return pagesJsonResponse({ ok: true });
 }
 
+// 手动优选以整段文本保存，一行一条 `地址:端口#备注`；保存时不逐行强校验，
+// 无法识别的行只计数提示，不参与优选 API 输出（由 subscriptions 过滤）。
+function normalizePreferredManualContent(content) {
+  if (typeof content !== "string") throw new Error("手动优选内容必须是字符串");
+  if (content.length > MAX_MANUAL_ENTRIES * MAX_MANUAL_LINE_LENGTH) {
+    throw new Error(`手动优选内容不能超过 ${MAX_MANUAL_ENTRIES} 行`);
+  }
+  const lines = content.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim());
+  // 空行不参与输出，保存时直接清理，保证内容与条目计数一致。
+  const entries = lines.filter(Boolean);
+  if (entries.length > MAX_MANUAL_ENTRIES) {
+    throw new Error(`手动优选条目不能超过 ${MAX_MANUAL_ENTRIES} 个`);
+  }
+  for (const line of entries) {
+    if (line.length > MAX_MANUAL_LINE_LENGTH) {
+      throw new Error(`单行内容过长（最多 ${MAX_MANUAL_LINE_LENGTH} 个字符）: ${line.slice(0, 60)}`);
+    }
+  }
+  return entries.join("\n");
+}
+
+function preferredManualStats(content) {
+  const entries = String(content || "").split("\n").filter(Boolean);
+  return { count: entries.length };
+}
+
+function normalizePreferredManualEntry(data) {
+  const content = normalizePreferredManualContent(isPlainObject(data) ? data.content : "");
+  return { content, updatedAt: Date.now() };
+}
+
+async function handleGetPreferredManual(env) {
+  const data = await env.KV.get(KV_KEY_PREFERRED_MANUAL, "json");
+  if (!isPlainObject(data) || typeof data.content !== "string") {
+    return pagesJsonResponse({ content: "", updatedAt: null, ...preferredManualStats("") });
+  }
+  return pagesJsonResponse({ content: data.content, updatedAt: data.updatedAt ?? null, ...preferredManualStats(data.content) });
+}
+
+async function handlePostPreferredManual(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  let entry;
+  try { entry = normalizePreferredManualEntry(body); } catch (error) { return pagesTextResponse(error.message, 400); }
+  await env.KV.put(KV_KEY_PREFERRED_MANUAL, JSON.stringify(entry));
+  subscriptions.clearAggregateCache();
+  return pagesJsonResponse({ ok: true, ...entry, ...preferredManualStats(entry.content) });
+}
+
 async function checkSourceStatuses(env, request) {
   subscriptions.clearAggregateCache();
   let body = {};
@@ -688,6 +740,7 @@ const BACKUP_SECTIONS = [
   { key: "blacklist", aliases: ["blacklist"], kvKey: KV_KEY_BLACKLIST },
   { key: "filterRules", aliases: ["filterRules", "filter_rules"], kvKey: KV_KEY_FILTER_RULES },
   { key: "preferredDomains", aliases: ["preferredDomains", "preferred_domains"], kvKey: KV_KEY_PREFERRED_DOMAINS },
+  { key: "preferredManual", aliases: ["preferredManual", "preferred_manual"], kvKey: KV_KEY_PREFERRED_MANUAL },
   { key: "settings", aliases: ["settings"], kvKey: KV_KEY_SETTINGS },
 ];
 
@@ -712,6 +765,15 @@ function normalizeBackupSection(section, value) {
       if (!isPlainObject(value)) return null;
       if (Object.keys(value).length > MAX_CONFIG_ENTRIES) return null;
       return { data: normalizePreferredDomainBackup(value) };
+    case "preferredManual":
+      // 备份里的手动优选支持三种形态：整段文本、{ content } 完整条目，以及空对象（历史备份中的空配置）。
+      if (typeof value === "string") return { data: { content: normalizePreferredManualContent(value), updatedAt: Date.now() } };
+      if (!isPlainObject(value)) return null;
+      if (typeof value.content !== "string") {
+        if (Object.keys(value).length === 0) return { data: { content: "", updatedAt: Date.now() } };
+        return null;
+      }
+      return { data: { content: normalizePreferredManualContent(value.content), updatedAt: Number(value.updatedAt) > 0 ? Number(value.updatedAt) : Date.now() } };
     case "settings":
       if (!isPlainObject(value)) return null;
       return { data: normalizeSettings(value) };
@@ -721,19 +783,20 @@ function normalizeBackupSection(section, value) {
 }
 
 async function collectBackupData(env) {
-  const [subs, apis, customApis, blacklist, filterRules, preferredDomains, settings] = await Promise.all([
+  const [subs, apis, customApis, blacklist, filterRules, preferredDomains, preferredManual, settings] = await Promise.all([
     env.KV.get(KV_KEY_SUBS, "json"),
     env.KV.get(KV_KEY_APIS, "json"),
     env.KV.get(KV_KEY_CUSTOM_APIS, "json"),
     env.KV.get(KV_KEY_BLACKLIST, "json"),
     env.KV.get(KV_KEY_FILTER_RULES, "json"),
     env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
+    env.KV.get(KV_KEY_PREFERRED_MANUAL, "json"),
     env.KV.get(KV_KEY_SETTINGS, "json"),
   ]);
-  const raw = { subs, apis, customApis, blacklist, filterRules, preferredDomains, settings };
+  const raw = { subs, apis, customApis, blacklist, filterRules, preferredDomains, preferredManual, settings };
   const data = {};
   for (const section of BACKUP_SECTIONS) {
-    const empty = section.key === "blacklist" || section.key === "filterRules" ? [] : {};
+    const empty = section.key === "blacklist" || section.key === "filterRules" ? [] : section.key === "preferredManual" ? { content: "" } : {};
     const normalized = normalizeBackupSection(section, raw[section.key] ?? empty);
     data[section.key] = normalized ? normalized.data : empty;
   }
@@ -895,7 +958,9 @@ async function applyRestoreSections(env, data) {
     const normalized = normalizeBackupSection(section, value);
     if (!normalized) throw new Error(`备份文件格式无效: ${section.key}`);
     writes.push(env.KV.put(section.kvKey, JSON.stringify(normalized.data)));
-    restored[section.key] = section.key === "settings" ? true : Array.isArray(normalized.data) ? normalized.data.length : Object.keys(normalized.data).length;
+    restored[section.key] = section.key === "settings" ? true
+      : section.key === "preferredManual" ? String(normalized.data.content || "").split("\n").filter(Boolean).length
+        : Array.isArray(normalized.data) ? normalized.data.length : Object.keys(normalized.data).length;
   }
   if (!writes.length) throw new Error("备份文件中没有任何可恢复的配置");
 
@@ -989,7 +1054,7 @@ function handleAdmin(page = "overview", adminBasePath = "/admin") {
 }
 
 function renderAdminPage(page, adminBasePath = "/admin") {
-  const activeSections = new Set(page === "manage" ? ["subs", "apis", "sourceStatus", "preferredDomains"] : [page]);
+  const activeSections = new Set(page === "manage" ? ["subs", "apis", "sourceStatus", "preferredDomains", "preferredManual"] : [page]);
   let html = adminHTML
     .replaceAll("__ADMIN_ASSET_VERSION__", ADMIN_ASSET_VERSION)
     .replaceAll("__ADMIN_BASE_PATH__", adminBasePath)
@@ -1136,6 +1201,10 @@ export default {
         case "/api/preferred-domains/import":
           if (method === "POST") return await handleImportPreferredDomains(request, env);
           return pagesMethodNotAllowed("POST");
+        case "/api/preferred-manual":
+          if (method === "GET") return await handleGetPreferredManual(env);
+          if (method === "POST") return await handlePostPreferredManual(request, env);
+          return pagesMethodNotAllowed("GET, POST");
         case "/api/source-raw":
           if (method === "POST") return await handleSourceRaw(request, env);
           return pagesMethodNotAllowed("POST");

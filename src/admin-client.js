@@ -192,7 +192,7 @@ function adminUrl(suffix = '') {
 }
 
 function hasUnsavedChanges() {
-  return customApisDirty || blacklistDirty || filterRulesDirty || camouflageDirty || subsDirty || apisDirty || subsSavePending > 0 || apisSavePending > 0;
+  return customApisDirty || blacklistDirty || filterRulesDirty || camouflageDirty || subsDirty || apisDirty || preferredManualDirty || subsSavePending > 0 || apisSavePending > 0;
 }
 
 function responseError(label, response) {
@@ -797,7 +797,7 @@ function updateNodeFilterOptions() {
   const sources = [...new Map(getPreviewDataNodes().filter((node) => node.sourceKey).map((node) => [node.sourceType + ':' + node.sourceKey, node])).values()];
   nodesSourceFilterEl.innerHTML = '<option value="">全部来源</option>' + sources.map((node) => {
     const value = node.sourceType + ':' + node.sourceKey;
-    const label = (node.sourceType === 'apis' ? 'API 源 · ' : '订阅源 · ') + node.sourceKey;
+    const label = (node.sourceType === 'apis' ? 'API 源 · ' : node.sourceType === 'manual' ? '手动优选 · ' : '订阅源 · ') + node.sourceKey;
     return '<option value="' + value.replace(/"/g, '&quot;') + '">' + label.replace(/</g, '&lt;') + '</option>';
   }).join('');
   if (sources.some((node) => node.sourceType + ':' + node.sourceKey === selected)) nodesSourceFilterEl.value = selected;
@@ -1901,6 +1901,184 @@ async function addPreferredDomain() {
     setInputError(input, error.message);
     showToast(error.message, 'error');
   } finally { setButtonBusy(button, false); }
+}
+
+// ======================== 手动优选管理 ========================
+// 与 subscriptions.js 的 NODE_MATCH_REGEX 保持一致：地址:端口 才算有效条目。
+const MANUAL_NODE_REGEX = /(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+):(\\d+)/;
+let preferredManualSavedContent = '';
+let preferredManualDirty = false;
+
+function preferredManualLines(value) {
+  return String(value || '').split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function parseManualNodeLine(line) {
+  const hashIndex = line.indexOf('#');
+  const base = hashIndex >= 0 ? line.slice(0, hashIndex).trim() : line;
+  const remark = hashIndex >= 0 ? line.slice(hashIndex + 1).trim() : '';
+  const match = MANUAL_NODE_REGEX.exec(base);
+  if (!match) return null;
+  return { host: match[1], port: match[2], remark };
+}
+
+function updatePreferredManualMeta() {
+  const textarea = $('preferredManualText');
+  const stats = $('preferredManualStats');
+  const status = $('preferredManualStatus');
+  const saveButton = $('preferredManualSaveButton');
+  if (!textarea || !stats || !saveButton) return;
+  const lines = preferredManualLines(textarea.value);
+  const invalidIndexes = [];
+  lines.forEach((line, index) => { if (!parseManualNodeLine(line)) invalidIndexes.push(index + 1); });
+  preferredManualDirty = textarea.value.replace(/\\s+$/, '') !== preferredManualSavedContent.replace(/\\s+$/, '');
+  saveButton.disabled = !preferredManualDirty;
+  stats.textContent = '共 ' + lines.length + ' 条' + (invalidIndexes.length ? '，' + invalidIndexes.length + ' 条无法识别' : '');
+  if (status) {
+    status.hidden = !invalidIndexes.length;
+    status.textContent = invalidIndexes.length
+      ? '第 ' + invalidIndexes.slice(0, 10).join('、') + ' 行无法识别（缺少地址或端口），保存后不会参与优选 API 输出。'
+      : '';
+  }
+}
+
+function markPreferredManualSaved(content) {
+  preferredManualSavedContent = content;
+  preferredManualDirty = false;
+  const saveButton = $('preferredManualSaveButton');
+  if (saveButton) saveButton.disabled = true;
+}
+
+async function loadPreferredManual() {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  // 加载期间禁用输入，避免请求返回时覆盖用户已经开始编辑的内容。
+  textarea.disabled = true;
+  try {
+    const data = await readJsonResponse('/api/preferred-manual', '手动优选配置');
+    const content = typeof data.content === 'string' ? data.content : '';
+    textarea.value = content;
+    markPreferredManualSaved(content);
+    updatePreferredManualMeta();
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    textarea.disabled = false;
+  }
+}
+
+async function savePreferredManual(trigger = null) {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  if (trigger) setButtonBusy(trigger, true, '保存中…');
+  try {
+    const result = await readJsonResponse('/api/preferred-manual', '手动优选保存', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: textarea.value }),
+    });
+    markPreferredManualSaved(typeof result.content === 'string' ? result.content : textarea.value);
+    updatePreferredManualMeta();
+    showToast('手动优选已保存，共 ' + (result.count ?? preferredManualLines(result.content).length) + ' 条', 'success');
+  } catch (error) {
+    showToast(error.message, 'error', () => savePreferredManual(trigger));
+  } finally {
+    if (trigger) {
+      setButtonBusy(trigger, false);
+      // setButtonBusy 会无条件恢复可用状态；无修改时保存按钮需要保持禁用。
+      trigger.disabled = !preferredManualDirty;
+    }
+  }
+}
+
+async function copyPreferredManual() {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  const content = textarea.value;
+  if (!preferredManualLines(content).length) { showToast('暂无可复制的内容', 'warning'); return; }
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(content);
+    else throw new Error('unsupported');
+    showToast('手动优选内容已复制', 'success');
+  } catch {
+    textarea.focus();
+    textarea.select();
+    if (document.execCommand?.('copy')) showToast('手动优选内容已复制', 'success');
+    else showToast('复制失败：浏览器拒绝了剪贴板访问', 'error');
+  }
+}
+
+async function appendPastePreferredManual() {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  let text = '';
+  try {
+    if (navigator.clipboard?.readText) text = await navigator.clipboard.readText();
+    else throw new Error('unsupported');
+  } catch {
+    const fallback = window.prompt('无法读取剪贴板，请手动粘贴要追加的内容：');
+    if (fallback === null) return;
+    text = fallback;
+  }
+  const pasted = preferredManualLines(text);
+  if (!pasted.length) { showToast('剪贴板中没有可追加的条目', 'warning'); return; }
+  const seen = new Set(preferredManualLines(textarea.value));
+  const added = [];
+  for (const line of pasted) {
+    if (seen.has(line)) continue;
+    seen.add(line);
+    added.push(line);
+  }
+  if (!added.length) { showToast('没有新增条目，跳过 ' + pasted.length + ' 条重复', 'warning'); return; }
+  const current = textarea.value.replace(/\\s+$/, '');
+  textarea.value = current ? current + '\\n' + added.join('\\n') : added.join('\\n');
+  updatePreferredManualMeta();
+  textarea.focus();
+  textarea.scrollTop = textarea.scrollHeight;
+  showToast('已追加 ' + added.length + ' 条' + (pasted.length - added.length ? '，跳过 ' + (pasted.length - added.length) + ' 条重复' : '') + '，保存后生效', 'success');
+}
+
+function compareManualNodeLines(left, right) {
+  const a = parseManualNodeLine(left) || { host: left, port: '', remark: '' };
+  const b = parseManualNodeLine(right) || { host: right, port: '', remark: '' };
+  const ipv4 = /^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$/;
+  const aMatch = ipv4.exec(a.host);
+  const bMatch = ipv4.exec(b.host);
+  if (aMatch && bMatch) {
+    for (let i = 1; i <= 4; i += 1) {
+      const diff = Number(aMatch[i]) - Number(bMatch[i]);
+      if (diff) return diff;
+    }
+  } else {
+    const diff = a.host.localeCompare(b.host, 'zh-CN', { numeric: true });
+    if (diff) return diff;
+  }
+  const portDiff = (Number(a.port) || 0) - (Number(b.port) || 0);
+  if (portDiff) return portDiff;
+  return a.remark.localeCompare(b.remark, 'zh-CN');
+}
+
+function sortPreferredManual() {
+  const textarea = $('preferredManualText');
+  if (!textarea) return;
+  const lines = preferredManualLines(textarea.value);
+  if (lines.length < 2) { showToast('至少需要两条内容才能排序', 'warning'); return; }
+  const hadTrailingNewline = /\\n\\s*$/.test(textarea.value);
+  lines.sort(compareManualNodeLines);
+  textarea.value = lines.join('\\n') + (hadTrailingNewline ? '\\n' : '');
+  updatePreferredManualMeta();
+  showToast('已按地址、端口排序，保存后生效', 'success');
+}
+
+function initPreferredManualEditor() {
+  const textarea = $('preferredManualText');
+  if (!textarea || textarea.dataset.bound === 'true') return;
+  textarea.dataset.bound = 'true';
+  textarea.addEventListener('input', updatePreferredManualMeta);
+  $('preferredManualSaveButton')?.addEventListener('click', (event) => void savePreferredManual(event.currentTarget));
+  $('preferredManualCopyButton')?.addEventListener('click', () => void copyPreferredManual());
+  $('preferredManualAppendButton')?.addEventListener('click', () => void appendPastePreferredManual());
+  $('preferredManualSortButton')?.addEventListener('click', sortPreferredManual);
 }
 
 function getSourceStatus(type, key) {
@@ -4708,7 +4886,7 @@ const pageIntros = {
   overview: '集中查看订阅聚合结果和节点状态。',
   subs: '管理优选订阅源，维护地址和备注。',
   apis: '管理额外 API 源，维护地址和备注。',
-  manage: '统一管理优选订阅源和 API 源。',
+  manage: '统一管理优选订阅源、API 源和手动优选节点。',
   customApis: '创建并管理优选 API 的访问路径。',
   settings: '管理节点过滤关键词和备注清理规则，修改后会影响后续数据预览结果。'
 };
@@ -4939,6 +5117,7 @@ function bindPageControls() {
     importPreferredDomainsButton.addEventListener('click', () => importPreferredDomainsFile.click());
     importPreferredDomainsFile.addEventListener('change', importPreferredDomains);
   }
+  initPreferredManualEditor();
 }
 
 // ======================== 备份与恢复 ========================
@@ -4948,6 +5127,7 @@ const BACKUP_SECTION_LABELS = {  subs: '订阅源',
   blacklist: '黑名单',
   filterRules: '过滤规则',
   preferredDomains: '优选域名',
+  preferredManual: '手动优选',
   settings: '伪装设置',
 };
 
@@ -4975,6 +5155,11 @@ function describeRestoreSections(data) {
   for (const [key, label] of Object.entries(BACKUP_SECTION_LABELS)) {
     if (!(key in data)) continue;
     const value = data[key];
+    if (key === 'preferredManual') {
+      const count = typeof value?.content === 'string' ? preferredManualLines(value.content).length : 0;
+      parts.push(label + ' ' + count + ' 项');
+      continue;
+    }
     if (Array.isArray(value)) parts.push(label + ' ' + value.length + ' 项');
     else if (value && typeof value === 'object') parts.push(label + ' ' + Object.keys(value).length + ' 项');
     else parts.push(label);
@@ -5403,6 +5588,7 @@ function loadActivePage(page) {
     void loadApis();
     void loadSourceStatuses('read');
     void loadPreferredDomains();
+    void loadPreferredManual();
   } else if (page === 'overview') {
     void loadCustomApis()
       .then(() => {

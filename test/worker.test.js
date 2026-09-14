@@ -120,11 +120,18 @@ test("serves separate responsive admin pages", async () => {
       assert.match(html, /id="sourceStatusSection"/);
       assert.match(html, /id="preferredDomainsSection"/);
       assert.match(html, /id="newPreferredDomain"/);
+      assert.match(html, /id="preferredManualSection"/);
+      assert.match(html, /id="preferredManualText"/);
+      assert.match(html, /id="preferredManualAppendButton"/);
+      assert.match(html, /id="preferredManualSortButton"/);
+      assert.match(html, /id="preferredManualCopyButton"/);
       assert.match(html, /data-nav-page="manage"/);
       assert.ok(html.indexOf('id="sourceStatusSection"') < html.indexOf('id="subsSection"'));
       assert.ok(html.indexOf('id="sourceStatusSection"') < html.indexOf('id="preferredDomainsSection"'));
+      assert.ok(html.indexOf('id="preferredManualSection"') < html.indexOf('id="preferredDomainsSection"'));
     }
     if (page === "overview") assert.doesNotMatch(html, /id="sourceStatusSection"/);
+    if (page === "overview") assert.doesNotMatch(html, /id="preferredManualSection"/);
     if (page === "customApis") {
       assert.match(html, /id="customApiSection"/);
       assert.match(html, /data-nav-page="customApis"/);
@@ -583,6 +590,7 @@ test("backs up and restores all configuration data", async () => {
     blacklist: [" foo ", "bar"],
     filter_rules: ["|"],
     preferred_domains: { "Example.COM.": { remark: "d", records: { A: ["1.2.3.4"] } } },
+    preferred_manual: { content: "5.6.7.8:443#x\n9.9.9.9:443#y", updatedAt: 1757800000000 },
     settings: { enabled: false, accessPath: "old-entry", redirectUrl: "/" },
     source_status: { subs: { "https://sub.example/a/": { state: "success" } } },
   };
@@ -607,6 +615,7 @@ test("backs up and restores all configuration data", async () => {
   assert.deepEqual(backup.data.blacklist, ["foo", "bar"]);
   assert.deepEqual(backup.data.filterRules, ["|"]);
   assert.deepEqual(backup.data.preferredDomains["example.com"].records.A, ["1.2.3.4"]);
+  assert.equal(backup.data.preferredManual.content, "5.6.7.8:443#x\n9.9.9.9:443#y");
   assert.equal(backup.data.settings.accessPath, "old-entry");
 
   const restoredKv = {};
@@ -620,9 +629,11 @@ test("backs up and restores all configuration data", async () => {
   const restoreResult = await restoreResponse.json();
   assert.equal(restoreResult.ok, true);
   assert.equal(restoreResult.restored.subs, 1);
+  assert.equal(restoreResult.restored.preferredManual, 2);
   assert.equal(restoreResult.restored.settings, true);
 
   assert.deepEqual(restoredKv.source_status, {});
+  assert.equal(restoredKv.preferred_manual.content, "5.6.7.8:443#x\n9.9.9.9:443#y");
   const subsResponse = await worker.fetch(new Request("https://example.test/api/subs", { headers: authHeaders }), restoreRuntime);
   assert.deepEqual(await subsResponse.json(), { "sub.example/a": { remark: "sub" } });
   const settingsResponse = await worker.fetch(new Request("https://example.test/api/settings", { headers: authHeaders }), restoreRuntime);
@@ -793,6 +804,7 @@ test("configures WebDAV and backs up and restores through it", async () => {
       blacklist: 1,
       filterRules: 0,
       preferredDomains: 0,
+      preferredManual: 0,
       settings: true,
     });
     assert.deepEqual(restoreValues.blacklist, ["foo"]);
@@ -999,6 +1011,88 @@ test("updates remark without re-resolving DNS records", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("saves and serves manual preferred entries", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+
+  const empty = await worker.fetch(new Request("https://example.test/api/preferred-manual", { headers }), runtime);
+  assert.equal(empty.status, 200);
+  assert.deepEqual(await empty.json(), { content: "", updatedAt: null, count: 0 });
+
+  const saved = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ content: "  104.156.239.15:443#美国01  \n\n104.156.239.16:8443#美国02\n" }),
+  }), runtime);
+  assert.equal(saved.status, 200);
+  const savedResult = await saved.json();
+  assert.equal(savedResult.ok, true);
+  assert.equal(savedResult.content, "104.156.239.15:443#美国01\n104.156.239.16:8443#美国02");
+  assert.equal(savedResult.count, 2);
+  assert.ok(savedResult.updatedAt > 0);
+  assert.equal(values.preferred_manual.content, "104.156.239.15:443#美国01\n104.156.239.16:8443#美国02");
+
+  const readBack = await worker.fetch(new Request("https://example.test/api/preferred-manual", { headers }), runtime);
+  const readBackResult = await readBack.json();
+  assert.equal(readBackResult.count, 2);
+  assert.equal(readBackResult.updatedAt, values.preferred_manual.updatedAt);
+
+  const unauthenticated = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content: "1.2.3.4:443" }),
+  }), runtime);
+  assert.equal(unauthenticated.status, 200);
+  assert.match(await unauthenticated.text(), /管理员密码/);
+
+  const tooMany = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ content: Array.from({ length: 501 }, (_, i) => `1.2.3.${i % 256}:${40000 + i}#x`).join("\n") }),
+  }), runtime);
+  assert.equal(tooMany.status, 400);
+
+  const invalid = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ content: 42 }),
+  }), runtime);
+  assert.equal(invalid.status, 400);
+});
+
+test("merges manual preferred entries into custom API output", async () => {
+  const values = {
+    subs: {},
+    apis: { "https://api.example/source": { remark: "api" } },
+    blacklist: ["blocked"],
+    preferred_manual: { content: "104.156.239.15:443#manual1\n1.2.3.4:443#api\n2.2.2.2:443\nnot-an-entry\n3.3.3.3:443#blocked" },
+    custom_apis: { manual_api: { enabled: true, remark: "", sourceMode: "selected", sources: [{ type: "apis", key: "https://api.example/source" }] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("1.2.3.4:443#api", { status: 200 });
+  try {
+    const response = await worker.fetch(new Request("https://example.test/manual_api"), runtime);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "1.2.3.4:443#api\n104.156.239.15:443#manual1\n2.2.2.2:443");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("serves custom API output from manual preferred entries alone", async () => {
+  const values = {
+    preferred_manual: { content: "104.156.239.15:443#manual1" },
+    custom_apis: { manual_only: { enabled: true, remark: "", sourceMode: "all", sources: [] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const response = await worker.fetch(new Request("https://example.test/manual_only"), runtime);
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "104.156.239.15:443#manual1");
 });
 
 test("disabling a preferred domain hides it from custom API output", async () => {

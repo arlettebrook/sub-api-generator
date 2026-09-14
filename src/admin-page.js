@@ -271,6 +271,38 @@ export const adminHTML = `
 </div>
 <!-- ADMIN_SECTION:sourceStatus:END -->
 
+<!-- ADMIN_SECTION:preferredManual:START -->
+<!-- ==================== 手动优选管理 ==================== -->
+<div class="card" id="preferredManualSection">
+  <details class="source-status-panel preferred-manual-panel" open>
+    <summary>
+      <div>
+      <h3>✍️ 手动优选管理</h3>
+      <p class="section-caption">维护手动优选节点，每行一条“地址:端口#备注”，保存后会追加到所有优选 API 的输出末尾。</p>
+      </div>
+    </summary>
+    <div class="source-status-panel-body">
+      <div class="manual-preferred-toolbar">
+        <span class="section-summary" id="preferredManualStats">共 0 条</span>
+        <div class="section-heading-actions">
+          <button class="btn-outline" type="button" id="preferredManualAppendButton" title="读取剪贴板并追加到列表末尾（自动跳过重复条目）">📥 追加粘贴</button>
+          <button class="btn-outline" type="button" id="preferredManualSortButton" title="按地址、端口和备注排序">⇅ 一键排序</button>
+          <button class="btn-outline" type="button" id="preferredManualCopyButton" title="复制全部内容">📋 复制</button>
+          <button class="btn-primary" type="button" id="preferredManualSaveButton" disabled>💾 保存手动优选</button>
+        </div>
+      </div>
+      <label class="manual-preferred-editor">
+        <span class="sr-only">手动优选节点列表</span>
+        <textarea id="preferredManualText" rows="10" spellcheck="false" autocomplete="off" placeholder="每行一条，例如：
+104.156.239.15:443#美国01
+104.156.239.16:8443#美国02"></textarea>
+      </label>
+      <div class="manual-preferred-status" id="preferredManualStatus" role="status" aria-live="polite"></div>
+    </div>
+  </details>
+</div>
+<!-- ADMIN_SECTION:preferredManual:END -->
+
 <!-- ADMIN_SECTION:preferredDomains:START -->
 <!-- ==================== 优选域名管理 ==================== -->
 <div class="card" id="preferredDomainsSection">
@@ -641,7 +673,7 @@ export const adminHTML = `
       <div class="setting-block-heading">
         <div class="setting-copy">
           <h4>备份与恢复</h4>
-          <p>一键备份全部配置数据（订阅源、API 源、优选域名、优选 API、黑名单、过滤规则和伪装设置）为 JSON 文件，文件名带有备份时刻的北京时间；恢复时会覆盖文件中包含的对应配置。</p>
+          <p>一键备份全部配置数据（订阅源、API 源、优选域名、手动优选、优选 API、黑名单、过滤规则和伪装设置）为 JSON 文件，文件名带有备份时刻的北京时间；恢复时会覆盖文件中包含的对应配置。</p>
         </div>
         <span class="section-summary" id="backupSummary"></span>
       </div>

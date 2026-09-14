@@ -6,6 +6,7 @@ import {
   KV_KEY_BLACKLIST,
   KV_KEY_FILTER_RULES,
   KV_KEY_PREFERRED_DOMAINS,
+  KV_KEY_PREFERRED_MANUAL,
   KV_KEY_SUBS,
   normalizeFilterRules,
   normalizeBlacklist,
@@ -517,12 +518,13 @@ function normalizeSourceSelection(sourceSelection) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}) {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualContent = "") {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
     domains: domainsConfig,
+    manual: manualContent,
     blacklist,
     filterRules,
     outputTransform,
@@ -599,21 +601,23 @@ async function allSettledWithConcurrency(tasks, limit = SOURCE_CHECK_CONCURRENCY
 
 export async function handleRoot(env, sourceSelection, options = {}) {
   try {
-    const [subsConfig, apisConfig, domainsConfig, blacklistConfig, filterRulesConfig] = await Promise.all([
+    const [subsConfig, apisConfig, domainsConfig, blacklistConfig, filterRulesConfig, manualPreferred] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
       env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
       env.KV.get(KV_KEY_BLACKLIST, "json"),
       env.KV.get(KV_KEY_FILTER_RULES, "json"),
+      env.KV.get(KV_KEY_PREFERRED_MANUAL, "json"),
     ]);
-    if (!isPlainObject(subsConfig) && !isPlainObject(apisConfig) && !isPlainObject(domainsConfig)) {
+    const manualContent = isPlainObject(manualPreferred) && typeof manualPreferred.content === "string" ? manualPreferred.content : "";
+    if (!isPlainObject(subsConfig) && !isPlainObject(apisConfig) && !isPlainObject(domainsConfig) && !manualContent.trim()) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
     const blacklist = normalizeBlacklist(blacklistConfig);
     const filterRules = normalizeFilterRules(filterRulesConfig);
     const outputTransform = getOutputTransform(options);
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform);
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, manualContent);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -816,6 +820,15 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "domains", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "domains", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
+    }
+    // 手动优选是全局补充源：无论数据源是全部还是手动选择，非空内容都会追加到输出末尾，
+    // 并与其他来源一样经过黑名单、过滤规则和格式校验。
+    const manualLines = manualContent.split(/\r?\n/).filter((line) => line.trim());
+    if (manualLines.length) {
+      const manualValues = filterPreferredIps(manualLines, blacklist, blacklistRegex, filterRules);
+      extra.push(...manualValues);
+      mergeFilterStats(filterStats, manualValues.filterStats);
+      manualValues.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "manual", "manual", "手动优选")));
     }
 
     const filtered = [...new Set(preferred)];

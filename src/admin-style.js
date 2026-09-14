@@ -3517,6 +3517,60 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
+  /* 手动优选管理：工具栏 + 等宽文本编辑器。 */
+  .manual-preferred-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .manual-preferred-toolbar .section-heading-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .manual-preferred-editor {
+    display: block;
+  }
+
+  .manual-preferred-editor textarea {
+    width: 100%;
+    min-height: 220px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+    transition: var(--transition);
+    outline: none;
+  }
+
+  .manual-preferred-editor textarea:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--accent-light);
+    background: var(--bg-secondary);
+  }
+
+  .manual-preferred-status {
+    margin-top: 10px;
+    color: var(--warning);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .manual-preferred-status[hidden] {
+    display: none;
+  }
+
   /* 已禁用的数据源/优选 API 整行置灰，开关与“已禁用”标识提示可通过开关恢复。 */
   .row.source-disabled-row {
     opacity: 0.55;
