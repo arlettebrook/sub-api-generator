@@ -1923,6 +1923,18 @@ let preferredManualDialogResolver = null;
 let preferredManualItems = {};
 let preferredManualSavedItems = {};
 let preferredManualId = 'manual';
+const PREFERRED_MANUAL_SELECTION_STORAGE_KEY = 'preferred-manual-selected-id';
+
+function loadPreferredManualSelection() {
+  try { return localStorage.getItem(PREFERRED_MANUAL_SELECTION_STORAGE_KEY) || ''; } catch { return ''; }
+}
+
+function savePreferredManualSelection(id) {
+  try {
+    if (id) localStorage.setItem(PREFERRED_MANUAL_SELECTION_STORAGE_KEY, id);
+    else localStorage.removeItem(PREFERRED_MANUAL_SELECTION_STORAGE_KEY);
+  } catch { /* ignore unavailable storage */ }
+}
 
 function preferredManualLines(value) {
   return String(value || '').split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
@@ -2001,6 +2013,7 @@ function selectPreferredManual(id, { preserve = true } = {}) {
   if (!textarea || !preferredManualItems[id]) return;
   if (preserve && preferredManualDirty) preferredManualItems[preferredManualId] = { ...preferredManualItems[preferredManualId], content: textarea.value, name: $('preferredManualName')?.value?.trim() || preferredManualId };
   preferredManualId = id;
+  savePreferredManualSelection(id);
   const item = preferredManualItems[id];
   textarea.value = item.content || '';
   preferredManualSavedContent = preferredManualSavedItems[id]?.content || '';
@@ -2018,7 +2031,8 @@ async function loadPreferredManual() {
     const data = await readJsonResponse('/api/preferred-manual', '手动优选配置');
     preferredManualItems = data.items && typeof data.items === 'object' ? data.items : { manual: { name: '手动优选', content: typeof data.content === 'string' ? data.content : '' } };
     preferredManualSavedItems = JSON.parse(JSON.stringify(preferredManualItems));
-    preferredManualId = Object.keys(preferredManualItems)[0] || 'manual';
+    const savedSelection = loadPreferredManualSelection();
+    preferredManualId = preferredManualItems[savedSelection] ? savedSelection : (Object.keys(preferredManualItems)[0] || 'manual');
     renderPreferredManualSelect();
     selectPreferredManual(preferredManualId, { preserve: false });
     preferredManualCount = Number(data.totalCount ?? data.count) || 0;
