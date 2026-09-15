@@ -275,12 +275,11 @@ export const adminHTML = `
 <!-- ==================== 手动优选管理 ==================== -->
 <div class="card" id="preferredManualSection">
   <details class="source-status-panel preferred-manual-panel" open>
-    <summary class="preferred-manual-summary">
+    <summary>
       <div>
       <h3>✍️ 手动优选管理</h3>
       <p class="section-caption">维护手动优选节点，每行一条“地址:端口#备注”；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
       </div>
-      <button class="manual-preferred-top-button" id="preferredManualTopButton" type="button" title="返回数据顶部" aria-label="返回数据顶部"><span aria-hidden="true">↑</span><span>返回数据顶部</span></button>
     </summary>
     <div class="source-status-panel-body">
       <div class="manual-preferred-toolbar">
@@ -295,12 +294,15 @@ export const adminHTML = `
           <button class="btn-primary" type="button" id="preferredManualSaveButton" disabled>💾 保存手动优选</button>
         </div>
       </div>
-      <label class="manual-preferred-editor">
-        <span class="sr-only">手动优选节点列表</span>
-        <textarea id="preferredManualText" rows="10" spellcheck="false" autocomplete="off" placeholder="每行一条，例如：
+      <div class="manual-preferred-editor-wrap">
+        <label class="manual-preferred-editor">
+          <span class="sr-only">手动优选节点列表</span>
+          <textarea id="preferredManualText" rows="10" spellcheck="false" autocomplete="off" placeholder="每行一条，例如：
 104.156.239.15:443#美国01
 104.156.239.16:8443#美国02"></textarea>
-      </label>
+        </label>
+        <button class="btn-subtle preview-api-top-button manual-preferred-top-button" id="preferredManualTopButton" type="button" aria-label="返回手动优选数据顶部" aria-hidden="true" tabindex="-1">返回数据顶部</button>
+      </div>
       <div class="manual-preferred-status" id="preferredManualStatus" role="status" aria-live="polite"></div>
     </div>
   </details>

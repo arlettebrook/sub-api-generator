@@ -3518,35 +3518,6 @@ export const adminStyle = `
   }
 
   /* 手动优选管理：工具栏 + 等宽文本编辑器。 */
-  .preferred-manual-summary {
-    position: relative;
-    padding-right: 190px;
-  }
-
-  .preferred-manual-summary > div:first-child {
-    min-width: 0;
-  }
-
-  .manual-preferred-top-button {
-    position: absolute;
-    top: 14px;
-    right: 48px;
-    height: 34px;
-    padding: 0 11px;
-    border-radius: 999px;
-    border-color: var(--accent-border);
-    background: var(--accent-light);
-    color: var(--accent-primary);
-    font-size: 12px;
-    white-space: nowrap;
-    box-shadow: none;
-  }
-
-  .manual-preferred-top-button span:first-child {
-    font-size: 18px;
-    line-height: 1;
-  }
-
   .manual-preferred-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -3568,6 +3539,56 @@ export const adminStyle = `
 
   .manual-preferred-toolbar .section-heading-actions > button {
     min-width: 0;
+  }
+
+  /* 手动优选按钮使用清晰的三级色彩：常规操作、辅助/危险操作、保存操作。 */
+  .manual-preferred-toolbar .btn-outline {
+    border-color: color-mix(in srgb, var(--accent-primary) 34%, var(--border-color));
+    background: color-mix(in srgb, var(--surface-solid) 90%, var(--accent-light));
+    color: var(--text-secondary);
+  }
+
+  .manual-preferred-toolbar .btn-outline:hover,
+  .manual-preferred-toolbar .btn-outline:focus-visible {
+    border-color: var(--accent-primary);
+    background: var(--accent-light);
+    color: var(--accent-hover);
+  }
+
+  .manual-preferred-toolbar .btn-subtle {
+    border-color: color-mix(in srgb, var(--warning) 28%, var(--border-color));
+    background: color-mix(in srgb, var(--surface-solid) 92%, var(--warning-light));
+    color: var(--warning-strong);
+  }
+
+  .manual-preferred-toolbar .btn-subtle:hover,
+  .manual-preferred-toolbar .btn-subtle:focus-visible {
+    border-color: var(--warning-border);
+    background: var(--warning-hover-bg);
+    color: var(--warning-strong);
+  }
+
+  .manual-preferred-toolbar .btn-primary {
+    border-color: var(--accent-border);
+    color: #fff;
+    box-shadow: 0 5px 14px color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  }
+
+  .manual-preferred-toolbar button:disabled {
+    border-color: var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-tertiary);
+    box-shadow: none;
+    filter: none;
+    opacity: .62;
+  }
+
+  .manual-preferred-editor-wrap {
+    position: relative;
+  }
+
+  .manual-preferred-top-button {
+    /* 完全复用数据预览返回顶部按钮的悬浮、显隐和主题样式。 */
   }
 
   .preferred-manual-dialog-input {
@@ -4561,27 +4582,6 @@ export const adminStyle = `
       align-items: flex-end;
       flex-direction: column-reverse;
       gap: 6px;
-    }
-    .preferred-manual-summary {
-      padding-right: 44px;
-    }
-    .preferred-manual-summary .section-caption {
-      padding-right: 0;
-    }
-    .manual-preferred-top-button {
-      top: 12px;
-      right: 42px;
-      width: 34px;
-      padding: 0;
-      border-radius: 50%;
-    }
-    .manual-preferred-top-button span:last-child {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-      white-space: nowrap;
     }
     .manual-preferred-toolbar {
       align-items: stretch;

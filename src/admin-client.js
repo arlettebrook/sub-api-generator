@@ -2193,11 +2193,22 @@ function initPreferredManualEditor() {
   $('preferredManualSortButton')?.addEventListener('click', sortPreferredManual);
   $('preferredManualClearButton')?.addEventListener('click', () => void clearPreferredManual());
   $('preferredManualUndoButton')?.addEventListener('click', undoPreferredManualChanges);
-  $('preferredManualTopButton')?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    scrollElementToTop(document.scrollingElement || document.documentElement, window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth');
-  });
+  const topButton = $('preferredManualTopButton');
+  if (topButton && topButton.dataset.bound !== 'true') {
+    topButton.dataset.bound = 'true';
+    const updateTopButton = () => {
+      const visible = textarea.scrollTop > 160;
+      topButton.classList.toggle('is-visible', visible);
+      topButton.setAttribute('aria-hidden', String(!visible));
+      topButton.tabIndex = visible ? 0 : -1;
+    };
+    textarea.addEventListener('scroll', updateTopButton, { passive: true });
+    topButton.addEventListener('click', () => {
+      scrollElementToTop(textarea, window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth');
+      updateTopButton();
+    });
+    requestAnimationFrame(updateTopButton);
+  }
 }
 
 function getSourceStatus(type, key) {
