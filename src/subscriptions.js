@@ -506,7 +506,7 @@ function normalizeSourceSelection(sourceSelection) {
   const unique = new Map();
   for (const source of sourceSelection) {
     const type = source?.type;
-    if (!["subs", "apis", "domains"].includes(type)) continue;
+    if (!["subs", "apis", "domains", "manual"].includes(type)) continue;
     const key = normalizeSourceKey(type, source?.key);
     if (!key) continue;
     unique.set(`${type}:${key}`, { type, key });
@@ -518,13 +518,30 @@ function normalizeSourceSelection(sourceSelection) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualContent = "", includeManual = true) {
+function normalizeManualPreferredConfig(value) {
+  const rawItems = isPlainObject(value?.items)
+    ? value.items
+    : (isPlainObject(value) && typeof value.content !== "string" ? value : null);
+  if (!rawItems) {
+    return isPlainObject(value) && typeof value.content === "string"
+      ? [{ id: "manual", name: "手动优选", content: value.content }]
+      : [];
+  }
+  return Object.entries(rawItems).flatMap(([rawId, rawEntry]) => {
+    if (!isPlainObject(rawEntry) || typeof rawEntry.content !== "string") return [];
+    const id = normalizeSourceKey("manual", rawId);
+    if (!id) return [];
+    return [{ id, name: typeof rawEntry.name === "string" && rawEntry.name.trim() ? rawEntry.name.trim() : id, content: rawEntry.content }];
+  });
+}
+
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualConfig = [], includeManual = true) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
     domains: domainsConfig,
-    manual: includeManual ? manualContent : "",
+    manual: includeManual ? manualConfig : [],
     blacklist,
     filterRules,
     outputTransform,
@@ -609,7 +626,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       env.KV.get(KV_KEY_FILTER_RULES, "json"),
       env.KV.get(KV_KEY_PREFERRED_MANUAL, "json"),
     ]);
-    const manualContent = isPlainObject(manualPreferred) && typeof manualPreferred.content === "string" ? manualPreferred.content : "";
+    const manualEntries = normalizeManualPreferredConfig(manualPreferred);
+    const manualContent = manualEntries.map((entry) => entry.content).filter(Boolean).join("\n");
     if (!isPlainObject(subsConfig) && !isPlainObject(apisConfig) && !isPlainObject(domainsConfig) && !manualContent.trim()) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
@@ -617,9 +635,14 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const blacklist = normalizeBlacklist(blacklistConfig);
     const filterRules = normalizeFilterRules(filterRulesConfig);
     const outputTransform = getOutputTransform(options);
+    const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
     // includeManual 由优选 API 的数据源模式决定：全部数据源时包含手动优选，手动选择模式下需显式勾选。
     const includeManual = options.includeManual !== false;
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, manualContent, includeManual);
+    const selectedManualKeys = new Set((selected || []).filter((source) => source?.type === "manual").map((source) => normalizeSourceKey("manual", source.key)));
+    const activeManualEntries = !includeManual ? []
+      : selected === null ? manualEntries
+        : manualEntries.filter((entry) => selectedManualKeys.has(entry.id));
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, activeManualEntries, true);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -640,7 +663,6 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       });
     }
 
-    const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
     const selectedKeys = selected
       ? new Set(selected.map((source) => `${source?.type}:${normalizeSourceKey(source?.type, source?.key)}`))
       : null;
@@ -825,14 +847,13 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     }
     // 手动优选是全局补充源：全部数据源模式始终追加；手动选择模式下由优选 API 配置里的
     // “手动优选”来源勾选决定，与其他来源一样经过黑名单、过滤规则和格式校验。
-    const manualLines = includeManual
-      ? manualContent.split(/\r?\n/).filter((line) => line.trim())
-      : [];
-    if (manualLines.length) {
+    for (const manualEntry of activeManualEntries) {
+      const manualLines = manualEntry.content.split(/\r?\n/).filter((line) => line.trim());
+      if (!manualLines.length) continue;
       const manualValues = filterPreferredIps(manualLines, blacklist, blacklistRegex, filterRules);
       extra.push(...manualValues);
       mergeFilterStats(filterStats, manualValues.filterStats);
-      manualValues.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "manual", "manual", "手动优选")));
+      manualValues.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "manual", manualEntry.id, manualEntry.name)));
     }
 
     const filtered = [...new Set(preferred)];

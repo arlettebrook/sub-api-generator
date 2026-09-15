@@ -1555,7 +1555,13 @@ async function loadCustomApis(loadSources = false) {
       sourceErrors.push({ type: 'domains', message: results[3].reason.message });
     }
     // 手动优选加载失败只影响数据源选择器少一个分组，不作为数据源异常提示。
-    preferredManualCount = results[4].status === 'fulfilled' ? (Number(results[4].value?.count) || 0) : 0;
+    if (results[4].status === 'fulfilled') {
+      preferredManualItems = results[4].value?.items && typeof results[4].value.items === 'object' ? results[4].value.items : {};
+      preferredManualCount = Number(results[4].value?.totalCount ?? results[4].value?.count) || 0;
+    } else {
+      preferredManualItems = {};
+      preferredManualCount = 0;
+    }
     renderSourceLoadStatus(sourceErrors);
   }
   setCustomApisDirty(false);
@@ -1605,8 +1611,7 @@ function sourceEntries() {
     ...Object.entries(subs).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'subs', key, label: value.remark || key })),
     ...Object.entries(apis).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'apis', key, label: value.remark || key })),
     ...Object.entries(preferredDomains).filter(([, value]) => value?.enabled !== false).map(([key, value]) => ({ type: 'domains', key, label: value.remark || key })),
-    // 手动优选是全局唯一数据源，始终展示（条目数为 0 时勾选不产生节点）。
-    { type: 'manual', key: 'manual', label: preferredManualCount > 0 ? '手动优选（' + preferredManualCount + ' 条）' : '手动优选' },
+    ...Object.entries(preferredManualItems || {}).map(([key, value]) => ({ type: 'manual', key, label: (value.name || key) + '（' + preferredManualLines(value.content).length + ' 条）' })),
   ];
 }
 
@@ -1915,6 +1920,9 @@ const MANUAL_NODE_REGEX = /(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\
 let preferredManualSavedContent = '';
 let preferredManualDirty = false;
 let preferredManualDialogResolver = null;
+let preferredManualItems = {};
+let preferredManualSavedItems = {};
+let preferredManualId = 'manual';
 
 function preferredManualLines(value) {
   return String(value || '').split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
@@ -1938,7 +1946,8 @@ function updatePreferredManualMeta() {
   const lines = preferredManualLines(textarea.value);
   const invalidIndexes = [];
   lines.forEach((line, index) => { if (!parseManualNodeLine(line)) invalidIndexes.push(index + 1); });
-  preferredManualDirty = textarea.value.replace(/\\s+$/, '') !== preferredManualSavedContent.replace(/\\s+$/, '');
+  if (preferredManualItems[preferredManualId]) preferredManualItems[preferredManualId] = { ...preferredManualItems[preferredManualId], name: $('preferredManualName')?.value?.trim() || preferredManualId, content: textarea.value };
+  preferredManualDirty = JSON.stringify(preferredManualItems) !== JSON.stringify(preferredManualSavedItems);
   saveButton.disabled = !preferredManualDirty;
   const undoButton = $('preferredManualUndoButton');
   if (undoButton) undoButton.disabled = !preferredManualDirty;
@@ -1951,13 +1960,53 @@ function updatePreferredManualMeta() {
       ? '第 ' + invalidIndexes.slice(0, 10).join('、') + ' 行无法识别（缺少地址或端口），保存后不会参与优选 API 输出。'
       : '';
   }
+  const selectedOption = $('preferredManualSelect')?.querySelector('option:checked');
+  if (selectedOption && preferredManualItems[preferredManualId]) selectedOption.textContent = (preferredManualItems[preferredManualId].name || preferredManualId) + '（' + lines.length + ' 条）';
 }
 
 function markPreferredManualSaved(content) {
   preferredManualSavedContent = content;
+  preferredManualSavedItems = JSON.parse(JSON.stringify(preferredManualItems));
   preferredManualDirty = false;
   const saveButton = $('preferredManualSaveButton');
   if (saveButton) saveButton.disabled = true;
+}
+
+function renderPreferredManualSelect() {
+  const select = $('preferredManualSelect');
+  const nameInput = $('preferredManualName');
+  const deleteButton = $('preferredManualDeleteButton');
+  if (!select) return;
+  select.innerHTML = '';
+  const entries = Object.entries(preferredManualItems);
+  for (const [id, item] of entries) {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = (item.name || id) + '（' + preferredManualLines(item.content).length + ' 条）';
+    select.appendChild(option);
+  }
+  if (!entries.length) {
+    preferredManualId = 'manual';
+    preferredManualItems.manual = { name: '手动优选', content: '' };
+    return renderPreferredManualSelect();
+  }
+  if (!preferredManualItems[preferredManualId]) preferredManualId = entries[0][0];
+  select.value = preferredManualId;
+  if (nameInput) { nameInput.disabled = false; nameInput.value = preferredManualItems[preferredManualId].name || preferredManualId; }
+  if (deleteButton) deleteButton.disabled = entries.length <= 1;
+}
+
+function selectPreferredManual(id, { preserve = true } = {}) {
+  const textarea = $('preferredManualText');
+  if (!textarea || !preferredManualItems[id]) return;
+  if (preserve && preferredManualDirty) preferredManualItems[preferredManualId] = { ...preferredManualItems[preferredManualId], content: textarea.value, name: $('preferredManualName')?.value?.trim() || preferredManualId };
+  preferredManualId = id;
+  const item = preferredManualItems[id];
+  textarea.value = item.content || '';
+  preferredManualSavedContent = preferredManualSavedItems[id]?.content || '';
+  if ($('preferredManualName')) $('preferredManualName').value = item.name || id;
+  renderPreferredManualSelect();
+  updatePreferredManualMeta();
 }
 
 async function loadPreferredManual() {
@@ -1967,11 +2016,12 @@ async function loadPreferredManual() {
   textarea.disabled = true;
   try {
     const data = await readJsonResponse('/api/preferred-manual', '手动优选配置');
-    const content = typeof data.content === 'string' ? data.content : '';
-    textarea.value = content;
-    preferredManualCount = Number(data.count) || 0;
-    markPreferredManualSaved(content);
-    updatePreferredManualMeta();
+    preferredManualItems = data.items && typeof data.items === 'object' ? data.items : { manual: { name: '手动优选', content: typeof data.content === 'string' ? data.content : '' } };
+    preferredManualSavedItems = JSON.parse(JSON.stringify(preferredManualItems));
+    preferredManualId = Object.keys(preferredManualItems)[0] || 'manual';
+    renderPreferredManualSelect();
+    selectPreferredManual(preferredManualId, { preserve: false });
+    preferredManualCount = Number(data.totalCount ?? data.count) || 0;
   } catch (error) {
     showToast(error.message, 'error');
   } finally {
@@ -1984,16 +2034,22 @@ async function savePreferredManual(trigger = null) {
   if (!textarea) return;
   if (trigger) setButtonBusy(trigger, true, '保存中…');
   try {
+    preferredManualItems[preferredManualId] = { ...(preferredManualItems[preferredManualId] || {}), name: $('preferredManualName')?.value?.trim() || preferredManualId, content: textarea.value };
     const result = await readJsonResponse('/api/preferred-manual', '手动优选保存', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: textarea.value }),
+      body: JSON.stringify({ items: preferredManualItems }),
     });
-    markPreferredManualSaved(typeof result.content === 'string' ? result.content : textarea.value);
+    preferredManualItems = result.items || preferredManualItems;
+    textarea.value = preferredManualItems[preferredManualId]?.content || '';
+    if ($('preferredManualName')) $('preferredManualName').value = preferredManualItems[preferredManualId]?.name || preferredManualId;
+    markPreferredManualSaved(preferredManualItems[preferredManualId]?.content || textarea.value);
     // 数据源选择器里的“手动优选（N 条）”标签跟随最新保存的条目数。
-    preferredManualCount = Number(result.count) || preferredManualLines(result.content || '').length;
+    preferredManualCount = Number(result.totalCount ?? result.count) || 0;
+    renderPreferredManualSelect();
+    renderNewCustomApiSources();
     updatePreferredManualMeta();
-    showToast('手动优选已保存，共 ' + (result.count ?? preferredManualLines(result.content).length) + ' 条', 'success');
+    showToast('手动优选已保存，共 ' + preferredManualLines(textarea.value).length + ' 条', 'success');
   } catch (error) {
     showToast(error.message, 'error', () => savePreferredManual(trigger));
   } finally {
@@ -2176,9 +2232,12 @@ function undoPreferredManualChanges() {
   const textarea = $('preferredManualText');
   if (!textarea) return;
   if (!preferredManualDirty) { showToast('没有需要撤销的修改', 'info'); return; }
-  textarea.value = preferredManualSavedContent;
-  updatePreferredManualMeta();
-  showToast('已恢复到上次保存的版本', 'success');
+  preferredManualItems = JSON.parse(JSON.stringify(preferredManualSavedItems));
+  if (!preferredManualItems[preferredManualId]) preferredManualId = Object.keys(preferredManualItems)[0] || 'manual';
+  if (!Object.keys(preferredManualItems).length) preferredManualItems.manual = { name: '手动优选', content: '' };
+  renderPreferredManualSelect();
+  selectPreferredManual(preferredManualId, { preserve: false });
+  showToast('已恢复全部手动优选到上次保存的版本', 'success');
 }
 
 function initPreferredManualEditor() {
@@ -2186,6 +2245,26 @@ function initPreferredManualEditor() {
   if (!textarea || textarea.dataset.bound === 'true') return;
   textarea.dataset.bound = 'true';
   textarea.addEventListener('input', updatePreferredManualMeta);
+  $('preferredManualSelect')?.addEventListener('change', (event) => selectPreferredManual(event.target.value));
+  $('preferredManualName')?.addEventListener('input', updatePreferredManualMeta);
+  $('preferredManualCreateButton')?.addEventListener('click', () => {
+    if (Object.keys(preferredManualItems).length >= 200) { showToast('手动优选列表不能超过 200 个', 'warning'); return; }
+    const id = 'manual-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+    preferredManualItems[id] = { name: '手动优选 ' + (Object.keys(preferredManualItems).length + 1), content: '' };
+    selectPreferredManual(id, { preserve: true });
+    updatePreferredManualMeta();
+    showToast('已创建新的手动优选列表，保存后生效', 'success');
+  });
+  $('preferredManualDeleteButton')?.addEventListener('click', async () => {
+    const ids = Object.keys(preferredManualItems);
+    if (ids.length <= 1) return;
+    const confirmed = await openPreferredManualDialog({ title: '确认删除列表', message: '确定删除“' + (preferredManualItems[preferredManualId]?.name || preferredManualId) + '”吗？保存后生效。', confirmLabel: '确认删除' });
+    if (!confirmed) return;
+    delete preferredManualItems[preferredManualId];
+    preferredManualId = Object.keys(preferredManualItems)[0];
+    selectPreferredManual(preferredManualId, { preserve: false });
+    updatePreferredManualMeta();
+  });
   $('preferredManualSaveButton')?.addEventListener('click', (event) => void savePreferredManual(event.currentTarget));
   $('preferredManualCopyButton')?.addEventListener('click', () => void copyPreferredManual());
   $('preferredManualAppendButton')?.addEventListener('click', () => void appendPastePreferredManual());

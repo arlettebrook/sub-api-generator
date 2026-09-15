@@ -289,8 +289,7 @@ export function validateApiPathPayload(body) {
       if (!isPlainObject(source) || !["subs", "apis", "domains", "manual"].includes(source.type) || typeof source.key !== "string") {
         throw new Error(`数据源配置无效: ${rawPath}`);
       }
-      // 手动优选是全局唯一条目，key 固定为 manual。
-      const key = source.type === "manual" ? "manual" : normalizeSourceKey(source.type, source.key);
+      const key = normalizeSourceKey(source.type, source.key);
       if (!key || key.length > MAX_CONFIG_KEY_LENGTH) throw new Error(`数据源配置无效: ${rawPath}`);
       if (!normalizedSources.some((item) => item.type === source.type && item.key === key)) {
         normalizedSources.push({ type: source.type, key });

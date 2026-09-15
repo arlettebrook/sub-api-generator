@@ -282,6 +282,16 @@ export const adminHTML = `
       </div>
     </summary>
     <div class="source-status-panel-body">
+      <div class="manual-preferred-listbar">
+        <label class="manual-preferred-select-label">手动优选列表
+          <select id="preferredManualSelect" aria-label="选择手动优选列表"></select>
+        </label>
+        <label class="manual-preferred-name-label">列表名称
+          <input id="preferredManualName" maxlength="200" placeholder="例如：香港手动节点" autocomplete="off" disabled />
+        </label>
+        <button class="btn-outline" type="button" id="preferredManualCreateButton">➕ 新建列表</button>
+        <button class="btn-subtle" type="button" id="preferredManualDeleteButton" disabled>🗑 删除列表</button>
+      </div>
       <div class="manual-preferred-toolbar">
         <span class="section-summary" id="preferredManualStats">共 0 条</span>
         <div class="section-heading-actions">

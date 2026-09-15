@@ -467,27 +467,69 @@ function preferredManualStats(content) {
   return { count: entries.length };
 }
 
-function normalizePreferredManualEntry(data) {
-  const content = normalizePreferredManualContent(isPlainObject(data) ? data.content : "");
-  return { content, updatedAt: Date.now() };
+function normalizePreferredManualId(value) {
+  const id = String(value || "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("手动优选标识无效");
+  return id;
+}
+
+function normalizePreferredManualItem(data, fallbackName = "手动优选") {
+  if (!isPlainObject(data)) throw new Error("手动优选配置项无效");
+  const content = normalizePreferredManualContent(data.content ?? "");
+  const name = typeof data.name === "string" && data.name.trim() ? data.name.trim().slice(0, 200) : fallbackName;
+  return { name, content, updatedAt: Number(data.updatedAt) > 0 ? Number(data.updatedAt) : Date.now() };
+}
+
+function normalizePreferredManualData(data) {
+  if (!isPlainObject(data)) return {};
+  // 兼容旧版单列表结构 { content, updatedAt }。
+  if (typeof data.content === "string") return { manual: normalizePreferredManualItem(data, "手动优选") };
+  const rawItems = isPlainObject(data.items) ? data.items : data;
+  const entries = Object.entries(rawItems);
+  if (entries.length > MAX_CONFIG_ENTRIES) throw new Error(`手动优选不能超过 ${MAX_CONFIG_ENTRIES} 个`);
+  const normalized = {};
+  for (const [rawId, rawItem] of entries) {
+    const id = normalizePreferredManualId(rawId);
+    normalized[id] = normalizePreferredManualItem(rawItem, id);
+  }
+  return normalized;
+}
+
+function preferredManualPayload(items) {
+  const entries = Object.entries(items);
+  const totalCount = entries.reduce((total, [, item]) => total + preferredManualStats(item.content).count, 0);
+  const legacy = items.manual || entries[0]?.[1] || { content: "", updatedAt: null };
+  return { items, groupCount: entries.length, totalCount, content: legacy.content, updatedAt: legacy.updatedAt ?? null, count: totalCount };
+}
+
+async function getPreferredManualSourceSelection(env) {
+  const data = await env.KV.get(KV_KEY_PREFERRED_MANUAL, "json");
+  let items = {};
+  try { items = normalizePreferredManualData(data); } catch { items = {}; }
+  return Object.keys(items).map((key) => ({ type: "manual", key }));
 }
 
 async function handleGetPreferredManual(env) {
   const data = await env.KV.get(KV_KEY_PREFERRED_MANUAL, "json");
-  if (!isPlainObject(data) || typeof data.content !== "string") {
-    return pagesJsonResponse({ content: "", updatedAt: null, ...preferredManualStats("") });
-  }
-  return pagesJsonResponse({ content: data.content, updatedAt: data.updatedAt ?? null, ...preferredManualStats(data.content) });
+  if (isPlainObject(data) && typeof data.content === "string") return pagesJsonResponse({ content: data.content, updatedAt: data.updatedAt ?? null, ...preferredManualStats(data.content) });
+  let items = {};
+  try { items = normalizePreferredManualData(data); } catch { items = {}; }
+  if (!Object.keys(items).length) return pagesJsonResponse({ content: "", updatedAt: null, count: 0 });
+  return pagesJsonResponse(preferredManualPayload(items));
 }
 
 async function handlePostPreferredManual(request, env) {
   let body;
   try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
-  let entry;
-  try { entry = normalizePreferredManualEntry(body); } catch (error) { return pagesTextResponse(error.message, 400); }
-  await env.KV.put(KV_KEY_PREFERRED_MANUAL, JSON.stringify(entry));
+  let items;
+  try {
+    items = isPlainObject(body?.items)
+      ? normalizePreferredManualData({ items: body.items })
+      : { manual: normalizePreferredManualItem(body, "手动优选") };
+  } catch (error) { return pagesTextResponse(error.message, 400); }
+  await env.KV.put(KV_KEY_PREFERRED_MANUAL, JSON.stringify(isPlainObject(body?.items) ? { items } : items.manual));
   subscriptions.clearAggregateCache();
-  return pagesJsonResponse({ ok: true, ...entry, ...preferredManualStats(entry.content) });
+  return pagesJsonResponse({ ok: true, ...preferredManualPayload(items) });
 }
 
 async function checkSourceStatuses(env, request) {
@@ -604,15 +646,17 @@ async function handleCustomApiPreview(request, env) {
   let sourceSelection = entry.sources;
   let includeManual;
   if (entry.sourceMode !== SOURCE_MODE_SELECTED) {
-    const [subs, apis, domains] = await Promise.all([
+    const [subs, apis, domains, manuals] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
       env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
+      getPreferredManualSourceSelection(env),
     ]);
     sourceSelection = [
       ...Object.keys(normalizeKvData(subs, "subs")).map((key) => ({ type: "subs", key })),
       ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
       ...Object.keys(normalizeKvData(domains, "domains")).map((key) => ({ type: "domains", key })),
+      ...manuals,
     ];
     includeManual = true;
   } else {
@@ -772,14 +816,12 @@ function normalizeBackupSection(section, value) {
       if (Object.keys(value).length > MAX_CONFIG_ENTRIES) return null;
       return { data: normalizePreferredDomainBackup(value) };
     case "preferredManual":
-      // 备份里的手动优选支持三种形态：整段文本、{ content } 完整条目，以及空对象（历史备份中的空配置）。
+      // 同时支持新版多列表结构与旧版单列表结构。
       if (typeof value === "string") return { data: { content: normalizePreferredManualContent(value), updatedAt: Date.now() } };
       if (!isPlainObject(value)) return null;
-      if (typeof value.content !== "string") {
-        if (Object.keys(value).length === 0) return { data: { content: "", updatedAt: Date.now() } };
-        return null;
-      }
-      return { data: { content: normalizePreferredManualContent(value.content), updatedAt: Number(value.updatedAt) > 0 ? Number(value.updatedAt) : Date.now() } };
+      if (Object.keys(value).length === 0) return { data: { content: "", updatedAt: Date.now() } };
+      if (typeof value.content === "string") return { data: { content: normalizePreferredManualContent(value.content), updatedAt: Number(value.updatedAt) > 0 ? Number(value.updatedAt) : Date.now() } };
+      try { return { data: { items: normalizePreferredManualData(value) } }; } catch { return null; }
     case "settings":
       if (!isPlainObject(value)) return null;
       return { data: normalizeSettings(value) };
@@ -965,7 +1007,7 @@ async function applyRestoreSections(env, data) {
     if (!normalized) throw new Error(`备份文件格式无效: ${section.key}`);
     writes.push(env.KV.put(section.kvKey, JSON.stringify(normalized.data)));
     restored[section.key] = section.key === "settings" ? true
-      : section.key === "preferredManual" ? String(normalized.data.content || "").split("\n").filter(Boolean).length
+      : section.key === "preferredManual" ? (normalized.data.items ? Object.values(normalized.data.items).reduce((total, item) => total + preferredManualStats(item.content).count, 0) : preferredManualStats(normalized.data.content).count)
         : Array.isArray(normalized.data) ? normalized.data.length : Object.keys(normalized.data).length;
   }
   if (!writes.length) throw new Error("备份文件中没有任何可恢复的配置");
@@ -1034,15 +1076,17 @@ async function handleCustomApiPath(path, env) {
   let includeManual;
   if (api.sourceMode !== SOURCE_MODE_SELECTED) {
     // 与 handleCustomApiPreview 保持一致：全部数据源模式跟随订阅源、API 源和优选域名。
-    const [subs, apis, domains] = await Promise.all([
+    const [subs, apis, domains, manuals] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
       env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
+      getPreferredManualSourceSelection(env),
     ]);
     sourceSelection = [
       ...Object.keys(normalizeKvData(subs, "subs")).map((key) => ({ type: "subs", key })),
       ...Object.keys(normalizeKvData(apis, "apis")).map((key) => ({ type: "apis", key })),
       ...Object.keys(normalizeKvData(domains, "domains")).map((key) => ({ type: "domains", key })),
+      ...manuals,
     ];
     includeManual = true;
   } else {

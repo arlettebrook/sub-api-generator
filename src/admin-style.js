@@ -3518,6 +3518,32 @@ export const adminStyle = `
   }
 
   /* 手动优选管理：工具栏 + 等宽文本编辑器。 */
+  .manual-preferred-listbar {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+  }
+
+  .manual-preferred-select-label,
+  .manual-preferred-name-label {
+    display: grid;
+    gap: 5px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .manual-preferred-select-label { flex: 1 1 220px; }
+  .manual-preferred-name-label { flex: 1 1 220px; }
+  .manual-preferred-listbar select,
+  .manual-preferred-listbar input { width: 100%; min-width: 0; height: 38px; }
+
   .manual-preferred-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -4585,6 +4611,12 @@ export const adminStyle = `
     }
     .manual-preferred-toolbar {
       align-items: stretch;
+    }
+    .manual-preferred-listbar {
+      align-items: stretch;
+    }
+    .manual-preferred-listbar > button {
+      flex: 1 1 calc(50% - 5px);
     }
     .manual-preferred-toolbar .section-summary,
     .manual-preferred-toolbar .section-heading-actions {
