@@ -1615,6 +1615,26 @@ function sourceEntries() {
   ];
 }
 
+function migrateCustomApiSourceReference(type, oldKey, newKey) {
+  const normalizedOldKey = normalizeSourceKeyClient(type, oldKey);
+  const normalizedNewKey = normalizeSourceKeyClient(type, newKey);
+  Object.values(customApis || {}).forEach((entry) => {
+    if (!entry || !Array.isArray(entry.sources)) return;
+    const seen = new Set();
+    entry.sources = entry.sources.map((source) => {
+      if (source?.type === type && normalizeSourceKeyClient(type, source.key) === normalizedOldKey) {
+        return { ...source, key: normalizedNewKey };
+      }
+      return source;
+    }).filter((source) => {
+      const identity = source?.type + ':' + normalizeSourceKeyClient(source?.type, source?.key);
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
+  });
+}
+
 let sourceStatuses = { subs: {}, apis: {}, domains: {} };
 let sourceStatusRequestVersion = 0;
 let preferredDomains = {};
@@ -1781,17 +1801,18 @@ async function savePreferredDomain(domain, remark = '', previousDomain = '') {
     // 仅改备注/同域名保存时跳过 DNS 解析；改域名为新域名时才需要重新解析。
     const resolve = Boolean(previousDomain && previousDomain !== domain);
     const current = preferredDomains[domain] || preferredDomains[previousDomain] || {};
-    const entry = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark, resolve, enabled: current.enabled !== false }) });
+    const result = await readJsonResponse('/api/preferred-domains', '优选域名保存', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, remark, resolve, enabled: current.enabled !== false, previousDomain }) });
+    const { updatedCustomApis = 0, ...entry } = result;
     if (previousDomain && previousDomain !== entry.domain) {
-      await readJsonResponse('/api/preferred-domains?domain=' + encodeURIComponent(previousDomain), '旧域名删除', { method: 'DELETE' });
       delete preferredDomains[previousDomain];
       delete preferredDomainStatuses[normalizeSourceKeyClient('domains', previousDomain)];
+      migrateCustomApiSourceReference('domains', previousDomain, entry.domain);
     }
     preferredDomains[entry.domain] = entry;
     setPreferredDomainStatus(entry.domain, preferredDomainEntryStatus(entry));
     renderPreferredDomains();
     refreshRenderedSourceStatuses([{ type: 'domains', key: entry.domain }]);
-    showToast(resolve ? '优选域名已保存并重新解析' : '备注已保存', 'success');
+    showToast(resolve ? '优选域名已保存并重新解析' + (updatedCustomApis ? '，已同步更新 ' + updatedCustomApis + ' 个优选 API' : '') : '备注已保存', 'success');
     return true;
   } catch (error) {
     showToast(error.message, 'error');
@@ -3352,21 +3373,15 @@ function renderSubs() {
     });
 
     hostInput.onchange = () => {
-      const newHost = hostInput.value.trim();
+      const newHost = normalizeSourceKeyClient('subs', hostInput.value);
       if (!newHost || newHost === host) { hostInput.value = host; return; }
+      if (subs[newHost]) { hostInput.value = host; showToast('新订阅源地址已存在', 'error'); return; }
       hostInput.value = host;
       confirmSourceChange({
         title: '确认修改？',
-        message: '保存后，订阅数据将改从新地址获取，原地址不再使用。',
+        message: '保存后，订阅数据将改从新地址获取，已选择此源的优选 API 会同步更新。',
         change: { field: '地址', before: host, after: newHost },
-        onConfirm: () => {
-          const entryCopy = subs[host];
-          if (!entryCopy) return;
-          delete subs[host];
-          subs[newHost] = entryCopy;
-          renderSubs();
-          void queueSubsSave();
-        },
+        onConfirm: () => queueSourceRename('subs', host, newHost),
       });
     };
     hostInput.onkeydown = (event) => {
@@ -3555,6 +3570,42 @@ function queueApisSave() {
   return apisSaveQueue;
 }
 
+async function renameConfiguredSource(type, oldKey, newKey) {
+  try {
+    const result = await readJsonResponse('/api/source-rename', '数据源地址修改', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, oldKey, newKey }),
+    });
+    const data = type === 'subs' ? subs : apis;
+    delete data[oldKey];
+    data[result.key] = result.entry;
+    migrateCustomApiSourceReference(type, oldKey, result.key);
+    if (sourceStatuses[type]?.[oldKey]) {
+      sourceStatuses[type][result.key] = { ...sourceStatuses[type][oldKey], remark: result.entry?.remark || '' };
+      delete sourceStatuses[type][oldKey];
+    }
+    type === 'subs' ? renderSubs() : renderApis();
+    showToast('数据源地址已更新' + (result.updatedCustomApis ? '，已同步更新 ' + result.updatedCustomApis + ' 个优选 API' : ''), 'success');
+    return true;
+  } catch (error) {
+    showToast(error.message || '数据源地址修改失败', 'error');
+    type === 'subs' ? renderSubs() : renderApis();
+    return false;
+  }
+}
+
+function queueSourceRename(type, oldKey, newKey) {
+  if (type === 'subs') {
+    subsSavePending += 1;
+    subsSaveQueue = subsSaveQueue.then(() => renameConfiguredSource(type, oldKey, newKey)).finally(() => { subsSavePending = Math.max(0, subsSavePending - 1); });
+    return subsSaveQueue;
+  }
+  apisSavePending += 1;
+  apisSaveQueue = apisSaveQueue.then(() => renameConfiguredSource(type, oldKey, newKey)).finally(() => { apisSavePending = Math.max(0, apisSavePending - 1); });
+  return apisSaveQueue;
+}
+
 async function loadApis() {
   if ($('apisList')) $('apisList').innerHTML = listSkeletonMarkup();
   try {
@@ -3640,21 +3691,16 @@ function renderApis() {
     });
 
     urlInput.onchange = () => {
-      const newUrl = urlInput.value.trim();
+      const newUrl = normalizeSourceKeyClient('apis', urlInput.value);
       if (!newUrl || newUrl === url) { urlInput.value = url; return; }
+      if (!/^https?:\\/\\//i.test(newUrl)) { urlInput.value = url; showToast('API 地址必须以 http:// 或 https:// 开头', 'error'); return; }
+      if (apis[newUrl]) { urlInput.value = url; showToast('新 API 源地址已存在', 'error'); return; }
       urlInput.value = url;
       confirmSourceChange({
         title: '确认修改？',
-        message: '保存后，数据将改从新地址获取，原地址不再使用。',
+        message: '保存后，数据将改从新地址获取，已选择此源的优选 API 会同步更新。',
         change: { field: '地址', before: url, after: newUrl },
-        onConfirm: () => {
-          const entryCopy = apis[url];
-          if (!entryCopy) return;
-          delete apis[url];
-          apis[newUrl] = entryCopy;
-          renderApis();
-          void queueApisSave();
-        },
+        onConfirm: () => queueSourceRename('apis', url, newUrl),
       });
     };
     urlInput.onkeydown = (event) => {

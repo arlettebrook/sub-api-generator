@@ -263,6 +263,55 @@ test("keeps multiple custom API paths independently usable", async () => {
   }
 });
 
+test("renaming configured sources keeps custom API selections in sync", async () => {
+  const values = {
+    subs: { "old.example": { remark: "旧订阅", enabled: false } },
+    apis: { "https://old-api.example/data": { remark: "旧 API" } },
+    preferred_domains: { "old-domain.example": { domain: "old-domain.example", remark: "旧域名", records: { A: ["1.2.3.4"], AAAA: [], CNAME: [] } } },
+    custom_apis: {
+      selected: {
+        enabled: true,
+        remark: "同步测试",
+        sourceMode: "selected",
+        sources: [
+          { type: "subs", key: "old.example" },
+          { type: "apis", key: "https://old-api.example/data" },
+          { type: "domains", key: "old-domain.example" },
+        ],
+      },
+    },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const rename = (body) => worker.fetch(new Request("https://example.test/api/source-rename", {
+    method: "POST", headers, body: JSON.stringify(body),
+  }), runtime);
+
+  const sub = await rename({ type: "subs", oldKey: "old.example", newKey: "new.example" });
+  assert.equal(sub.status, 200);
+  assert.equal(values.subs["new.example"].remark, "旧订阅");
+  assert.equal(values.subs["new.example"].enabled, false);
+
+  const api = await rename({ type: "apis", oldKey: "https://old-api.example/data", newKey: "https://new-api.example/data" });
+  assert.equal(api.status, 200);
+
+  const domain = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+    method: "POST", headers,
+    body: JSON.stringify({ domain: "new-domain.example", previousDomain: "old-domain.example", remark: "新域名", resolve: false }),
+  }), runtime);
+  assert.equal(domain.status, 200);
+  assert.equal(values.preferred_domains["new-domain.example"].remark, "新域名");
+  assert.equal(values.preferred_domains["new-domain.example"].records.A[0], "1.2.3.4");
+
+  assert.deepEqual(values.custom_apis.selected.sources, [
+    { type: "subs", key: "new.example" },
+    { type: "apis", key: "https://new-api.example/data" },
+    { type: "domains", key: "new-domain.example" },
+  ]);
+  assert.equal(values.custom_apis.selected.remark, "同步测试");
+});
+
 test("reads source status without contacting upstream sources", async () => {
   const values = {
     subs: { "status-read-only.example": { remark: "只读状态测试" } },

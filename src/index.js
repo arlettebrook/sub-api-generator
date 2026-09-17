@@ -23,6 +23,7 @@ import {
   isPlainObject,
   readJsonObject as readPagesJsonObject,
   SOURCE_MODE_SELECTED,
+  validateConfigPayload,
   validateApiPathPayload,
   validateBlacklistPayload,
   validateFilterRulesPayload,
@@ -238,6 +239,78 @@ async function handlePostSubs(request, env) {
   return pagesJsonResponse({ ok: true });
 }
 
+function migrateCustomApiSourceReferences(data, type, oldKey, newKey) {
+  if (!isPlainObject(data)) return { data, updated: 0 };
+  let updated = 0;
+  const migrated = {};
+  for (const [path, rawEntry] of Object.entries(data)) {
+    if (!isPlainObject(rawEntry) || !Array.isArray(rawEntry.sources)) {
+      migrated[path] = rawEntry;
+      continue;
+    }
+    let changed = false;
+    const seen = new Set();
+    const sources = [];
+    for (const rawSource of rawEntry.sources) {
+      let source = rawSource;
+      if (isPlainObject(rawSource) && rawSource.type === type && normalizeSourceKey(type, rawSource.key) === oldKey) {
+        source = { ...rawSource, key: newKey };
+        changed = true;
+      }
+      if (isPlainObject(source) && typeof source.type === "string" && typeof source.key === "string") {
+        const identity = `${source.type}:${normalizeSourceKey(source.type, source.key)}`;
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+      }
+      sources.push(source);
+    }
+    migrated[path] = changed ? { ...rawEntry, sources } : rawEntry;
+    if (changed) updated += 1;
+  }
+  return { data: migrated, updated };
+}
+
+async function handleRenameSource(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  const type = body?.type;
+  if (!["subs", "apis"].includes(type)) return pagesTextResponse("数据源类型无效", 400);
+  const oldKey = normalizeSourceKey(type, body?.oldKey);
+  const newKey = normalizeSourceKey(type, body?.newKey);
+  if (!oldKey || !newKey) return pagesTextResponse("数据源地址不能为空", 400);
+  if (type === "apis" && !/^https?:\/\//i.test(newKey)) return pagesTextResponse("API 地址必须以 http:// 或 https:// 开头", 400);
+
+  const kvKey = type === "subs" ? KV_KEY_SUBS : KV_KEY_APIS;
+  const [rawSources, rawCustomApis, rawStatuses] = await Promise.all([
+    env.KV.get(kvKey, "json"),
+    env.KV.get(KV_KEY_CUSTOM_APIS, "json"),
+    env.KV.get(KV_KEY_SOURCE_STATUS, "json"),
+  ]);
+  const sources = normalizeKvData(rawSources, type);
+  if (!Object.prototype.hasOwnProperty.call(sources, oldKey)) return pagesTextResponse("原数据源不存在", 404);
+  if (oldKey !== newKey && Object.prototype.hasOwnProperty.call(sources, newKey)) return pagesTextResponse("新数据源地址已存在", 409);
+  if (oldKey === newKey) return pagesJsonResponse({ ok: true, oldKey, key: newKey, entry: sources[oldKey], updatedCustomApis: 0 });
+
+  const nextSources = { ...sources, [newKey]: sources[oldKey] };
+  delete nextSources[oldKey];
+  let validatedSources;
+  try { validatedSources = validateConfigPayload(nextSources, type); } catch (error) { return pagesTextResponse(error.message, 400); }
+
+  const customApis = migrateCustomApiSourceReferences(rawCustomApis, type, oldKey, newKey);
+  const statuses = isPlainObject(rawStatuses) ? { ...rawStatuses } : {};
+  if (isPlainObject(statuses[type]) && Object.prototype.hasOwnProperty.call(statuses[type], oldKey)) {
+    statuses[type] = { ...statuses[type], [newKey]: { ...statuses[type][oldKey], remark: validatedSources[newKey]?.remark || "" } };
+    delete statuses[type][oldKey];
+  }
+  await Promise.all([
+    env.KV.put(kvKey, JSON.stringify(validatedSources)),
+    ...(customApis.updated ? [env.KV.put(KV_KEY_CUSTOM_APIS, JSON.stringify(customApis.data))] : []),
+    env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(statuses)),
+  ]);
+  subscriptions.clearAggregateCache();
+  return pagesJsonResponse({ ok: true, oldKey, key: newKey, entry: validatedSources[newKey], updatedCustomApis: customApis.updated });
+}
+
 async function handleGetApis(env) {
   const data = await env.KV.get(KV_KEY_APIS, "json");
   return pagesJsonResponse(normalizeKvData(data, "apis"));
@@ -325,12 +398,19 @@ async function handlePostPreferredDomain(request, env) {
   try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
   let domain;
   try { domain = normalizePreferredDomain(body?.domain); } catch (error) { return pagesTextResponse(error.message, 400); }
+  let previousDomain = "";
+  if (body?.previousDomain) {
+    try { previousDomain = normalizePreferredDomain(body.previousDomain); } catch (error) { return pagesTextResponse(error.message, 400); }
+    if (previousDomain === domain) previousDomain = "";
+  }
   const current = await env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json");
   const configured = isPlainObject(current) ? current : {};
-  if (!Object.prototype.hasOwnProperty.call(configured, domain) && Object.keys(configured).length >= MAX_CONFIG_ENTRIES) {
+  if (previousDomain && !Object.prototype.hasOwnProperty.call(configured, previousDomain)) return pagesTextResponse("原优选域名不存在", 404);
+  if (previousDomain && Object.prototype.hasOwnProperty.call(configured, domain)) return pagesTextResponse("新优选域名已存在", 409);
+  if (!previousDomain && !Object.prototype.hasOwnProperty.call(configured, domain) && Object.keys(configured).length >= MAX_CONFIG_ENTRIES) {
     return pagesTextResponse(`优选域名不能超过 ${MAX_CONFIG_ENTRIES} 个`, 400);
   }
-  const previous = isPlainObject(configured[domain]) ? configured[domain] : null;
+  const previous = isPlainObject(configured[domain]) ? configured[domain] : previousDomain && isPlainObject(configured[previousDomain]) ? configured[previousDomain] : null;
   if (body?.enabled !== undefined && typeof body.enabled !== "boolean") {
     return pagesTextResponse("启用状态必须是布尔值", 400);
   }
@@ -371,10 +451,18 @@ async function handlePostPreferredDomain(request, env) {
     subscriptions.recordPreferredDomainStatus(domain, result, Date.now() - startedAt);
   }
   configured[domain] = entry;
-  await env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured));
+  let migratedCustomApis = { data: null, updated: 0 };
+  if (previousDomain) {
+    delete configured[previousDomain];
+    migratedCustomApis = migrateCustomApiSourceReferences(await env.KV.get(KV_KEY_CUSTOM_APIS, "json"), "domains", previousDomain, domain);
+  }
+  await Promise.all([
+    env.KV.put(KV_KEY_PREFERRED_DOMAINS, JSON.stringify(configured)),
+    ...(migratedCustomApis.updated ? [env.KV.put(KV_KEY_CUSTOM_APIS, JSON.stringify(migratedCustomApis.data))] : []),
+  ]);
   const snapshot = subscriptions.getSourceStatuses(await env.KV.get(KV_KEY_SUBS, "json"), await env.KV.get(KV_KEY_APIS, "json"), configured);
   await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
-  return pagesJsonResponse(entry);
+  return pagesJsonResponse(previousDomain ? { ...entry, updatedCustomApis: migratedCustomApis.updated } : entry);
 }
 
 async function handleDeletePreferredDomainsBatch(request, env) {
@@ -1242,6 +1330,9 @@ export default {
           if (method === "GET") return await handleGetApis(env);
           if (method === "POST") return await handlePostApis(request, env);
           return pagesMethodNotAllowed("GET, POST");
+        case "/api/source-rename":
+          if (method === "POST") return await handleRenameSource(request, env);
+          return pagesMethodNotAllowed("POST");
         case "/api/source-status":
           if (method === "GET") return await handleGetSourceStatuses(env);
           return pagesMethodNotAllowed("GET");
