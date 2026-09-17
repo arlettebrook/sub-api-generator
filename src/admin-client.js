@@ -3296,7 +3296,10 @@ async function loadSubs() {
       if (typeof data[key] === 'boolean') {
         data[key] = { remark: '' };
       } else if (data[key] && typeof data[key] === 'object') {
-        data[key] = { remark: typeof data[key].remark === 'string' ? data[key].remark : '' };
+        data[key] = {
+          remark: typeof data[key].remark === 'string' ? data[key].remark : '',
+          ...(typeof data[key].enabled === 'boolean' ? { enabled: data[key].enabled } : {}),
+        };
       }
     }
     subs = data;
@@ -3614,7 +3617,10 @@ async function loadApis() {
       if (typeof data[key] === 'boolean') {
         data[key] = { remark: '' };
       } else if (data[key] && typeof data[key] === 'object') {
-        data[key] = { remark: typeof data[key].remark === 'string' ? data[key].remark : '' };
+        data[key] = {
+          remark: typeof data[key].remark === 'string' ? data[key].remark : '',
+          ...(typeof data[key].enabled === 'boolean' ? { enabled: data[key].enabled } : {}),
+        };
       }
     }
     apis = data;

@@ -263,6 +263,10 @@ test("keeps multiple custom API paths independently usable", async () => {
   }
 });
 
+test("keeps source enabled state when loading the admin configuration", () => {
+  assert.equal((adminClientScript.match(/typeof data\[key\]\.enabled === 'boolean'/g) || []).length, 2);
+});
+
 test("renaming configured sources keeps custom API selections in sync", async () => {
   const values = {
     subs: { "old.example": { remark: "旧订阅", enabled: false } },
