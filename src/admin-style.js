@@ -3348,6 +3348,33 @@ export const adminStyle = `
     white-space: normal;
   }
 
+  /* 过滤节点的分类标题：黑名单、备注规则各成一组。 */
+  .source-raw-filter-category {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 10px 0 2px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .source-raw-filter-category:first-child {
+    margin-top: 0;
+  }
+
+  .source-raw-filter-category strong {
+    font-weight: 600;
+  }
+
+  .source-raw-filter-category span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
   .source-raw-node-rule {
     justify-self: start;
     max-width: 100%;
@@ -3366,6 +3393,13 @@ export const adminStyle = `
     border-color: var(--border-hover);
     background: var(--bg-tertiary);
     color: var(--text-tertiary);
+  }
+
+  /* 备注规则命中的节点仍会输出，用中性偏提示的配色和“被移除”的原因区分开。 */
+  .source-raw-node-rule.is-remark {
+    border-color: color-mix(in srgb, var(--primary) 35%, var(--border-color));
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
   }
 
   .source-raw-node-source {

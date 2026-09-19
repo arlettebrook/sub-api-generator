@@ -1316,10 +1316,14 @@ function renderSourceRawHistoryDialog() {
       const nodes = (Array.isArray(source.nodes) ? source.nodes : []).filter((node) => sourceRawHistoryDialogVisible.includes(node));
       if (!nodes.length) return '';
       const groupId = sourceGroupId(source.type, source.key);
-      const lines = nodes.map((node) => {
-        const detail = detailFor(groupId, node);
-        const reason = sourceRawFilterReasonLabel(detail);
-        return reason ? node + '  ← ' + reason : node;
+      const lines = [];
+      // 与查看弹窗保持一致：黑名单、备注规则等分类分别成组展示。
+      groupSourceRawFilteredNodes(nodes, (node) => detailFor(groupId, node)).forEach(([category, list]) => {
+        lines.push('【' + sourceRawFilterCategoryLabel(category) + '】');
+        list.forEach((node) => {
+          const reason = sourceRawFilterReasonLabel(detailFor(groupId, node));
+          lines.push(reason ? node + '  ← ' + reason : node);
+        });
       });
       return sourceGroupLabelFromMeta(source, true) + '\\n' + lines.join('\\n');
     }).filter(Boolean);
@@ -1365,11 +1369,19 @@ function renderSourceRawHistoryDialog() {
   }
   if (sourceRawHistoryDialogTab === 'filtered') {
     const details = buildSourceRawFilterDetails(item.filterDetails);
-    const suffixByNode = new Map();
-    details.forEach((map) => map.forEach((detail, node) => { if (!suffixByNode.has(node)) suffixByNode.set(node, sourceRawFilterReasonLabel(detail)); }));
-    content.textContent = sourceRawHistoryDialogVisible
-      .map((node) => (suffixByNode.get(node) ? node + '  ← ' + suffixByNode.get(node) : node))
-      .join('\\n');
+    const detailFor = (node) => {
+      for (const map of details.values()) if (map.has(node)) return map.get(node);
+      return null;
+    };
+    const lines = [];
+    groupSourceRawFilteredNodes(sourceRawHistoryDialogVisible, detailFor).forEach(([category, list]) => {
+      lines.push('【' + sourceRawFilterCategoryLabel(category) + '】');
+      list.forEach((node) => {
+        const reason = sourceRawFilterReasonLabel(detailFor(node));
+        lines.push(reason ? node + '  ← ' + reason : node);
+      });
+    });
+    content.textContent = lines.join('\\n');
     return;
   }
   content.textContent = sourceRawHistoryDialogVisible.join('\\n');
@@ -1736,6 +1748,41 @@ function sourceRawFilterReasonLabel(detail) {
     case 'remark': return detail.rule ? '备注规则：' + detail.rule : '备注规则命中';
     default: return '已过滤';
   }
+}
+
+// 过滤节点的分类顺序：黑名单与备注规则各自成组，重复和格式问题单独归类。
+const SOURCE_RAW_FILTER_CATEGORIES = [
+  { key: 'blacklist', label: '黑名单', match: (reason) => reason === 'blacklist' },
+  { key: 'remark', label: '备注规则', match: (reason) => reason === 'remark' },
+  { key: 'duplicate', label: '重复节点', match: (reason) => reason === 'duplicate' || reason === 'cross-duplicate' },
+  { key: 'invalid', label: '格式无效', match: (reason) => reason === 'invalid' },
+  { key: 'other', label: '其他', match: () => true },
+];
+
+function sourceRawFilterCategoryKey(detail) {
+  const reason = String(detail?.reason || '');
+  const found = SOURCE_RAW_FILTER_CATEGORIES.find((item) => item.match(reason));
+  return found ? found.key : 'other';
+}
+
+function sourceRawFilterCategoryLabel(key) {
+  const found = SOURCE_RAW_FILTER_CATEGORIES.find((item) => item.key === key);
+  return found ? found.label : '其他';
+}
+
+// 按分类归拢过滤节点，保持配置里的分类顺序和节点原有顺序。
+function groupSourceRawFilteredNodes(nodes, resolveDetail) {
+  const buckets = new Map();
+  (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+    const detail = typeof resolveDetail === 'function' ? resolveDetail(node) : null;
+    const key = sourceRawFilterCategoryKey(detail);
+    const list = buckets.get(key);
+    if (list) list.push(node);
+    else buckets.set(key, [node]);
+  });
+  return SOURCE_RAW_FILTER_CATEGORIES
+    .map((category) => [category.key, buckets.get(category.key) || []])
+    .filter(([, list]) => list.length);
 }
 
 function sourceGroupShortName(key) {
@@ -4158,7 +4205,7 @@ function renderSourceRawCacheStatus(text, state = '') {
 function renderSourceRawProcess(stats = {}) {
   const el = $('sourceRawProcess');
   if (!el) return;
-  const items = [['上游返回', stats.inputCount || 0], ['格式无效', stats.invalidCount || 0], ['黑名单过滤', stats.blacklistedCount || 0], ['重复节点', stats.duplicateCount || 0], ['最终保留', stats.outputCount || 0]];
+  const items = [['上游返回', stats.inputCount || 0], ['格式无效', stats.invalidCount || 0], ['黑名单过滤', stats.blacklistedCount || 0], ['重复节点', stats.duplicateCount || 0], ['备注清理', stats.remarkCount || 0], ['最终保留', stats.outputCount || 0]];
   el.innerHTML = items.map(([label, value]) => '<span><b>' + value + '</b>' + label + '</span>').join('');
 }
 
@@ -4247,13 +4294,30 @@ function renderSourceRawResults(view = sourceRawTab) {
         const detail = sourceRawFilterDetailFor(groupId, node);
         if (detail) {
           const rule = document.createElement('span');
-          rule.className = 'source-raw-node-rule' + (detail.rule ? '' : ' is-generic');
+          // 备注规则只是清理备注、节点仍会输出，用不同配色与黑名单/重复区分。
+          rule.className = 'source-raw-node-rule' + (detail.rule ? '' : ' is-generic') + (detail.reason === 'remark' ? ' is-remark' : '');
           rule.textContent = sourceRawFilterReasonLabel(detail);
           rule.title = rule.textContent;
           line.appendChild(rule);
         }
       }
       return line;
+    };
+    // 过滤节点按原因分类展示：分类标题 + 该分类下的节点，节点旁仍标注命中的具体规则。
+    const renderFilteredCategory = (container, key, nodes, groupId) => {
+      const header = document.createElement('div');
+      header.className = 'source-raw-filter-category';
+      const label = document.createElement('strong');
+      label.textContent = sourceRawFilterCategoryLabel(key);
+      const total = document.createElement('span');
+      total.textContent = nodes.length + ' 条';
+      header.append(label, total);
+      container.appendChild(header);
+      nodes.forEach((node) => container.appendChild(renderNode(node, groupId)));
+    };
+    const renderFilteredNodes = (container, nodes, groupId) => {
+      groupSourceRawFilteredNodes(nodes, (node) => sourceRawFilterDetailFor(groupId, node))
+        .forEach(([key, list]) => renderFilteredCategory(container, key, list, groupId));
     };
     if (showSources) {
       const groups = new Map();
@@ -4377,12 +4441,16 @@ function renderSourceRawResults(view = sourceRawTab) {
         heading.onclick = toggle;
         heading.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } };
         group.appendChild(sourceHeader);
-        if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node, id)));
+        if (!collapsed) {
+          if (filteredMode) renderFilteredNodes(group, groupNodes, id);
+          else groupNodes.forEach((node) => group.appendChild(renderNode(node, id)));
+        }
         fragment.appendChild(group);
       });
     } else {
       const flatGroupId = sourceRawSelection ? sourceGroupId(sourceRawSelection.type, sourceRawSelection.key) : '';
-      visible.forEach((node) => fragment.appendChild(renderNode(node, flatGroupId)));
+      if (filteredMode) renderFilteredNodes(fragment, visible, flatGroupId);
+      else visible.forEach((node) => fragment.appendChild(renderNode(node, flatGroupId)));
     }
     if (fragment.childNodes.length) content.appendChild(fragment);
     else content.textContent = allNodes.length ? '没有匹配的数据。' : emptyText;

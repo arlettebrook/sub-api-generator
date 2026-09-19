@@ -481,10 +481,12 @@ test("previews a source with nodes, raw content, and filtering statistics", asyn
 test("reports which rule filtered each node", async () => {
   const apiKey = "https://filter-reason.example/data";
   const apiKey2 = "https://filter-reason-second.example/data";
+  const remarkApiKey = "https://filter-reason-remark.example/data";
   const subKey = "reason.example.com";
+  const subRemarkKey = "reason-remark.example.com";
   const values = {
-    subs: { [subKey]: { remark: "订阅源" } },
-    apis: { [apiKey]: { remark: "API 源" }, [apiKey2]: { remark: "API 源二" } },
+    subs: { [subKey]: { remark: "订阅源" }, [subRemarkKey]: { remark: "备注清理订阅源" } },
+    apis: { [apiKey]: { remark: "API 源" }, [apiKey2]: { remark: "API 源二" }, [remarkApiKey]: { remark: "备注清理源" } },
     blacklist: ["Ad-Node"],
     custom_apis: {
       reason_preview: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: apiKey }, { type: "apis", key: apiKey2 }] },
@@ -498,6 +500,7 @@ test("reports which rule filtered each node", async () => {
   globalThis.fetch = async (resource) => {
     const url = String(resource);
     if (url.includes("/sub?host=")) return new Response(btoa([subLine, subLine].join("\n")), { status: 200 });
+    if (url.includes("filter-reason-remark")) return new Response("6.6.6.6:443#A|B", { status: 200 });
     return new Response("1.1.1.1:443#ok\n2.2.2.2:443#ad-node-1", { status: 200 });
   };
   const preview = (body) => worker.fetch(new Request("https://example.test/api/source-raw", {
@@ -523,6 +526,29 @@ test("reports which rule filtered each node", async () => {
     assert.deepEqual(subResult.filterDetails, [
       { type: "subs", key: subKey, node: "43.129.217.38:443#dup", reason: "duplicate", rule: "" },
     ]);
+
+    // 备注规则：命中的节点仍然输出截断后的备注，同时在过滤节点里标注命中的规则
+    const remarkPreview = await preview({ type: "apis", key: remarkApiKey, filterRules: ["|"] });
+    assert.equal(remarkPreview.status, 200);
+    const remarkResult = await remarkPreview.json();
+    assert.deepEqual(remarkResult.nodes, ["6.6.6.6:443#A"]);
+    assert.deepEqual(remarkResult.filteredNodes, ["6.6.6.6:443#A|B"]);
+    assert.deepEqual(remarkResult.filterDetails, [
+      { type: "apis", key: remarkApiKey, node: "6.6.6.6:443#A|B", reason: "remark", rule: "|" },
+    ]);
+    assert.equal(remarkResult.status.filterStats.remarkCount, 1);
+
+    // 订阅源同样会把备注命中的节点与规则带进过滤节点，两个来源行清理后重复的节点仍标记为重复
+    const subRemarkPreview = await preview({ type: "subs", key: subRemarkKey, filterRules: ["dup"] });
+    assert.equal(subRemarkPreview.status, 200);
+    const subRemarkResult = await subRemarkPreview.json();
+    assert.deepEqual(subRemarkResult.nodes, ["43.129.217.38:443"]);
+    assert.deepEqual(subRemarkResult.filteredNodes, ["43.129.217.38:443", "43.129.217.38:443#dup"]);
+    assert.deepEqual(subRemarkResult.filterDetails, [
+      { type: "subs", key: subRemarkKey, node: "43.129.217.38:443", reason: "duplicate", rule: "" },
+      { type: "subs", key: subRemarkKey, node: "43.129.217.38:443#dup", reason: "remark", rule: "dup" },
+    ]);
+    assert.equal(subRemarkResult.status.filterStats.remarkCount, 1);
 
     // 优选 API：跨来源重复的节点归回后出现的来源，并标记为与其他来源重复
     const customPreview = await worker.fetch(new Request("https://example.test/api/custom-api-preview", {
@@ -579,11 +605,17 @@ test("applies view-only blacklist and remark filters without touching global con
     assert.equal(localPreview.status, 200);
     const localResult = await localPreview.json();
     assert.deepEqual(localResult.nodes, ["2.2.2.2:443#global-block", "3.3.3.3:443", "4.4.4.4:443#ok"]);
-    assert.deepEqual(localResult.filteredNodes, ["1.1.1.1:443#local-block"]);
+    // 备注被“高速”截断的节点仍会输出，但会带着命中的规则出现在过滤节点里。
+    assert.deepEqual(localResult.filteredNodes, ["1.1.1.1:443#local-block", "3.3.3.3:443#高速官网地址"]);
+    assert.deepEqual(localResult.filterDetails, [
+      { type: "apis", key: overrideKey, node: "1.1.1.1:443#local-block", reason: "blacklist", rule: "local-block" },
+      { type: "apis", key: overrideKey, node: "3.3.3.3:443#高速官网地址", reason: "remark", rule: "高速" },
+    ]);
     assert.deepEqual(localResult.unfilteredNodes, upstream.split("\n"));
     assert.equal(localResult.localFilterOverride, true);
     assert.equal(localResult.status.state, "success");
     assert.equal(localResult.status.filterStats.blacklistedCount, 1);
+    assert.equal(localResult.status.filterStats.remarkCount, 1);
 
     // 空数组覆盖表示“本次查看不过滤”，而不是回退到全局规则
     const emptyPreview = await preview({ type: "apis", key: emptyKey, blacklist: [], filterRules: [] });
@@ -692,7 +724,7 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
     assert.deepEqual(result.filteredNodes, ["8.8.8.8:443#blocked"]);
     assert.deepEqual(result.filteredSources, [{ type: "apis", key: sourceKey, remark: "API 源", nodes: ["8.8.8.8:443#blocked"] }]);
     assert.deepEqual(result.unfilteredNodes, ["9.9.9.9:443#custom", "8.8.8.8:443#blocked"]);
-    assert.deepEqual(result.rawSources, [{ type: "apis", key: sourceKey, remark: "API 源", nodes: ["9.9.9.9:443#custom", "8.8.8.8:443#blocked"], filterStats: { inputCount: 2, outputCount: 1, invalidCount: 0, blacklistedCount: 1, duplicateCount: 0 } }]);
+    assert.deepEqual(result.rawSources, [{ type: "apis", key: sourceKey, remark: "API 源", nodes: ["9.9.9.9:443#custom", "8.8.8.8:443#blocked"], filterStats: { inputCount: 2, outputCount: 1, invalidCount: 0, blacklistedCount: 1, duplicateCount: 0, remarkCount: 0 } }]);
     assert.deepEqual(result.sourceMeta, [{ type: "apis", key: sourceKey, remark: "API 源" }]);
     assert.deepEqual(result.nodeSources, [{ value: "9.9.9.9:443#custom", type: "apis", key: sourceKey, remark: "API 源" }]);
     const second = await request();

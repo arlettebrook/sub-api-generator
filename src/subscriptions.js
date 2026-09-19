@@ -65,34 +65,57 @@ async function fetchWithTimeout(resource, options = {}, timeoutMs = OUTBOUND_TIM
   }
 }
 
-function cleanPreferredRemark(value, filterRules = []) {
-  let remark = value;
+// 备注过滤规则命中判定：文本/空格规则会在命中位置截断，“符号”规则会移除符号。
+// 返回清理后的备注与命中的规则名，便于在“过滤节点”里标注是哪条规则清理了备注。
+function matchRemarkRules(value, filterRules = []) {
+  let remark = String(value ?? "");
   if (remark.includes("%")) {
     try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
   }
+  const hits = [];
   let cutIndex = -1;
+  let cutRule = "";
   for (const rule of filterRules) {
     if (rule === "符号") continue;
     const index = rule === "空格" ? remark.search(/\s/u) : remark.toLowerCase().indexOf(rule.toLowerCase());
-    if (index >= 0 && (cutIndex < 0 || index < cutIndex)) cutIndex = index;
+    if (index >= 0 && (cutIndex < 0 || index < cutIndex)) { cutIndex = index; cutRule = rule; }
   }
-  if (cutIndex >= 0) remark = remark.slice(0, cutIndex);
-  if (filterRules.includes("符号")) remark = remark.replace(REMARK_SYMBOL_REGEX, "");
-  return remark.trim();
+  if (cutIndex >= 0) {
+    hits.push(cutRule);
+    remark = remark.slice(0, cutIndex);
+  }
+  if (filterRules.includes("符号")) {
+    const stripped = remark.replace(REMARK_SYMBOL_REGEX, "");
+    if (stripped !== remark) hits.push("符号");
+    remark = stripped;
+  }
+  return { remark: remark.trim(), rule: hits.join("、") };
 }
 
-function parsePreferredIpLine(line, filterRules = DEFAULT_FILTER_RULES) {
+function cleanPreferredRemark(value, filterRules = []) {
+  return matchRemarkRules(value, filterRules).remark;
+}
+
+// 解析订阅源节点，同时给出原始节点和备注命中的规则，供“过滤节点”展示使用。
+function parsePreferredIpLineDetail(line, filterRules = DEFAULT_FILTER_RULES) {
   if (!line.includes(FIXED_UUID) || !line.includes(FIXED_HOST)) return null;
   const addressMatch = NODE_ADDRESS_REGEX.exec(line);
   if (!addressMatch) return null;
 
-  let result = addressMatch[1];
+  const node = addressMatch[1];
   const remarkMatch = NODE_REMARK_REGEX.exec(line);
-  if (remarkMatch) {
-    const remark = cleanPreferredRemark(remarkMatch[1], filterRules);
-    result += `#${remark}`;
-  }
-  return result;
+  const rawRemark = remarkMatch ? remarkMatch[1] : "";
+  const detail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "" };
+  return {
+    value: remarkMatch ? `${node}#${detail.remark}` : node,
+    original: remarkMatch ? `${node}#${rawRemark}` : node,
+    rule: detail.rule,
+  };
+}
+
+function parsePreferredIpLine(line, filterRules = DEFAULT_FILTER_RULES) {
+  const parsed = parsePreferredIpLineDetail(line, filterRules);
+  return parsed ? parsed.value : null;
 }
 
 function decodeSubscriptionBody(content) {
@@ -118,14 +141,26 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
   const rawContent = decodeSubscriptionBody(response.content);
   const result = [];
   const unfilteredNodes = [];
+  const filteredNodes = [];
+  const filterDetails = [];
+  const remarkSeen = new Set();
   for (const line of rawContent.split(/\r?\n/)) {
     const unfiltered = parsePreferredIpLine(line, []);
     if (unfiltered) unfilteredNodes.push(unfiltered);
-    const parsed = parsePreferredIpLine(line, filterRules);
-    if (parsed) result.push(parsed);
+    const parsed = parsePreferredIpLineDetail(line, filterRules);
+    if (!parsed) continue;
+    result.push(parsed.value);
+    // 备注被规则清理过的节点仍然输出（保留截断后的备注），但会在“过滤节点”里标注命中的规则。
+    if (parsed.rule && !remarkSeen.has(parsed.original)) {
+      remarkSeen.add(parsed.original);
+      filteredNodes.push(parsed.original);
+      filterDetails.push({ node: parsed.original, reason: "remark", rule: parsed.rule });
+    }
   }
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
   Object.defineProperty(result, "unfilteredNodes", { value: unfilteredNodes, enumerable: false });
+  Object.defineProperty(result, "filteredNodes", { value: filteredNodes, enumerable: false });
+  Object.defineProperty(result, "filterDetails", { value: filterDetails, enumerable: false });
   return result;
 }
 
@@ -468,7 +503,7 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
   const result = [];
   const filteredNodes = [];
   const filterDetails = [];
-  const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
+  const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, remarkCount: 0, outputCount: 0 };
   for (const value of lines) {
     stats.inputCount += 1;
     if (!value) { stats.invalidCount += 1; continue; }
@@ -484,8 +519,15 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
       result.push(value);
       continue;
     }
-    const remark = cleanPreferredRemark(value.slice(hashIndex + 1), filterRules);
-    result.push(`${value.slice(0, hashIndex)}${remark ? `#${remark}` : ""}`);
+    const detail = matchRemarkRules(value.slice(hashIndex + 1), filterRules);
+    if (detail.rule) {
+      // 备注被规则清理过的节点仍然输出，但会在“过滤节点”里标注命中的规则。
+      stats.remarkCount += 1;
+      const node = String(value).trim();
+      filteredNodes.push(node);
+      filterDetails.push({ node, reason: "remark", rule: detail.rule });
+    }
+    result.push(`${value.slice(0, hashIndex)}${detail.remark ? `#${detail.remark}` : ""}`);
   }
   stats.outputCount = result.length;
   Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
@@ -499,7 +541,7 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
   const filteredNodes = [];
   const filterDetails = [];
   const seen = new Set();
-  const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
+  const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, remarkCount: 0, outputCount: 0 };
   const normalizedBlacklist = normalizeBlacklist(blacklist);
   const blacklistRegex = preparedRegex || getBlacklistRegex(normalizedBlacklist);
   for (const value of lines) {
@@ -518,13 +560,21 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
       filterDetails.push({ node: rawFull, reason: "blacklist", rule: findBlacklistMatch(rawFull, normalizedBlacklist) });
       continue;
     }
-    const remark = rawRemark ? cleanPreferredRemark(rawRemark, filterRules) : "";
+    const remarkDetail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "" };
+    const remark = remarkDetail.remark;
     const cleaned = remark ? `${node}#${remark}` : node;
     if (seen.has(cleaned)) {
       stats.duplicateCount += 1;
       filteredNodes.push(cleaned);
       filterDetails.push({ node: cleaned, reason: "duplicate", rule: "" });
       continue;
+    }
+    if (remarkDetail.rule) {
+      // 备注被规则清理过的节点仍然输出，但会在“过滤节点”里标注命中的规则。
+      stats.remarkCount += 1;
+      const original = `${node}#${rawRemark}`;
+      filteredNodes.push(original);
+      filterDetails.push({ node: original, reason: "remark", rule: remarkDetail.rule });
     }
     seen.add(cleaned);
     result.push(cleaned);
@@ -749,6 +799,15 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         try {
           const rawValues = await fetchPreferredSubs(host, filterRules);
           const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
+          // 订阅源在 fetchPreferredSubs 里已按备注规则清理过，这里补回“备注被清理”的节点与规则。
+          const remarkNodes = rawValues.filteredNodes || [];
+          const remarkDetails = rawValues.filterDetails || [];
+          const filteredNodes = [...new Set([...(values.filteredNodes || []), ...remarkNodes])];
+          const filterDetails = [...(values.filterDetails || []), ...remarkDetails];
+          const filterStats = {
+            ...(values.filterStats || {}),
+            remarkCount: (Number(values.filterStats?.remarkCount) || 0) + remarkDetails.length,
+          };
           const timestamp = new Date().toISOString();
           recordStatus("subs", host, {
             state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
@@ -765,7 +824,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterDetails: values.filterDetails || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes, filterDetails, filterStats };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "subs";
@@ -881,7 +940,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       .map((result) => ({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.unfilteredNodes || [], ...(result.value.type === "domains" ? { records: result.value.records || {} } : {}), filterStats: result.value.filterStats || null }));
 
     const preferred = [];
-    const filterStats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
+    const filterStats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, remarkCount: 0, outputCount: 0 };
     const nodeSources = [];
     const sourceErrors = [];
     const filteredSources = [];
@@ -1002,7 +1061,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
 
 function mergeFilterStats(target, stats) {
   if (!stats || typeof stats !== "object") return;
-  for (const key of ["inputCount", "invalidCount", "blacklistedCount", "duplicateCount", "outputCount"]) {
+  for (const key of ["inputCount", "invalidCount", "blacklistedCount", "duplicateCount", "remarkCount", "outputCount"]) {
     target[key] = (target[key] || 0) + (Number(stats[key]) || 0);
   }
 }

@@ -259,6 +259,8 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
   await page.locator('[data-source-raw-tab="filtered"]').click();
   await expect(page.locator("#sourceRawFilteredContent")).toContainText("2.2.2.2:443#api");
+  // 过滤节点按原因分类展示，黑名单单独成组。
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["黑名单"]);
   // 过滤节点旁标注命中的规则（默认黑名单为空，这里展示本次查看的独立规则）
   await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("黑名单：2.2.2.2");
   await expect(page.locator("#sourceRawFilterStatus")).toContainText("仅对当前查看生效");
@@ -271,6 +273,19 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
   await page.locator('[data-source-raw-tab="nodes"]').click();
   await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443#api");
+
+  // 备注规则命中的节点会出现在“过滤节点”里并标注命中的规则，节点本身仍按截断后的备注输出。
+  await page.locator("#sourceRawFilterRulesInput").fill("api");
+  await expect(page.locator("#sourceRawFilterRulesMeta")).toHaveText("1 条");
+  await page.locator("#applySourceRawFiltersButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();
+  await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443");
+  await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
+  await page.locator('[data-source-raw-tab="filtered"]').click();
+  await expect(page.locator("#sourceRawFilteredContent")).toContainText("2.2.2.2:443#api");
+  // 备注规则命中的节点归入“备注规则”分类。
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["备注规则"]);
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("备注规则：api");
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
 });
