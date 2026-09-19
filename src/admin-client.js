@@ -1841,15 +1841,19 @@ function sourceGroupStatsText(stats) {
     + (stats.remark ? ' · 备注清理 ' + stats.remark : '');
 }
 
-// 按来源分组统计过滤原因：备注清理的节点仍会输出，单独计数，不和被丢弃的节点混在一起。
+// 按来源分组统计过滤原因：备注清理的节点仍会输出，单独计数；跨来源重复的节点已从「保留」里扣除。
 function sourceRawFilterCountsByGroup(details) {
   const counts = new Map();
   (Array.isArray(details) ? details : []).forEach((detail) => {
     const id = sourceGroupId(detail?.type, detail?.key);
     if (!id) return;
-    const entry = counts.get(id) || { filtered: 0, remark: 0 };
+    const entry = counts.get(id) || { filtered: 0, remark: 0, cross: 0 };
     if (detail?.reason === 'remark') entry.remark += 1;
-    else entry.filtered += 1;
+    else {
+      entry.filtered += 1;
+      // 跨来源重复是聚合阶段去掉的，保留数要按每条实际输出扣掉一次。
+      if (detail?.reason === 'cross-duplicate') entry.cross += 1;
+    }
     counts.set(id, entry);
   });
   return counts;
@@ -4816,7 +4820,8 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
         const counts = filterCountsByGroup.get(id);
         sourceRawSourceStats.set(id, {
           raw: values.length,
-          kept: Number(filterStats.outputCount ?? values.length) || 0,
+          // 保留 = 该来源真正进入输出的节点数（扣掉聚合阶段按跨来源重复去掉的那些）。
+          kept: Math.max(0, (Number(filterStats.outputCount ?? values.length) || 0) - (counts ? counts.cross : 0)),
           // 备注清理的节点仍会输出，从“过滤”里拆出来单独展示，避免出现 保留 + 过滤 > 原始 的错觉。
           filtered: counts ? counts.filtered : Math.max(0, filteredCount - (Number(filterStats.remarkCount) || 0)),
           remark: counts ? counts.remark : (Number(filterStats.remarkCount) || 0),

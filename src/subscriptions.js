@@ -93,10 +93,6 @@ function matchRemarkRules(value, filterRules = []) {
   return { remark: remark.trim(), rule: hits.join("、"), original };
 }
 
-function cleanPreferredRemark(value, filterRules = []) {
-  return matchRemarkRules(value, filterRules).remark;
-}
-
 // 上游备注常用百分号编码（例如 %20%5BSG%5D），展示时解码，失败则保留原文。
 function decodeRemarkForDisplay(value) {
   const text = String(value ?? "");
@@ -160,11 +156,21 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
   const filteredNodes = [];
   const filterDetails = [];
   const remarkSeen = new Set();
+  let invalidCount = 0;
   for (const line of rawContent.split(/\r?\n/)) {
-    const unfiltered = parsePreferredIpLine(line, []);
-    if (unfiltered) unfilteredNodes.push(unfiltered);
-    const parsed = parsePreferredIpLineDetail(line, filterRules);
-    if (!parsed) continue;
+    const text = line.trim();
+    if (!text) continue;
+    // “未过滤节点”展示上游原文，这样原始条数就等于上游实际发来的行数（原始 ≥ 可用）。
+    unfilteredNodes.push(text);
+    const parsed = parsePreferredIpLineDetail(text, filterRules);
+    if (!parsed) {
+      // 解析不出节点的行会被丢弃，这里保留原文，方便在“过滤节点”里排查上游格式变化。
+      invalidCount += 1;
+      const display = displayFilteredNode(text);
+      filteredNodes.push(display);
+      filterDetails.push({ node: display, reason: "invalid", rule: "" });
+      continue;
+    }
     result.push(parsed.value);
     // 备注被规则清理过的节点仍然输出（保留截断后的备注），但会在“过滤节点”里标注命中的规则。
     if (parsed.rule && !remarkSeen.has(parsed.original)) {
@@ -174,6 +180,7 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
     }
   }
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
+  Object.defineProperty(result, "invalidCount", { value: invalidCount, enumerable: false });
   Object.defineProperty(result, "unfilteredNodes", { value: unfilteredNodes, enumerable: false });
   Object.defineProperty(result, "filteredNodes", { value: filteredNodes, enumerable: false });
   Object.defineProperty(result, "filterDetails", { value: filterDetails, enumerable: false });
@@ -412,15 +419,8 @@ async function fetchApiSubs(apiUrl) {
     headers: { "User-Agent": UA_APIS_FETCH },
   }, "API 源");
   const result = decodeSubscriptionBody(response.content).split(/\r?\n/).filter((line) => line.trim() !== "");
-  const unfilteredNodes = [];
-  for (const value of result) {
-    const line = value.trim();
-    const match = NODE_MATCH_REGEX.exec(line);
-    if (!match) continue;
-    const hashIndex = line.indexOf("#");
-    const remark = hashIndex > -1 ? cleanPreferredRemark(line.slice(hashIndex + 1), []) : "";
-    unfilteredNodes.push(remark ? `${match[0]}#${remark}` : match[0]);
-  }
+  // API 源输出保留上游整行，因此“未过滤节点”也按上游原文统计，避免原始条数比可用节点还少。
+  const unfilteredNodes = result.map((line) => line.trim());
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
   Object.defineProperty(result, "unfilteredNodes", { value: unfilteredNodes, enumerable: false });
   return result;
@@ -823,20 +823,24 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         try {
           const rawValues = await fetchPreferredSubs(host, filterRules);
           const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
-          // 订阅源在 fetchPreferredSubs 里已按备注规则清理过，这里补回“备注被清理”的节点与规则。
-          const remarkNodes = rawValues.filteredNodes || [];
-          const remarkDetails = rawValues.filterDetails || [];
-          const filteredNodes = [...new Set([...(values.filteredNodes || []), ...remarkNodes])];
-          const filterDetails = [...(values.filterDetails || []), ...remarkDetails];
+          // 订阅源在 fetchPreferredSubs 里已经判定过“格式无效”和“备注被清理”，这里把两次结果合起来。
+          const sourceNodes = rawValues.filteredNodes || [];
+          const sourceDetails = rawValues.filterDetails || [];
+          const filteredNodes = [...new Set([...(values.filteredNodes || []), ...sourceNodes])];
+          const filterDetails = [...(values.filterDetails || []), ...sourceDetails];
+          const rawNodeCount = (rawValues.unfilteredNodes || []).length;
           const filterStats = {
             ...(values.filterStats || {}),
-            remarkCount: (Number(values.filterStats?.remarkCount) || 0) + remarkDetails.length,
+            // 上游返回数按原始行数统计（包含格式无效的行），与「原始节点」口径一致。
+            inputCount: rawNodeCount,
+            invalidCount: (Number(values.filterStats?.invalidCount) || 0) + (Number(rawValues.invalidCount) || 0),
+            remarkCount: (Number(values.filterStats?.remarkCount) || 0) + sourceDetails.filter((detail) => detail.reason === "remark").length,
           };
           const timestamp = new Date().toISOString();
           recordStatus("subs", host, {
-            state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
+            state: values.length > 0 ? "success" : (rawNodeCount ? "filtered" : "empty"),
             nodeCount: values.length,
-            rawNodeCount: rawValues.length,
+            rawNodeCount,
             durationMs: Date.now() - startedAt,
             error: "",
             errorType: "",
@@ -845,7 +849,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
             ...(values.length > 0 ? {
               lastSuccessAt: timestamp,
               lastSuccessNodeCount: values.length,
-              lastSuccessRawNodeCount: rawValues.length,
+              lastSuccessRawNodeCount: rawNodeCount,
             } : {}),
           });
           return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes, filterDetails, filterStats };

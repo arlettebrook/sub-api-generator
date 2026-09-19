@@ -861,9 +861,8 @@ async function handleCustomApiPreview(request, env) {
   // 手动优选没有原始抓取数据，不进入原始数据查看的来源筛选。
   const sourceMeta = (sourceSelection || []).filter((source) => source.type !== "manual").map((source) => ({ type: source.type, key: source.key, remark: snapshot[source.type]?.[source.key]?.remark || "" }));
   const selectedStatuses = (sourceSelection || []).filter((source) => source.type !== "manual").map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
-  const rawNodeCount = hasFilterOverride
-    ? unfilteredNodes.length
-    : selectedStatuses.reduce((count, status) => count + (status.rawNodeCount || 0), 0);
+  // 「原始节点」= 本次各来源上游原始条数之和（含手动优选），与「未过滤节点」列表一致，保证原始 ≥ 可用。
+  const rawNodeCount = unfilteredNodes.length;
   const errors = response.headers.get("x-source-errors");
   let errorList = [];
   if (errors) {

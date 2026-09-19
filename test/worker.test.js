@@ -611,6 +611,70 @@ test("records unparsable upstream lines as format-invalid filter details", async
   ]);
 });
 
+test("counts raw nodes from upstream lines so raw is never below kept", async () => {
+  const apiKey = "https://raw-lines.example/data";
+  const subKey = "raw-lines.example.com";
+  const uuid = "00000000-0000-4000-8000-000000000000";
+  const subLine = `vless://${uuid}@1.1.1.1:443?security=tls&sni=example.com#CN`;
+  const values = {
+    subs: { [subKey]: { remark: "订阅源" } },
+    apis: { [apiKey]: { remark: "API 源" } },
+    blacklist: [],
+    preferred_manual: { content: "9.9.9.9:443#手动" },
+    custom_apis: { raw_lines: { enabled: true, sourceMode: "all", sources: [] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = String(resource);
+    if (url.includes("/sub?host=")) return new Response([subLine, "订阅已过期，请续费"].join("\n"), { status: 200 });
+    return new Response(["2.2.2.2:443#api", "vmess://eyJhZGQiOiJ4In0="].join("\n"), { status: 200 });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ path: "raw_lines" }),
+    }), runtime);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    // 上游共 5 行（订阅源 2 行含 1 行坏行、API 源 2 行含 1 行无法解析、手动优选 1 行），最终输出 4 条。
+    assert.equal(result.status.rawNodeCount, 5);
+    assert.equal(result.status.nodeCount, 4);
+    assert.equal(result.status.filterStats.inputCount, 5);
+    assert.equal(result.status.filterStats.invalidCount, 1);
+    assert.deepEqual(result.rawSources.map((source) => source.nodes.length), [2, 2, 1]);
+    // 「未过滤节点」就是上游原文，订阅源不再只显示解析成功的节点。
+    assert.deepEqual(result.unfilteredNodes, [subLine, "订阅已过期，请续费", "2.2.2.2:443#api", "vmess://eyJhZGQiOiJ4In0=", "9.9.9.9:443#手动"]);
+    assert.deepEqual(result.filterDetails, [
+      { type: "subs", key: subKey, node: "订阅已过期，请续费", reason: "invalid", rule: "" },
+    ]);
+    // API 源保留整行输出，所以「原始」和「可用」都是 2 条，不会再出现可用比原始多。
+    assert.deepEqual(result.rawSources[1], {
+      type: "apis",
+      key: apiKey,
+      remark: "API 源",
+      nodes: ["2.2.2.2:443#api", "vmess://eyJhZGQiOiJ4In0="],
+      filterStats: { inputCount: 2, outputCount: 2, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, remarkCount: 0 },
+    });
+
+    // 单个订阅源的查看同样按上游原始行数显示。
+    const subPreview = await worker.fetch(new Request("https://example.test/api/source-raw", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ type: "subs", key: subKey }),
+    }), runtime);
+    const subResult = await subPreview.json();
+    assert.equal(subResult.status.rawNodeCount, 2);
+    assert.equal(subResult.status.nodeCount, 1);
+    assert.deepEqual(subResult.unfilteredNodes, [subLine, "订阅已过期，请续费"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("applies view-only blacklist and remark filters without touching global config", async () => {
   const globalKey = "https://view-global.example/data";
   const overrideKey = "https://view-override.example/data";
