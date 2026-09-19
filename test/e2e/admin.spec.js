@@ -286,6 +286,14 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   // 备注规则命中的节点归入“备注规则”分类。
   await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["备注规则"]);
   await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("备注规则：api");
+  // 分类标题可以折叠，收起后该分类的节点不再显示。
+  const remarkCategory = page.locator("#sourceRawFilteredContent .source-raw-filter-category").first();
+  await remarkCategory.click();
+  await expect(remarkCategory).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#sourceRawFilteredContent")).not.toContainText("3.3.3.3:443#api");
+  await remarkCategory.click();
+  await expect(remarkCategory).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#sourceRawFilteredContent")).toContainText("3.3.3.3:443#api");
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
 });

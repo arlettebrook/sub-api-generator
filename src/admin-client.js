@@ -1218,6 +1218,9 @@ let sourceRawSourceMeta = new Map();
 let sourceRawSourceErrors = new Map();
 let sourceRawSourceStats = new Map();
 let sourceRawCollapsedGroups = new Set();
+// 过滤节点的分类折叠状态（按“来源分组::分类”记录），以及当前渲染出的分类键，供“展开/收起全部”使用。
+let sourceRawCollapsedFilterCategories = new Set();
+let sourceRawFilterCategoryKeys = new Set();
 let sourceRawSourceFilter = 'all';
 let sourceRawRetryingGroup = '';
 let sourceRawSourceSort = 'config';
@@ -4133,6 +4136,8 @@ function closeSourceRawDialog() {
   sourceRawSourceErrors = new Map();
   sourceRawSourceStats = new Map();
   sourceRawCollapsedGroups = new Set();
+  sourceRawCollapsedFilterCategories = new Set();
+  sourceRawFilterCategoryKeys = new Set();
   sourceRawSourceFilter = 'all';
   sourceRawRetryingGroup = '';
   sourceRawSourceSort = 'config';
@@ -4253,6 +4258,8 @@ function renderSourceRawResults(view = sourceRawTab) {
   else if (view === false) view = 'nodes';
   const rawMode = view === 'raw';
   const filteredMode = view === 'filtered';
+  // 记录本次渲染出的过滤分类，供“展开全部 / 收起全部”使用。
+  if (filteredMode) sourceRawFilterCategoryKeys = new Set();
   if (rawMode && sourceRawSelection?.type === 'domains') {
     renderPreferredDomainRecords(sourceRawRecords, view === sourceRawTab);
     return;
@@ -4303,16 +4310,28 @@ function renderSourceRawResults(view = sourceRawTab) {
       }
       return line;
     };
-    // 过滤节点按原因分类展示：分类标题 + 该分类下的节点，节点旁仍标注命中的具体规则。
+    // 过滤节点按原因分类展示：分类标题可折叠，节点旁仍标注命中的具体规则。
     const renderFilteredCategory = (container, key, nodes, groupId) => {
-      const header = document.createElement('div');
-      header.className = 'source-raw-filter-category';
+      const categoryId = (groupId || '') + '::' + key;
+      sourceRawFilterCategoryKeys.add(categoryId);
+      const collapsed = sourceRawCollapsedFilterCategories.has(categoryId);
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'source-raw-filter-category' + (collapsed ? ' is-collapsed' : '');
+      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      header.title = collapsed ? '展开该分类' : '收起该分类';
       const label = document.createElement('strong');
       label.textContent = sourceRawFilterCategoryLabel(key);
       const total = document.createElement('span');
       total.textContent = nodes.length + ' 条';
       header.append(label, total);
+      header.onclick = () => {
+        if (sourceRawCollapsedFilterCategories.has(categoryId)) sourceRawCollapsedFilterCategories.delete(categoryId);
+        else sourceRawCollapsedFilterCategories.add(categoryId);
+        renderSourceRawResults('filtered');
+      };
       container.appendChild(header);
+      if (collapsed) return;
       nodes.forEach((node) => container.appendChild(renderNode(node, groupId)));
     };
     const renderFilteredNodes = (container, nodes, groupId) => {
@@ -4563,6 +4582,8 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     const viewState = type === 'customApis' ? loadSourceRawViewState(type, key) : null;
     // 折叠状态只作用于当前查看会话；重新打开时始终展开来源分组。
     sourceRawCollapsedGroups = new Set();
+    sourceRawCollapsedFilterCategories = new Set();
+    sourceRawFilterCategoryKeys = new Set();
     sourceRawSourceFilter = typeof viewState?.filter === 'string' ? viewState.filter : 'all';
     sourceRawSourceSort = ['config', 'count', 'error', 'name'].includes(viewState?.sort) ? viewState.sort : 'config';
     if (search) search.value = typeof viewState?.query === 'string' ? viewState.query : '';
@@ -4655,6 +4676,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
   const expandGroups = $('expandSourceRawGroupsButton');
   if (expandGroups) expandGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set();
+    sourceRawCollapsedFilterCategories = new Set();
     renderSourceRawResults();
     renderSourceRawResults('filtered');
     renderSourceRawResults(true);
@@ -4663,6 +4685,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
   const collapseGroups = $('collapseSourceRawGroupsButton');
   if (collapseGroups) collapseGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set(sourceRawSourceMeta.keys());
+    sourceRawCollapsedFilterCategories = new Set(sourceRawFilterCategoryKeys);
     renderSourceRawResults();
     renderSourceRawResults('filtered');
     renderSourceRawResults(true);

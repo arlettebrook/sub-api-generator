@@ -72,6 +72,7 @@ function matchRemarkRules(value, filterRules = []) {
   if (remark.includes("%")) {
     try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
   }
+  const original = remark;
   const hits = [];
   let cutIndex = -1;
   let cutRule = "";
@@ -89,11 +90,26 @@ function matchRemarkRules(value, filterRules = []) {
     if (stripped !== remark) hits.push("符号");
     remark = stripped;
   }
-  return { remark: remark.trim(), rule: hits.join("、") };
+  return { remark: remark.trim(), rule: hits.join("、"), original };
 }
 
 function cleanPreferredRemark(value, filterRules = []) {
   return matchRemarkRules(value, filterRules).remark;
+}
+
+// 上游备注常用百分号编码（例如 %20%5BSG%5D），展示时解码，失败则保留原文。
+function decodeRemarkForDisplay(value) {
+  const text = String(value ?? "");
+  if (!text.includes("%")) return text;
+  try { return decodeURIComponent(text); } catch { return text; }
+}
+
+// 过滤节点列表里展示的节点文本：只解码备注部分，地址部分保持原样。
+function displayFilteredNode(value) {
+  const text = String(value ?? "").trim();
+  const hashIndex = text.indexOf("#");
+  if (hashIndex < 0) return text;
+  return `${text.slice(0, hashIndex)}#${decodeRemarkForDisplay(text.slice(hashIndex + 1))}`;
 }
 
 // 解析订阅源节点，同时给出原始节点和备注命中的规则，供“过滤节点”展示使用。
@@ -105,10 +121,10 @@ function parsePreferredIpLineDetail(line, filterRules = DEFAULT_FILTER_RULES) {
   const node = addressMatch[1];
   const remarkMatch = NODE_REMARK_REGEX.exec(line);
   const rawRemark = remarkMatch ? remarkMatch[1] : "";
-  const detail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "" };
+  const detail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "", original: "" };
   return {
     value: remarkMatch ? `${node}#${detail.remark}` : node,
-    original: remarkMatch ? `${node}#${rawRemark}` : node,
+    original: remarkMatch ? `${node}#${detail.original}` : node,
     rule: detail.rule,
   };
 }
@@ -509,7 +525,7 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
     if (!value) { stats.invalidCount += 1; continue; }
     if (isBlacklisted(value, blacklistRegex)) {
       stats.blacklistedCount += 1;
-      const node = String(value).trim();
+      const node = displayFilteredNode(value);
       filteredNodes.push(node);
       filterDetails.push({ node, reason: "blacklist", rule: findBlacklistMatch(node, normalizedBlacklist) });
       continue;
@@ -523,7 +539,7 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
     if (detail.rule) {
       // 备注被规则清理过的节点仍然输出，但会在“过滤节点”里标注命中的规则。
       stats.remarkCount += 1;
-      const node = String(value).trim();
+      const node = displayFilteredNode(value);
       filteredNodes.push(node);
       filterDetails.push({ node, reason: "remark", rule: detail.rule });
     }
@@ -556,11 +572,12 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     const rawFull = rawRemark ? `${node}#${rawRemark}` : node;
     if (isBlacklisted(rawFull, blacklistRegex)) {
       stats.blacklistedCount += 1;
-      filteredNodes.push(rawFull);
-      filterDetails.push({ node: rawFull, reason: "blacklist", rule: findBlacklistMatch(rawFull, normalizedBlacklist) });
+      const display = displayFilteredNode(rawFull);
+      filteredNodes.push(display);
+      filterDetails.push({ node: display, reason: "blacklist", rule: findBlacklistMatch(rawFull, normalizedBlacklist) });
       continue;
     }
-    const remarkDetail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "" };
+    const remarkDetail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "", original: "" };
     const remark = remarkDetail.remark;
     const cleaned = remark ? `${node}#${remark}` : node;
     if (seen.has(cleaned)) {
@@ -572,9 +589,9 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     if (remarkDetail.rule) {
       // 备注被规则清理过的节点仍然输出，但会在“过滤节点”里标注命中的规则。
       stats.remarkCount += 1;
-      const original = `${node}#${rawRemark}`;
-      filteredNodes.push(original);
-      filterDetails.push({ node: original, reason: "remark", rule: remarkDetail.rule });
+      const display = remarkDetail.original ? `${node}#${remarkDetail.original}` : rawFull;
+      filteredNodes.push(display);
+      filterDetails.push({ node: display, reason: "remark", rule: remarkDetail.rule });
     }
     seen.add(cleaned);
     result.push(cleaned);

@@ -3354,23 +3354,52 @@ export const adminStyle = `
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    width: 100%;
     margin: 10px 0 2px;
     padding: 3px 8px;
+    border: 1px solid transparent;
     border-radius: var(--radius-sm);
     background: var(--bg-tertiary);
     color: var(--text-secondary);
+    font-family: inherit;
     font-size: 12px;
+    text-align: left;
+    cursor: pointer;
   }
 
   .source-raw-filter-category:first-child {
     margin-top: 0;
   }
 
+  .source-raw-filter-category::before {
+    content: '▾';
+    flex: 0 0 12px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .source-raw-filter-category.is-collapsed::before {
+    content: '▸';
+  }
+
+  .source-raw-filter-category:hover {
+    border-color: var(--border-hover);
+  }
+
+  .source-raw-filter-category:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+  }
+
   .source-raw-filter-category strong {
+    flex: 1 1 auto;
+    min-width: 0;
     font-weight: 600;
   }
 
   .source-raw-filter-category span {
+    flex: 0 0 auto;
     color: var(--text-tertiary);
     font-size: 11px;
   }

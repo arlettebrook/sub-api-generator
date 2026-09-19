@@ -482,11 +482,12 @@ test("reports which rule filtered each node", async () => {
   const apiKey = "https://filter-reason.example/data";
   const apiKey2 = "https://filter-reason-second.example/data";
   const remarkApiKey = "https://filter-reason-remark.example/data";
+  const encodedApiKey = "https://filter-reason-encoded.example/data";
   const subKey = "reason.example.com";
   const subRemarkKey = "reason-remark.example.com";
   const values = {
     subs: { [subKey]: { remark: "订阅源" }, [subRemarkKey]: { remark: "备注清理订阅源" } },
-    apis: { [apiKey]: { remark: "API 源" }, [apiKey2]: { remark: "API 源二" }, [remarkApiKey]: { remark: "备注清理源" } },
+    apis: { [apiKey]: { remark: "API 源" }, [apiKey2]: { remark: "API 源二" }, [remarkApiKey]: { remark: "备注清理源" }, [encodedApiKey]: { remark: "编码备注源" } },
     blacklist: ["Ad-Node"],
     custom_apis: {
       reason_preview: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: apiKey }, { type: "apis", key: apiKey2 }] },
@@ -501,6 +502,7 @@ test("reports which rule filtered each node", async () => {
     const url = String(resource);
     if (url.includes("/sub?host=")) return new Response(btoa([subLine, subLine].join("\n")), { status: 200 });
     if (url.includes("filter-reason-remark")) return new Response("6.6.6.6:443#A|B", { status: 200 });
+    if (url.includes("filter-reason-encoded")) return new Response("5.5.5.5:443#SG%20%5B%E4%BC%98%E9%80%89%5D%2075.7ms", { status: 200 });
     return new Response("1.1.1.1:443#ok\n2.2.2.2:443#ad-node-1", { status: 200 });
   };
   const preview = (body) => worker.fetch(new Request("https://example.test/api/source-raw", {
@@ -549,6 +551,16 @@ test("reports which rule filtered each node", async () => {
       { type: "subs", key: subRemarkKey, node: "43.129.217.38:443#dup", reason: "remark", rule: "dup" },
     ]);
     assert.equal(subRemarkResult.status.filterStats.remarkCount, 1);
+
+    // 上游备注是百分号编码时，过滤节点展示解码后的备注，方便阅读
+    const encodedPreview = await preview({ type: "apis", key: encodedApiKey, filterRules: ["空格"] });
+    assert.equal(encodedPreview.status, 200);
+    const encodedResult = await encodedPreview.json();
+    assert.deepEqual(encodedResult.nodes, ["5.5.5.5:443#SG"]);
+    assert.deepEqual(encodedResult.filteredNodes, ["5.5.5.5:443#SG [优选] 75.7ms"]);
+    assert.deepEqual(encodedResult.filterDetails, [
+      { type: "apis", key: encodedApiKey, node: "5.5.5.5:443#SG [优选] 75.7ms", reason: "remark", rule: "空格" },
+    ]);
 
     // 优选 API：跨来源重复的节点归回后出现的来源，并标记为与其他来源重复
     const customPreview = await worker.fetch(new Request("https://example.test/api/custom-api-preview", {
