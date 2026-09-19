@@ -443,11 +443,12 @@ function isBlacklisted(value, blacklistRegex) {
 function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = []) {
   const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
   const result = [];
+  const filteredNodes = [];
   const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
   for (const value of lines) {
     stats.inputCount += 1;
     if (!value) { stats.invalidCount += 1; continue; }
-    if (isBlacklisted(value, blacklistRegex)) { stats.blacklistedCount += 1; continue; }
+    if (isBlacklisted(value, blacklistRegex)) { stats.blacklistedCount += 1; filteredNodes.push(String(value).trim()); continue; }
     const hashIndex = value.indexOf("#");
     if (hashIndex < 0) {
       result.push(value);
@@ -458,11 +459,13 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
   }
   stats.outputCount = result.length;
   Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
+  Object.defineProperty(result, "filteredNodes", { value: filteredNodes, enumerable: false });
   return result;
 }
 
 function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = DEFAULT_FILTER_RULES) {
   const result = [];
+  const filteredNodes = [];
   const seen = new Set();
   const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
   const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
@@ -476,15 +479,16 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     const hashIndex = line.indexOf("#");
     const rawRemark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
     const rawFull = rawRemark ? `${node}#${rawRemark}` : node;
-    if (isBlacklisted(rawFull, blacklistRegex)) { stats.blacklistedCount += 1; continue; }
+    if (isBlacklisted(rawFull, blacklistRegex)) { stats.blacklistedCount += 1; filteredNodes.push(rawFull); continue; }
     const remark = rawRemark ? cleanPreferredRemark(rawRemark, filterRules) : "";
     const cleaned = remark ? `${node}#${remark}` : node;
-    if (seen.has(cleaned)) { stats.duplicateCount += 1; continue; }
+    if (seen.has(cleaned)) { stats.duplicateCount += 1; filteredNodes.push(cleaned); continue; }
     seen.add(cleaned);
     result.push(cleaned);
   }
   stats.outputCount = result.length;
   Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
+  Object.defineProperty(result, "filteredNodes", { value: filteredNodes, enumerable: false });
   return result;
 }
 
@@ -658,6 +662,11 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       if (cached.filterStats) headers["x-filter-stats"] = encodeURIComponent(JSON.stringify(cached.filterStats));
       if (options.includeRaw || options.diagnostics) setSourceErrorHeaders(headers, cached.sourceErrors || []);
       if (cached.nodeSources?.length) headers["x-node-sources"] = encodeURIComponent(JSON.stringify(cached.nodeSources));
+      if (options.includeRaw) {
+        options.rawSources = cached.rawSources || [];
+        options.filteredSources = cached.filteredSources || [];
+        options.nodeSources = cached.nodeSources || [];
+      }
       return new Response(cached.output, {
         headers: withSecurityHeaders(headers),
       });
@@ -701,7 +710,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "subs";
@@ -743,7 +752,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "apis", key: apiUrl, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "apis", key: apiUrl, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "apis";
@@ -791,7 +800,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
             lastAttemptAt: timestamp,
             ...(values.length > 0 ? { lastSuccessAt: timestamp, lastSuccessNodeCount: values.length, lastSuccessRawNodeCount: rawValues.length } : {}),
           });
-          return { type: "domains", key: domain, remark: isPlainObject(entry) ? entry.remark || "" : "", values, records: rawValues.records || {}, unfilteredNodes: rawValues.unfilteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "domains", key: domain, remark: isPlainObject(entry) ? entry.remark || "" : "", values, records: rawValues.records || {}, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "domains";
@@ -812,11 +821,15 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const subsResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "subs" : result.reason?.sourceType === "subs");
     const apiResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "apis" : result.reason?.sourceType === "apis");
     const domainResults = sourceResults.filter((result) => result.status === "fulfilled" ? result.value.type === "domains" : result.reason?.sourceType === "domains");
+    const rawSources = sourceResults
+      .filter((result) => result.status === "fulfilled")
+      .map((result) => ({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.unfilteredNodes || [], ...(result.value.type === "domains" ? { records: result.value.records || {} } : {}), filterStats: result.value.filterStats || null }));
 
     const preferred = [];
     const filterStats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
     const nodeSources = [];
     const sourceErrors = [];
+    const filteredSources = [];
     if (selected && selected.length === 0) {
       sourceErrors.push({ type: "config", key: "", message: "未选择任何数据源" });
     }
@@ -824,6 +837,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       if (result.status === "fulfilled") {
         preferred.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
+        filteredSources.push({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.filteredNodes || [] });
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "subs", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "subs", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -833,6 +847,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       if (result.status === "fulfilled") {
         extra.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
+        filteredSources.push({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.filteredNodes || [] });
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "apis", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -841,6 +856,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       if (result.status === "fulfilled") {
         extra.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
+        filteredSources.push({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.filteredNodes || [] });
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "domains", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "domains", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -853,6 +869,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       const manualValues = filterPreferredIps(manualLines, blacklist, blacklistRegex, filterRules);
       extra.push(...manualValues);
       mergeFilterStats(filterStats, manualValues.filterStats);
+      filteredSources.push({ type: "manual", key: manualEntry.id, remark: manualEntry.name, nodes: manualValues.filteredNodes || [] });
       manualValues.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "manual", manualEntry.id, manualEntry.name)));
     }
 
@@ -861,12 +878,30 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const transformedValues = [...filtered, ...extra]
       .map((value) => transformOutputValue(value, outputTransform))
       .filter((item) => item.value && !transformedSeen.has(item.value) && transformedSeen.add(item.value));
+    // 记录聚合阶段因跨来源重复或输出转换后冲突而被移除的节点，并归回对应来源。
+    const emittedValues = new Set();
+    const filteredSourceMap = new Map(filteredSources.map((source) => [`${source.type}:${source.key}`, source]));
+    for (const source of nodeSources) {
+      if (!source.value || !emittedValues.has(source.value)) {
+        if (source.value) emittedValues.add(source.value);
+        continue;
+      }
+      const id = `${source.type}:${source.key}`;
+      let filteredSource = filteredSourceMap.get(id);
+      if (!filteredSource) {
+        filteredSource = { type: source.type, key: source.key, remark: source.remark || "", nodes: [] };
+        filteredSourceMap.set(id, filteredSource);
+        filteredSources.push(filteredSource);
+      }
+      filteredSource.nodes.push(source.originalValue || source.value);
+      filterStats.duplicateCount += 1;
+    }
     const output = transformedValues.map((item) => item.value).join("\n");
     filterStats.outputCount = output ? output.split("\n").filter(Boolean).length : 0;
     const generatedAt = new Date().toISOString();
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
-      aggregateCache.set(cacheKey, { output, sourceErrors, nodeSources, filterStats, generatedAt, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
+      aggregateCache.set(cacheKey, { output, sourceErrors, nodeSources, filterStats, rawSources, filteredSources, generatedAt, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
       pruneAggregateCache();
     } else {
       aggregateCache.delete(cacheKey);
@@ -881,9 +916,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     if (options.includeRaw || options.diagnostics) setSourceErrorHeaders(headers, sourceErrors);
     if (nodeSources.length) headers["x-node-sources"] = encodeURIComponent(JSON.stringify(nodeSources.slice(0, 1000)));
     if (options.includeRaw) {
-      options.rawSources = sourceResults
-        .filter((result) => result.status === "fulfilled")
-        .map((result) => ({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.unfilteredNodes || [], ...(result.value.type === "domains" ? { records: result.value.records || {} } : {}), filterStats: result.value.filterStats || null }));
+      options.rawSources = rawSources;
+      options.filteredSources = filteredSources;
       options.nodeSources = nodeSources;
     }
     return new Response(output, {

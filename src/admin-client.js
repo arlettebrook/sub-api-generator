@@ -1200,13 +1200,16 @@ let pendingSourceChangeAction = null;
 let sourceRawRequest = null;
 let sourceRawSelection = null;
 let sourceRawNodes = [];
+let sourceRawFilteredNodes = [];
 let sourceRawRawContent = '';
 let sourceRawRecords = {};
 let sourceRawUnfilteredNodes = [];
 let sourceRawUnfilteredSourceNodes = new Map();
+let sourceRawFilteredSourceNodes = new Map();
 const sourceRawCache = new Map();
 let sourceRawRefreshTimer = null;
 let sourceRawLastVisible = [];
+let sourceRawLastFilteredVisible = [];
 let sourceRawLastRawVisible = [];
 let sourceRawNodeSources = new Map();
 let sourceRawSourceMeta = new Map();
@@ -1285,9 +1288,63 @@ function renderSourceRawHistoryDialog() {
   if (!item || !content) return;
   const all = sourceRawHistoryDialogTab === 'raw'
     ? (Array.isArray(item.unfilteredNodes) ? item.unfilteredNodes : [])
-    : (Array.isArray(item.nodes) ? item.nodes : []);
+    : sourceRawHistoryDialogTab === 'filtered'
+      ? (Array.isArray(item.filteredNodes) ? item.filteredNodes : [])
+      : (Array.isArray(item.nodes) ? item.nodes : []);
   sourceRawHistoryDialogVisible = all.filter((node) => !search || String(node).toLowerCase().includes(search));
-  content.textContent = sourceRawHistoryDialogVisible.length ? sourceRawHistoryDialogVisible.join('\\n') : '没有匹配的数据。';
+  content.setAttribute('aria-label', sourceRawHistoryDialogTab === 'raw' ? '历史未过滤节点' : sourceRawHistoryDialogTab === 'filtered' ? '历史过滤节点' : '历史节点结果');
+  if (!sourceRawHistoryDialogVisible.length) {
+    content.textContent = '没有匹配的数据。';
+    return;
+  }
+  // 历史检测保留优选 API 来源分类，三个标签分别只展示各自的数据集合。
+  if (sourceRawHistoryDialogTab === 'filtered' && Array.isArray(item.filteredSources) && item.filteredSources.length) {
+    const sections = item.filteredSources.map((source) => {
+      const nodes = (Array.isArray(source.nodes) ? source.nodes : []).filter((node) => sourceRawHistoryDialogVisible.includes(node));
+      if (!nodes.length) return '';
+      return sourceGroupLabelFromMeta(source, true) + '\\n' + nodes.join('\\n');
+    }).filter(Boolean);
+    content.textContent = sections.length ? sections.join('\\n\\n') : '没有匹配的数据。';
+    return;
+  }
+  if (sourceRawHistoryDialogTab === 'raw' && Array.isArray(item.rawSources) && item.rawSources.length) {
+    const sections = item.rawSources.map((source) => {
+      const nodes = (Array.isArray(source.nodes) ? source.nodes : []).filter((node) => sourceRawHistoryDialogVisible.includes(node));
+      if (!nodes.length) return '';
+      return sourceGroupLabelFromMeta(source, true) + '\\n' + nodes.join('\\n');
+    }).filter(Boolean);
+    content.textContent = sections.length ? sections.join('\\n\\n') : '没有匹配的数据。';
+    return;
+  }
+  if (sourceRawHistoryDialogTab === 'nodes' && Array.isArray(item.nodeSources) && item.nodeSources.length) {
+    const metaById = new Map();
+    (Array.isArray(item.sourceMeta) ? item.sourceMeta : []).forEach((meta) => {
+      if (meta?.type && meta?.key) metaById.set(sourceGroupId(meta.type, meta.key), meta);
+    });
+    const sourceIdsByNode = new Map();
+    item.nodeSources.forEach((source) => {
+      if (!source?.value || !source?.type || !source?.key) return;
+      const id = sourceGroupId(source.type, source.key);
+      if (!metaById.has(id)) metaById.set(id, { type: source.type, key: source.key, remark: source.remark || '' });
+      const ids = sourceIdsByNode.get(source.value) || [];
+      if (!ids.includes(id)) ids.push(id);
+      sourceIdsByNode.set(source.value, ids);
+    });
+    const groups = new Map();
+    sourceRawHistoryDialogVisible.forEach((node) => {
+      const ids = sourceIdsByNode.get(node);
+      (Array.isArray(ids) && ids.length ? ids : ['未识别来源']).forEach((id) => {
+        if (!groups.has(id)) groups.set(id, []);
+        groups.get(id).push(node);
+      });
+    });
+    content.textContent = [...groups.entries()].map(([id, nodes]) => {
+      const heading = id === '未识别来源' ? id : sourceGroupLabelFromMeta(metaById.get(id), true);
+      return heading + '\\n' + nodes.join('\\n');
+    }).join('\\n\\n');
+    return;
+  }
+  content.textContent = sourceRawHistoryDialogVisible.join('\\n');
 }
 
 function renderSourceRawHistoryDialogSummary(item) {
@@ -1326,8 +1383,11 @@ function showSourceRawHistoryItem(item) {
   if (search) search.value = '';
   renderSourceRawHistoryDialogSummary(item);
   document.querySelectorAll('[data-source-history-tab]').forEach((button) => {
+    const initialActive = button.dataset.sourceHistoryTab === sourceRawHistoryDialogTab;
+    button.classList.toggle('active', initialActive);
+    button.setAttribute('aria-selected', initialActive ? 'true' : 'false');
     button.onclick = () => {
-      sourceRawHistoryDialogTab = button.dataset.sourceHistoryTab === 'raw' ? 'raw' : 'nodes';
+      sourceRawHistoryDialogTab = ['nodes', 'filtered', 'raw'].includes(button.dataset.sourceHistoryTab) ? button.dataset.sourceHistoryTab : 'nodes';
       document.querySelectorAll('[data-source-history-tab]').forEach((tab) => {
         const active = tab.dataset.sourceHistoryTab === sourceRawHistoryDialogTab;
         tab.classList.toggle('active', active);
@@ -1434,6 +1494,7 @@ function normalizeSourceRawCache(saved) {
     sourceStats: normalizeSourceNodes(saved.sourceStats),
     sourceErrors: (Array.isArray(saved.sourceErrors) ? saved.sourceErrors : []).map(([id, error]) => [normalizeId(id), error]),
     nodeSources: normalizeNodeSources(saved.nodeSources),
+    filteredSourceNodes: normalizeSourceNodes(saved.filteredSourceNodes),
     unfilteredSourceNodes: normalizeSourceNodes(saved.unfilteredSourceNodes),
   };
 }
@@ -1482,7 +1543,8 @@ function sourceGroupStats(id, groupNodes) {
   const stored = sourceRawSourceStats.get(id) || {};
   const raw = Number(stored.raw ?? sourceRawUnfilteredSourceNodes.get(id)?.length ?? groupNodes.length) || 0;
   const kept = Number(stored.kept ?? sourceGroupKeptCount(id)) || 0;
-  return { raw, kept, filtered: Math.max(0, raw - kept) };
+  const filtered = Number(stored.filtered ?? sourceRawFilteredSourceNodes.get(id)?.length ?? Math.max(0, raw - kept)) || 0;
+  return { raw, kept, filtered };
 }
 
 function sourceGroupStatsText(stats) {
@@ -3782,10 +3844,12 @@ function closeSourceRawDialog() {
   sourceRawRequest = null;
   sourceRawSelection = null;
   sourceRawNodes = [];
+  sourceRawFilteredNodes = [];
   sourceRawRawContent = '';
   sourceRawRecords = {};
   sourceRawUnfilteredNodes = [];
   sourceRawUnfilteredSourceNodes = new Map();
+  sourceRawFilteredSourceNodes = new Map();
   sourceRawNodeSources = new Map();
   sourceRawSourceMeta = new Map();
   sourceRawSourceErrors = new Map();
@@ -3795,6 +3859,7 @@ function closeSourceRawDialog() {
   sourceRawRetryingGroup = '';
   sourceRawSourceSort = 'config';
   sourceRawLastRawVisible = [];
+  sourceRawLastFilteredVisible = [];
   if (sourceRawRefreshTimer) clearInterval(sourceRawRefreshTimer);
   sourceRawRefreshTimer = null;
   const dialog = $('sourceRawDialog');
@@ -3808,7 +3873,7 @@ function closeSourceRawDialog() {
 function resetSourceRawScroll() {
   const dialog = $('sourceRawDialog');
   const body = dialog?.querySelector('.source-raw-body');
-  const regions = [dialog, body, $('sourceRawContent'), $('sourceRawRawContent')].filter(Boolean);
+  const regions = [dialog, body, $('sourceRawContent'), $('sourceRawFilteredContent'), $('sourceRawRawContent')].filter(Boolean);
   regions.forEach((region) => {
     region.scrollTop = 0;
     region.scrollLeft = 0;
@@ -3866,7 +3931,7 @@ function renderSourceRawProcess(stats = {}) {
   el.innerHTML = items.map(([label, value]) => '<span><b>' + value + '</b>' + label + '</span>').join('');
 }
 
-function renderPreferredDomainRecords(records = {}) {
+function renderPreferredDomainRecords(records = {}, updateCount = true) {
   const content = $('sourceRawRawContent');
   const count = $('sourceRawResultCount');
   if (!content) return;
@@ -3901,34 +3966,41 @@ function renderPreferredDomainRecords(records = {}) {
     fragment.appendChild(section);
   });
   content.appendChild(fragment);
-  if (count) count.textContent = total + ' 条 DNS 记录';
+  if (count && updateCount) count.textContent = total + ' 条 DNS 记录';
   sourceRawLastRawVisible = ['A', 'AAAA', 'CNAME'].flatMap((type) => Array.isArray(records?.[type]) ? records[type] : []);
 }
 
-function renderSourceRawResults(rawMode = false) {
+function renderSourceRawResults(view = sourceRawTab) {
+  if (view === true) view = 'raw';
+  else if (view === false) view = 'nodes';
+  const rawMode = view === 'raw';
+  const filteredMode = view === 'filtered';
   if (rawMode && sourceRawSelection?.type === 'domains') {
-    renderPreferredDomainRecords(sourceRawRecords);
+    renderPreferredDomainRecords(sourceRawRecords, view === sourceRawTab);
     return;
   }
-  const content = $(rawMode ? 'sourceRawRawContent' : 'sourceRawContent');
+  const content = $(rawMode ? 'sourceRawRawContent' : filteredMode ? 'sourceRawFilteredContent' : 'sourceRawContent');
   const count = $('sourceRawResultCount');
   if (!content) return;
   const query = ($('sourceRawSearch')?.value || '').trim().toLowerCase();
   const showSources = sourceRawSelection?.type === 'customApis';
-  const allNodes = rawMode ? sourceRawUnfilteredNodes : sourceRawNodes;
+  const allNodes = rawMode ? sourceRawUnfilteredNodes : filteredMode ? sourceRawFilteredNodes : sourceRawNodes;
   const nodeSources = rawMode ? sourceRawUnfilteredSourceNodes : sourceRawNodeSources;
+  const groupedNodes = rawMode ? sourceRawUnfilteredSourceNodes : filteredMode ? sourceRawFilteredSourceNodes : null;
   let visible = query ? allNodes.filter((node) => node.toLowerCase().includes(query)) : allNodes;
-  if (showSources && rawMode && sourceRawSourceFilter !== 'all') {
-    const sourceNodes = sourceRawUnfilteredSourceNodes.get(sourceRawSourceFilter) || [];
+  if (showSources && (rawMode || filteredMode) && sourceRawSourceFilter !== 'all') {
+    const sourceNodes = groupedNodes.get(sourceRawSourceFilter) || [];
     visible = sourceNodes.filter((node) => !query || node.toLowerCase().includes(query));
   } else if (showSources && sourceRawSourceFilter !== 'all') {
     visible = visible.filter((node) => (nodeSources.get(node) || []).includes(sourceRawSourceFilter));
   }
   if (rawMode) sourceRawLastRawVisible = visible;
+  else if (filteredMode) sourceRawLastFilteredVisible = visible;
   else sourceRawLastVisible = visible;
   content.innerHTML = '';
+  const emptyText = filteredMode ? '没有过滤节点。' : '没有提取到可用节点。';
   if (!visible.length && !showSources) {
-    content.textContent = allNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
+    content.textContent = allNodes.length ? '没有匹配的数据。' : emptyText;
   } else {
     const fragment = document.createDocumentFragment();
     const renderNode = (node) => {
@@ -3946,11 +4018,11 @@ function renderSourceRawResults(rawMode = false) {
       sourceRawSourceMeta.forEach((_, id) => {
         if (sourceRawSourceFilter === 'all' || sourceRawSourceFilter === id) groups.set(id, []);
       });
-      if (rawMode && !sourceRawUnfilteredSourceNodes.size && allNodes.length && sourceRawSourceFilter === 'all') {
+      if ((rawMode || filteredMode) && !groupedNodes.size && allNodes.length && sourceRawSourceFilter === 'all') {
         groups.set('未识别来源', allNodes.slice());
       }
-      if (rawMode) {
-        sourceRawUnfilteredSourceNodes.forEach((nodes, id) => {
+      if (rawMode || filteredMode) {
+        groupedNodes.forEach((nodes, id) => {
           if (sourceRawSourceFilter !== 'all' && id !== sourceRawSourceFilter) return;
           groups.set(id, nodes.filter((node) => !query || node.toLowerCase().includes(query)));
         });
@@ -3968,10 +4040,10 @@ function renderSourceRawResults(rawMode = false) {
       const sortedGroups = [...groups.entries()].sort(([leftId, leftNodes], [rightId, rightNodes]) => {
         const leftStats = sourceGroupStats(leftId, leftNodes);
         const rightStats = sourceGroupStats(rightId, rightNodes);
-        if (sourceRawSourceSort === 'count') return (rightStats[rawMode ? 'raw' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : 'kept'] || 0);
+        if (sourceRawSourceSort === 'count') return (rightStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0);
         if (sourceRawSourceSort === 'error') {
           const errorDiff = Number(sourceRawSourceErrors.has(rightId)) - Number(sourceRawSourceErrors.has(leftId));
-          return errorDiff || ((rightStats[rawMode ? 'raw' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : 'kept'] || 0));
+          return errorDiff || ((rightStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0));
         }
         if (sourceRawSourceSort === 'name') {
           return sourceGroupLabelFromMeta(sourceRawSourceMeta.get(leftId)).localeCompare(sourceGroupLabelFromMeta(sourceRawSourceMeta.get(rightId)), 'zh-CN');
@@ -4050,7 +4122,7 @@ function renderSourceRawResults(rawMode = false) {
         const toggle = () => {
           if (sourceRawCollapsedGroups.has(id)) sourceRawCollapsedGroups.delete(id);
           else sourceRawCollapsedGroups.add(id);
-          renderSourceRawResults(rawMode);
+          renderSourceRawResults(sourceRawTab);
           saveSourceRawViewState();
         };
         const sourceHeader = document.createElement('div');
@@ -4070,9 +4142,9 @@ function renderSourceRawResults(rawMode = false) {
       visible.forEach((node) => fragment.appendChild(renderNode(node)));
     }
     if (fragment.childNodes.length) content.appendChild(fragment);
-    else content.textContent = allNodes.length ? '没有匹配的数据。' : '没有提取到可用节点。';
+    else content.textContent = allNodes.length ? '没有匹配的数据。' : emptyText;
   }
-  if (count) count.textContent = (query || (showSources && sourceRawSourceFilter !== 'all')) ? '显示 ' + visible.length + ' / ' + allNodes.length + ' 条' : allNodes.length + ' 条节点';
+  if (count && view === sourceRawTab) count.textContent = (query || (showSources && sourceRawSourceFilter !== 'all')) ? '显示 ' + visible.length + ' / ' + allNodes.length + ' 条' : allNodes.length + ' 条节点';
 }
 
 function updateSourceRawGroupControls() {
@@ -4102,37 +4174,47 @@ function updateSourceRawGroupControls() {
 async function retrySourceRawGroup(id) {
   if (!sourceRawSelection || sourceRawSelection.type !== 'customApis' || sourceRawRetryingGroup) return;
   sourceRawRetryingGroup = id;
-  renderSourceRawResults(sourceRawTab === 'raw');
+  renderSourceRawResults(sourceRawTab);
   renderSourceRawCacheStatus('正在重新检测来源…', 'checking');
   try {
     await openSourceRawDialog('customApis', sourceRawSelection.key, true);
   } finally {
     sourceRawRetryingGroup = '';
-    renderSourceRawResults(sourceRawTab === 'raw');
+    renderSourceRawResults(sourceRawTab);
   }
 }
 
 function setSourceRawTab(tab) {
-  sourceRawTab = tab === 'raw' ? 'raw' : 'nodes';
+  sourceRawTab = ['nodes', 'filtered', 'raw'].includes(tab) ? tab : 'nodes';
   document.querySelectorAll('[data-source-raw-tab]').forEach((button) => {
     const active = button.dataset.sourceRawTab === sourceRawTab;
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', active ? 'true' : 'false');
+    if (button.dataset.sourceRawTab === 'nodes') {
+      button.textContent = '节点结果';
+    }
+    if (button.dataset.sourceRawTab === 'filtered') {
+      button.textContent = '过滤节点';
+    }
     if (button.dataset.sourceRawTab === 'raw') {
       button.textContent = sourceRawSelection?.type === 'domains' ? 'DNS 记录' : '未过滤节点';
     }
   });
   const nodes = $('sourceRawContent');
+  const filtered = $('sourceRawFilteredContent');
   const raw = $('sourceRawRawContent');
   const toolbar = document.querySelector('.source-raw-toolbar');
   const isDomain = sourceRawSelection?.type === 'domains';
   if (nodes) nodes.hidden = sourceRawTab !== 'nodes';
+  if (filtered) filtered.hidden = sourceRawTab !== 'filtered';
   if (raw) raw.hidden = sourceRawTab !== 'raw';
+  if (nodes) nodes.setAttribute('aria-label', '节点结果');
+  if (filtered) filtered.setAttribute('aria-label', '过滤节点');
   if (raw) raw.setAttribute('aria-label', isDomain ? 'DNS 记录' : '未过滤节点');
   if (toolbar) toolbar.hidden = isDomain;
   const process = $('sourceRawProcess');
   if (process) process.hidden = isDomain;
-  renderSourceRawResults(sourceRawTab === 'raw');
+  renderSourceRawResults(sourceRawTab);
   saveSourceRawViewState();
 }
 
@@ -4149,10 +4231,12 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   sourceRawRequest = controller;
   sourceRawSelection = { type, key };
   sourceRawNodes = [];
+  sourceRawFilteredNodes = [];
   sourceRawRawContent = '';
   sourceRawRecords = {};
   const title = $('sourceRawDialogSource');
   const content = $('sourceRawContent');
+  const filteredContent = $('sourceRawFilteredContent');
   const rawContent = $('sourceRawRawContent');
   const summary = $('sourceRawSummary');
   const reload = $('reloadSourceRawButton');
@@ -4180,14 +4264,17 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     resetSourceRawScroll();
   }
   if (content) content.textContent = '正在检测数据源…';
+  if (filteredContent) filteredContent.textContent = '正在检测数据源…';
   if (rawContent) rawContent.textContent = '正在检测数据源…';
   const cachedResult = loadSourceRawCache(type, key);
   if (cachedResult) {
     sourceRawNodes = cachedResult.nodes.slice();
+    sourceRawFilteredNodes = Array.isArray(cachedResult.filteredNodes) ? cachedResult.filteredNodes.slice() : [];
     sourceRawRawContent = cachedResult.rawContent;
     sourceRawRecords = cachedResult.records && typeof cachedResult.records === 'object' ? cachedResult.records : {};
     sourceRawUnfilteredNodes = Array.isArray(cachedResult.unfilteredNodes) ? cachedResult.unfilteredNodes.slice() : [];
     sourceRawUnfilteredSourceNodes = new Map(Array.isArray(cachedResult.unfilteredSourceNodes) ? cachedResult.unfilteredSourceNodes : []);
+    sourceRawFilteredSourceNodes = new Map(Array.isArray(cachedResult.filteredSourceNodes) ? cachedResult.filteredSourceNodes : []);
     sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
     sourceRawSourceMeta = new Map(Array.isArray(cachedResult.sourceMeta) ? cachedResult.sourceMeta : []);
     sourceRawSourceErrors = new Map(Array.isArray(cachedResult.sourceErrors) ? cachedResult.sourceErrors : []);
@@ -4196,6 +4283,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     renderSourceRawProcess(cachedResult.status?.filterStats || {});
     renderSourceRawCacheStatus('上次检测：' + formatSourceRawTime(cachedResult.savedAt) + '，正在重新检测…', 'checking');
     renderSourceRawResults();
+    renderSourceRawResults('filtered');
     renderSourceRawResults(true);
   }
   updateSourceRawGroupControls();
@@ -4207,7 +4295,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (copy) {
     copy.onclick = async () => {
       try {
-        const values = sourceRawTab === 'raw' ? sourceRawLastRawVisible : sourceRawLastVisible;
+        const values = sourceRawTab === 'raw' ? sourceRawLastRawVisible : sourceRawTab === 'filtered' ? sourceRawLastFilteredVisible : sourceRawLastVisible;
         await navigator.clipboard.writeText(values.join('\\n'));
         showToast('筛选结果已复制', 'success');
       } catch (error) {
@@ -4217,7 +4305,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   }
   if (search) search.oninput = () => {
     if (content) content.scrollTop = 0;
-    renderSourceRawResults(sourceRawTab === 'raw');
+    renderSourceRawResults(sourceRawTab);
     saveSourceRawViewState();
   };
   if (autoRefresh && !preserveState) {
@@ -4238,6 +4326,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (sourceFilter) sourceFilter.onchange = () => {
     sourceRawSourceFilter = sourceFilter.value || 'all';
     renderSourceRawResults();
+    renderSourceRawResults('filtered');
     renderSourceRawResults(true);
     saveSourceRawViewState();
   };
@@ -4245,6 +4334,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (sourceSort) sourceSort.onchange = () => {
     sourceRawSourceSort = sourceSort.value || 'config';
     renderSourceRawResults();
+    renderSourceRawResults('filtered');
     renderSourceRawResults(true);
     saveSourceRawViewState();
   };
@@ -4252,6 +4342,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (expandGroups) expandGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set();
     renderSourceRawResults();
+    renderSourceRawResults('filtered');
     renderSourceRawResults(true);
     saveSourceRawViewState();
   };
@@ -4259,6 +4350,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
   if (collapseGroups) collapseGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set(sourceRawSourceMeta.keys());
     renderSourceRawResults();
+    renderSourceRawResults('filtered');
     renderSourceRawResults(true);
     saveSourceRawViewState();
   };
@@ -4295,10 +4387,12 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     if (!response.ok) throw new Error(result?.error || '请求失败（HTTP ' + response.status + '）');
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
     sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+    sourceRawFilteredNodes = Array.isArray(result.filteredNodes) ? result.filteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawUnfilteredNodes = Array.isArray(result.unfilteredNodes) ? result.unfilteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawRecords = result.records && typeof result.records === 'object' ? result.records : {};
     sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
     sourceRawUnfilteredSourceNodes = new Map();
+    sourceRawFilteredSourceNodes = new Map();
     sourceRawNodeSources = new Map();
     sourceRawSourceMeta = new Map();
     sourceRawSourceErrors = new Map();
@@ -4319,8 +4413,16 @@ async function openSourceRawDialog(type, key, preserveState = false) {
         const values = Array.isArray(item.nodes) ? item.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
         sourceRawUnfilteredSourceNodes.set(id, values);
         const filterStats = item.filterStats || {};
-        sourceRawSourceStats.set(id, { raw: values.length, kept: Number(filterStats.outputCount ?? values.length) || 0 });
+        sourceRawSourceStats.set(id, { raw: values.length, kept: Number(filterStats.outputCount ?? values.length) || 0, filtered: Array.isArray(item.filteredNodes) ? item.filteredNodes.length : Math.max(0, values.length - (Number(filterStats.outputCount) || 0)) });
         if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: item.type, key: item.key, remark: item.remark || '' });
+      });
+      (Array.isArray(result.filteredSources) ? result.filteredSources : []).forEach((item) => {
+        const id = sourceGroupId(item.type, item.key);
+        const values = Array.isArray(item.nodes) ? item.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+        sourceRawFilteredSourceNodes.set(id, values);
+        if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: item.type, key: item.key, remark: item.remark || '' });
+        const stats = sourceRawSourceStats.get(id) || {};
+        sourceRawSourceStats.set(id, { ...stats, filtered: values.length });
       });
       (result.status?.errors || []).forEach((item) => {
         const id = sourceGroupId(item.type, item.key);
@@ -4329,7 +4431,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     }
     updateSourceRawGroupControls();
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
-    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), records: sourceRawRecords, unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
+    saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), records: sourceRawRecords, filteredSourceNodes: [...sourceRawFilteredSourceNodes], unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
     if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
     if (type === 'domains') setPreferredDomainStatus(normalizedKey, nextStatus);
     renderSourceRawSummary(nextStatus);
@@ -4337,14 +4439,15 @@ async function openSourceRawDialog(type, key, preserveState = false) {
     if (type === 'customApis') {
       const rawTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.raw || 0), 0);
       const keptTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.kept || 0), 0);
-      saveSourceRawHistory(type, key, { at: Date.now(), raw: rawTotal, kept: keptTotal, filtered: Math.max(0, rawTotal - keptTotal), errors: sourceRawSourceErrors.size });
+      saveSourceRawHistory(type, key, { at: Date.now(), raw: rawTotal, kept: keptTotal, filtered: sourceRawFilteredNodes.length, errors: sourceRawSourceErrors.size, nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), rawSources: result.rawSources || [], filteredSources: result.filteredSources || [], nodeSources: result.nodeSources || [], sourceMeta: result.sourceMeta || [] });
       void loadSourceRawHistoryFromDb(type, key, controller.signal);
     }
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
+    renderSourceRawResults('filtered');
     renderSourceRawResults(true);
     if (isManagedSource) refreshRenderedSourceStatuses([{ type, key }]);
-    if (copy) copy.disabled = sourceRawNodes.length === 0 && sourceRawUnfilteredNodes.length === 0;
+    if (copy) copy.disabled = sourceRawNodes.length === 0 && sourceRawFilteredNodes.length === 0 && sourceRawUnfilteredNodes.length === 0;
   } catch (error) {
     if (error?.name === 'AbortError') return;
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
@@ -4358,6 +4461,7 @@ async function openSourceRawDialog(type, key, preserveState = false) {
       renderSourceRawSummary(cachedResult.status);
       renderSourceRawProcess(cachedResult.status?.filterStats || {});
       renderSourceRawResults();
+      renderSourceRawResults('filtered');
       renderSourceRawResults(true);
     } else {
       renderSourceRawSummary(failedStatus);

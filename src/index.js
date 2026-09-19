@@ -97,8 +97,10 @@ async function ensureDetectionHistorySchema(env) {
           filtered_count INTEGER NOT NULL DEFAULT 0,
           error_count INTEGER NOT NULL DEFAULT 0,
           nodes_json TEXT NOT NULL DEFAULT '[]',
+          filtered_nodes_json TEXT NOT NULL DEFAULT '[]',
           raw_nodes_json TEXT NOT NULL DEFAULT '[]',
           raw_sources_json TEXT NOT NULL DEFAULT '[]',
+          filtered_sources_json TEXT NOT NULL DEFAULT '[]',
           node_sources_json TEXT NOT NULL DEFAULT '[]',
           source_meta_json TEXT NOT NULL DEFAULT '[]'
         )
@@ -130,18 +132,20 @@ async function saveDetectionHistory(env, path, result) {
     await db.prepare(`
       INSERT INTO detection_history
         (api_path, detected_at, raw_count, kept_count, filtered_count, error_count,
-         nodes_json, raw_nodes_json, raw_sources_json, node_sources_json, source_meta_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, node_sources_json, source_meta_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       path,
       Date.now(),
       rawNodeCount,
       result.nodes.length,
-      Math.max(0, rawNodeCount - result.nodes.length),
+      Number(result.filteredNodes?.length ?? Math.max(0, rawNodeCount - result.nodes.length)) || 0,
       result.status.errors.length,
       JSON.stringify(result.nodes),
+      JSON.stringify(result.filteredNodes || []),
       JSON.stringify(result.unfilteredNodes),
       JSON.stringify(result.rawSources),
+      JSON.stringify(result.filteredSources || []),
       JSON.stringify(result.nodeSources),
       JSON.stringify(result.sourceMeta),
     ).run();
@@ -173,7 +177,7 @@ async function readDetectionHistory(request, env) {
     const [rows, count] = await Promise.all([
       db.prepare(`
         SELECT id, api_path, detected_at, raw_count, kept_count, filtered_count, error_count,
-               nodes_json, raw_nodes_json, raw_sources_json, node_sources_json, source_meta_json
+               nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, node_sources_json, source_meta_json
         FROM detection_history
         WHERE api_path = ?
         ORDER BY detected_at DESC, id DESC
@@ -189,8 +193,10 @@ async function readDetectionHistory(request, env) {
       filtered: row.filtered_count,
       errors: row.error_count,
       nodes: parseJsonArray(row.nodes_json),
+      filteredNodes: parseJsonArray(row.filtered_nodes_json),
       unfilteredNodes: parseJsonArray(row.raw_nodes_json),
       rawSources: parseJsonArray(row.raw_sources_json),
+      filteredSources: parseJsonArray(row.filtered_sources_json),
       nodeSources: parseJsonArray(row.node_sources_json),
       sourceMeta: parseJsonArray(row.source_meta_json),
     }));
@@ -699,6 +705,8 @@ async function handleSourceRaw(request, env) {
     const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const rawSources = resultOptions.rawSources || [];
     const unfilteredNodes = rawSources.flatMap((source) => source.nodes || []);
+    const filteredSources = resultOptions.filteredSources || [];
+    const filteredNodes = filteredSources.flatMap((source) => source.nodes || []);
     const records = type === "domains"
       ? rawSources.find((source) => source.type === "domains")?.records || {}
       : null;
@@ -709,6 +717,8 @@ async function handleSourceRaw(request, env) {
     return pagesJsonResponse({
       nodes,
       rawSources,
+      filteredSources,
+      filteredNodes,
       unfilteredNodes,
       ...(type === "domains" ? { records } : {}),
       status: { ...(snapshot[type]?.[key] || {}), filterStats },
@@ -764,6 +774,8 @@ async function handleCustomApiPreview(request, env) {
   const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const rawSources = resultOptions.rawSources || [];
   const unfilteredNodes = rawSources.flatMap((source) => source.nodes || []);
+  const filteredSources = resultOptions.filteredSources || [];
+  const filteredNodes = filteredSources.flatMap((source) => source.nodes || []);
   const nodeSources = resultOptions.nodeSources || [];
   const filterStats = rawSources.reduce((total, source) => {
     for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
@@ -789,6 +801,8 @@ async function handleCustomApiPreview(request, env) {
   const previewResult = {
     nodes,
     rawSources,
+    filteredSources,
+    filteredNodes,
     unfilteredNodes,
     nodeSources,
     sourceMeta,

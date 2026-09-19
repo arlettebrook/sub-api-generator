@@ -86,6 +86,8 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#customApiSection")).toBeVisible();
   await expect(page.locator("#sourceRawCacheStatus")).toHaveCount(1);
   await expect(page.locator("#sourceRawSourceSort")).toHaveCount(1);
+  await expect(page.locator('[data-source-raw-tab]')).toHaveText(["节点结果", "过滤节点", "未过滤节点"]);
+  await expect(page.locator("#sourceRawFilteredContent")).toHaveAttribute("aria-label", "过滤节点");
   await expect(page.locator("#sourceRawRawContent")).toHaveAttribute("aria-label", "未过滤节点");
   await expect(page.locator("#customApiDialog")).not.toBeVisible();
   await page.getByRole("button", { name: "新建优选 API" }).click();

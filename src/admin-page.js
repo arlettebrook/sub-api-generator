@@ -120,6 +120,7 @@ export const adminHTML = `
     <div class="source-raw-process" id="sourceRawProcess" aria-live="polite"></div>
     <div class="source-raw-tabs" role="tablist" aria-label="查看内容">
       <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-raw-tab="nodes">节点结果</button>
+      <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-raw-tab="filtered">过滤节点</button>
       <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-raw-tab="raw">未过滤节点</button>
     </div>
     <div class="source-raw-toolbar">
@@ -137,7 +138,8 @@ export const adminHTML = `
       <button class="btn-subtle" type="button" id="expandSourceRawGroupsButton">展开全部</button>
       <button class="btn-subtle" type="button" id="collapseSourceRawGroupsButton">收起全部</button>
     </div>
-    <pre id="sourceRawContent" class="source-raw-code source-raw-content">正在检测数据源…</pre>
+    <pre id="sourceRawContent" class="source-raw-code source-raw-content" role="region" aria-label="节点结果">正在检测数据源…</pre>
+    <div id="sourceRawFilteredContent" class="source-raw-code source-raw-content" role="region" aria-label="过滤节点" hidden>正在检测数据源…</div>
     <div id="sourceRawRawContent" class="source-raw-code source-raw-content" role="region" aria-label="未过滤节点" hidden>正在检测数据源…</div>
     <div class="source-raw-actions">
       <span id="sourceRawResultCount" class="source-raw-result-count"></span>
@@ -160,6 +162,7 @@ export const adminHTML = `
     <div class="source-raw-summary" id="sourceRawHistoryDialogSummary"></div>
     <div class="source-raw-tabs" role="tablist" aria-label="历史检测内容">
       <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-history-tab="nodes">节点结果</button>
+      <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-history-tab="filtered">过滤节点</button>
       <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-history-tab="raw">未过滤节点</button>
     </div>
     <div class="source-raw-toolbar">

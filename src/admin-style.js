@@ -3031,6 +3031,7 @@ export const adminStyle = `
     white-space: normal;
   }
 
+  #sourceRawFilteredContent,
   #sourceRawRawContent {
     white-space: normal;
   }

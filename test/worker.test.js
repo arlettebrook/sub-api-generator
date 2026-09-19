@@ -467,6 +467,8 @@ test("previews a source with nodes, raw content, and filtering statistics", asyn
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.deepEqual(result.nodes, ["1.2.3.4:443#ok"]);
+    assert.deepEqual(result.filteredNodes, ["5.6.7.8:443#blocked"]);
+    assert.deepEqual(result.filteredSources, [{ type: "apis", key: sourceKey, remark: "预览源", nodes: ["5.6.7.8:443#blocked"] }]);
     assert.deepEqual(result.unfilteredNodes, ["1.2.3.4:443#ok", "5.6.7.8:443#blocked"]);
     assert.equal(result.status.filterStats.inputCount, 2);
     assert.equal(result.status.filterStats.blacklistedCount, 1);
@@ -481,12 +483,13 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
   const values = {
     apis: { [sourceKey]: { remark: "API 源" } },
     subs: {},
+    blacklist: ["blocked"],
     custom_apis: { disabled_preview: { enabled: false, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] } },
   };
   const runtime = env({ KV: createKv(values) });
   const hash = await sha256Hex("secret");
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response("9.9.9.9:443#custom", { status: 200 });
+  globalThis.fetch = async () => new Response("9.9.9.9:443#custom\n8.8.8.8:443#blocked", { status: 200 });
   const request = () => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
     method: "POST",
     headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
@@ -497,8 +500,10 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
     assert.equal(first.status, 200);
     const result = await first.json();
     assert.deepEqual(result.nodes, ["9.9.9.9:443#custom"]);
-    assert.deepEqual(result.unfilteredNodes, ["9.9.9.9:443#custom"]);
-    assert.deepEqual(result.rawSources, [{ type: "apis", key: sourceKey, remark: "API 源", nodes: ["9.9.9.9:443#custom"], filterStats: { inputCount: 1, outputCount: 1, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0 } }]);
+    assert.deepEqual(result.filteredNodes, ["8.8.8.8:443#blocked"]);
+    assert.deepEqual(result.filteredSources, [{ type: "apis", key: sourceKey, remark: "API 源", nodes: ["8.8.8.8:443#blocked"] }]);
+    assert.deepEqual(result.unfilteredNodes, ["9.9.9.9:443#custom", "8.8.8.8:443#blocked"]);
+    assert.deepEqual(result.rawSources, [{ type: "apis", key: sourceKey, remark: "API 源", nodes: ["9.9.9.9:443#custom", "8.8.8.8:443#blocked"], filterStats: { inputCount: 2, outputCount: 1, invalidCount: 0, blacklistedCount: 1, duplicateCount: 0 } }]);
     assert.deepEqual(result.sourceMeta, [{ type: "apis", key: sourceKey, remark: "API 源" }]);
     assert.deepEqual(result.nodeSources, [{ value: "9.9.9.9:443#custom", type: "apis", key: sourceKey, remark: "API 源" }]);
     const second = await request();
