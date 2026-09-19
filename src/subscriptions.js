@@ -565,7 +565,14 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     if (!value) continue;
     const line = value.trim();
     const match = NODE_MATCH_REGEX.exec(line);
-    if (!match) { stats.invalidCount += 1; continue; }
+    if (!match) {
+      // 解析不出 IP:端口 的行会被丢弃，这里保留原文，便于在“过滤节点”里排查上游格式变化。
+      stats.invalidCount += 1;
+      const display = displayFilteredNode(line);
+      filteredNodes.push(display);
+      filterDetails.push({ node: display, reason: "invalid", rule: "" });
+      continue;
+    }
     const node = match[0];
     const hashIndex = line.indexOf("#");
     const rawRemark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
@@ -1007,11 +1014,13 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     // 手动优选是全局补充源：全部数据源模式始终追加；手动选择模式下由优选 API 配置里的
     // “手动优选”来源勾选决定，与其他来源一样经过黑名单、过滤规则和格式校验。
     for (const manualEntry of activeManualEntries) {
-      const manualLines = manualEntry.content.split(/\r?\n/).filter((line) => line.trim());
+      const manualLines = manualEntry.content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       if (!manualLines.length) continue;
       const manualValues = filterPreferredIps(manualLines, blacklist, blacklistRegex, filterRules);
       extra.push(...manualValues);
       mergeFilterStats(filterStats, manualValues.filterStats);
+      // 手动优选同样登记原始节点，保证“未过滤节点”和来源统计（原始/保留/过滤）与其它来源一致。
+      rawSources.push({ type: "manual", key: manualEntry.id, remark: manualEntry.name, nodes: manualLines.slice(), filterStats: manualValues.filterStats });
       filteredSources.push({ type: "manual", key: manualEntry.id, remark: manualEntry.name, nodes: manualValues.filteredNodes || [] });
       recordFilterDetails("manual", manualEntry.id, manualValues.filterDetails);
       manualValues.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "manual", manualEntry.id, manualEntry.name)));

@@ -1830,12 +1830,29 @@ function sourceGroupStats(id, groupNodes) {
   const stored = sourceRawSourceStats.get(id) || {};
   const raw = Number(stored.raw ?? sourceRawUnfilteredSourceNodes.get(id)?.length ?? groupNodes.length) || 0;
   const kept = Number(stored.kept ?? sourceGroupKeptCount(id)) || 0;
+  const remark = Number(stored.remark) || 0;
   const filtered = Number(stored.filtered ?? sourceRawFilteredSourceNodes.get(id)?.length ?? Math.max(0, raw - kept)) || 0;
-  return { raw, kept, filtered };
+  // entries 是“过滤节点”列表里的实际条数：被丢弃的节点 + 仅清理了备注的节点。
+  return { raw, kept, filtered, remark, entries: filtered + remark };
 }
 
 function sourceGroupStatsText(stats) {
-  return '原始 ' + stats.raw + ' · 保留 ' + stats.kept + ' · 过滤 ' + stats.filtered;
+  return '原始 ' + stats.raw + ' · 保留 ' + stats.kept + ' · 过滤 ' + stats.filtered
+    + (stats.remark ? ' · 备注清理 ' + stats.remark : '');
+}
+
+// 按来源分组统计过滤原因：备注清理的节点仍会输出，单独计数，不和被丢弃的节点混在一起。
+function sourceRawFilterCountsByGroup(details) {
+  const counts = new Map();
+  (Array.isArray(details) ? details : []).forEach((detail) => {
+    const id = sourceGroupId(detail?.type, detail?.key);
+    if (!id) return;
+    const entry = counts.get(id) || { filtered: 0, remark: 0 };
+    if (detail?.reason === 'remark') entry.remark += 1;
+    else entry.filtered += 1;
+    counts.set(id, entry);
+  });
+  return counts;
 }
 
 let sourceRawTab = 'nodes';
@@ -4382,10 +4399,12 @@ function renderSourceRawResults(view = sourceRawTab) {
       const sortedGroups = [...groups.entries()].sort(([leftId, leftNodes], [rightId, rightNodes]) => {
         const leftStats = sourceGroupStats(leftId, leftNodes);
         const rightStats = sourceGroupStats(rightId, rightNodes);
-        if (sourceRawSourceSort === 'count') return (rightStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0);
+        // 过滤节点标签页按列表实际条数（含备注清理）排序，其余标签页按原始/保留节点数。
+        const sortKey = rawMode ? 'raw' : filteredMode ? 'entries' : 'kept';
+        if (sourceRawSourceSort === 'count') return (rightStats[sortKey] || 0) - (leftStats[sortKey] || 0);
         if (sourceRawSourceSort === 'error') {
           const errorDiff = Number(sourceRawSourceErrors.has(rightId)) - Number(sourceRawSourceErrors.has(leftId));
-          return errorDiff || ((rightStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0) - (leftStats[rawMode ? 'raw' : filteredMode ? 'filtered' : 'kept'] || 0));
+          return errorDiff || ((rightStats[sortKey] || 0) - (leftStats[sortKey] || 0));
         }
         if (sourceRawSourceSort === 'name') {
           return sourceGroupLabelFromMeta(sourceRawSourceMeta.get(leftId)).localeCompare(sourceGroupLabelFromMeta(sourceRawSourceMeta.get(rightId)), 'zh-CN');
@@ -4776,6 +4795,8 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     sourceRawSourceErrors = new Map();
     sourceRawSourceStats = new Map();
     if (type === 'customApis') {
+      // 过滤原因按来源分组统计：备注清理与真正被丢弃的节点分开计数。
+      const filterCountsByGroup = sourceRawFilterCountsByGroup(result.filterDetails);
       (Array.isArray(result.sourceMeta) ? result.sourceMeta : []).forEach((item) => {
         sourceRawSourceMeta.set(sourceGroupId(item.type, item.key), item);
       });
@@ -4791,7 +4812,15 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
         const values = Array.isArray(item.nodes) ? item.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
         sourceRawUnfilteredSourceNodes.set(id, values);
         const filterStats = item.filterStats || {};
-        sourceRawSourceStats.set(id, { raw: values.length, kept: Number(filterStats.outputCount ?? values.length) || 0, filtered: Array.isArray(item.filteredNodes) ? item.filteredNodes.length : Math.max(0, values.length - (Number(filterStats.outputCount) || 0)) });
+        const filteredCount = Array.isArray(item.filteredNodes) ? item.filteredNodes.length : Math.max(0, values.length - (Number(filterStats.outputCount) || 0));
+        const counts = filterCountsByGroup.get(id);
+        sourceRawSourceStats.set(id, {
+          raw: values.length,
+          kept: Number(filterStats.outputCount ?? values.length) || 0,
+          // 备注清理的节点仍会输出，从“过滤”里拆出来单独展示，避免出现 保留 + 过滤 > 原始 的错觉。
+          filtered: counts ? counts.filtered : Math.max(0, filteredCount - (Number(filterStats.remarkCount) || 0)),
+          remark: counts ? counts.remark : (Number(filterStats.remarkCount) || 0),
+        });
         if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: item.type, key: item.key, remark: item.remark || '' });
       });
       (Array.isArray(result.filteredSources) ? result.filteredSources : []).forEach((item) => {
@@ -4800,7 +4829,11 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
         sourceRawFilteredSourceNodes.set(id, values);
         if (!sourceRawSourceMeta.has(id)) sourceRawSourceMeta.set(id, { type: item.type, key: item.key, remark: item.remark || '' });
         const stats = sourceRawSourceStats.get(id) || {};
-        sourceRawSourceStats.set(id, { ...stats, filtered: values.length });
+        // 有过滤原因明细时按原因计数；旧缓存没有明细，退回按列表长度估算。
+        const counts = filterCountsByGroup.get(id);
+        const remark = counts ? counts.remark : (Number(stats.remark) || 0);
+        const filtered = counts ? counts.filtered : Math.max(0, values.length - remark);
+        sourceRawSourceStats.set(id, { ...stats, filtered, remark });
       });
       (result.status?.errors || []).forEach((item) => {
         const id = sourceGroupId(item.type, item.key);

@@ -581,6 +581,36 @@ test("reports which rule filtered each node", async () => {
   }
 });
 
+test("records unparsable upstream lines as format-invalid filter details", async () => {
+  const values = {
+    subs: {},
+    apis: {},
+    blacklist: [],
+    // 手动优选里混入上游文本（例如到期提示），过去这类行只会被丢弃，看不出上游发了什么。
+    preferred_manual: { content: "1.1.1.1:443#ok\nnot-a-node\n订阅内容已变更，请更新订阅" },
+    custom_apis: { invalid_preview: { enabled: true, sourceMode: "selected", sources: [{ type: "manual", key: "manual" }] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const response = await worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ path: "invalid_preview" }),
+  }), runtime);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result.nodes, ["1.1.1.1:443#ok"]);
+  assert.deepEqual(result.filteredNodes, ["not-a-node", "订阅内容已变更，请更新订阅"]);
+  assert.deepEqual(result.filterDetails, [
+    { type: "manual", key: "manual", node: "not-a-node", reason: "invalid", rule: "" },
+    { type: "manual", key: "manual", node: "订阅内容已变更，请更新订阅", reason: "invalid", rule: "" },
+  ]);
+  assert.deepEqual(result.rawSources, [
+    { type: "manual", key: "manual", remark: "手动优选", nodes: ["1.1.1.1:443#ok", "not-a-node", "订阅内容已变更，请更新订阅"], filterStats: { inputCount: 3, outputCount: 1, invalidCount: 2, blacklistedCount: 0, duplicateCount: 0, remarkCount: 0 } },
+  ]);
+});
+
 test("applies view-only blacklist and remark filters without touching global config", async () => {
   const globalKey = "https://view-global.example/data";
   const overrideKey = "https://view-override.example/data";

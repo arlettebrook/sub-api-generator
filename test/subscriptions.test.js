@@ -3,13 +3,24 @@ import assert from "node:assert/strict";
 import { clearAggregateCache, fetchPreferredSubs, filterPreferredIps, handleRoot, parsePreferredIpLine } from "../src/subscriptions.js";
 
 test("filters invalid and duplicate nodes", () => {
-  assert.deepEqual(filterPreferredIps([
+  const values = filterPreferredIps([
     "1.2.3.4:443#good",
     "1.2.3.4:443#good",
     "5.6.7.8:8443#telegram",
     "not-a-node",
     "9.9.9.9:443#good @extra",
-  ], ["telegram"], null, ["空格"]), ["1.2.3.4:443#good", "9.9.9.9:443#good"]);
+  ], ["telegram"], null, ["空格"]);
+  assert.deepEqual(values, ["1.2.3.4:443#good", "9.9.9.9:443#good"]);
+  // 解析不出的行会被丢弃，同时保留原文，便于在“过滤节点”的“格式无效”分类里排查上游格式变化。
+  assert.deepEqual(values.filteredNodes, ["1.2.3.4:443#good", "5.6.7.8:8443#telegram", "not-a-node", "9.9.9.9:443#good @extra"]);
+  assert.deepEqual(values.filterDetails, [
+    { node: "1.2.3.4:443#good", reason: "duplicate", rule: "" },
+    { node: "5.6.7.8:8443#telegram", reason: "blacklist", rule: "telegram" },
+    { node: "not-a-node", reason: "invalid", rule: "" },
+    { node: "9.9.9.9:443#good @extra", reason: "remark", rule: "空格" },
+  ]);
+  assert.equal(values.filterStats.invalidCount, 1);
+  assert.equal(values.filterStats.remarkCount, 1);
 });
 
 test("parses Base64 responses from preferred subscription providers", async () => {
