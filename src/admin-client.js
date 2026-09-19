@@ -1220,6 +1220,7 @@ let sourceRawSourceStats = new Map();
 let sourceRawCollapsedGroups = new Set();
 // 过滤节点的分类折叠状态（按“来源分组::分类”记录），以及当前渲染出的分类键，供“展开/收起全部”使用。
 let sourceRawCollapsedFilterCategories = new Set();
+let sourceRawExpandedFilterCategories = new Set();
 let sourceRawFilterCategoryKeys = new Set();
 let sourceRawSourceFilter = 'all';
 let sourceRawRetryingGroup = '';
@@ -1761,6 +1762,16 @@ const SOURCE_RAW_FILTER_CATEGORIES = [
   { key: 'invalid', label: '格式无效', match: (reason) => reason === 'invalid' },
   { key: 'other', label: '其他', match: () => true },
 ];
+
+// 默认收起的分类：备注规则命中的节点仍会输出，数量往往很多，默认折叠避免刷屏。
+const SOURCE_RAW_DEFAULT_COLLAPSED_CATEGORIES = new Set(['remark']);
+
+// 分类是否收起：用户的展开/收起操作优先于默认值。
+function sourceRawFilterCategoryCollapsed(categoryId, categoryKey) {
+  if (sourceRawExpandedFilterCategories.has(categoryId)) return false;
+  if (sourceRawCollapsedFilterCategories.has(categoryId)) return true;
+  return SOURCE_RAW_DEFAULT_COLLAPSED_CATEGORIES.has(categoryKey);
+}
 
 function sourceRawFilterCategoryKey(detail) {
   const reason = String(detail?.reason || '');
@@ -4137,6 +4148,7 @@ function closeSourceRawDialog() {
   sourceRawSourceStats = new Map();
   sourceRawCollapsedGroups = new Set();
   sourceRawCollapsedFilterCategories = new Set();
+  sourceRawExpandedFilterCategories = new Set();
   sourceRawFilterCategoryKeys = new Set();
   sourceRawSourceFilter = 'all';
   sourceRawRetryingGroup = '';
@@ -4314,7 +4326,7 @@ function renderSourceRawResults(view = sourceRawTab) {
     const renderFilteredCategory = (container, key, nodes, groupId) => {
       const categoryId = (groupId || '') + '::' + key;
       sourceRawFilterCategoryKeys.add(categoryId);
-      const collapsed = sourceRawCollapsedFilterCategories.has(categoryId);
+      const collapsed = sourceRawFilterCategoryCollapsed(categoryId, key);
       const header = document.createElement('button');
       header.type = 'button';
       header.className = 'source-raw-filter-category' + (collapsed ? ' is-collapsed' : '');
@@ -4326,8 +4338,13 @@ function renderSourceRawResults(view = sourceRawTab) {
       total.textContent = nodes.length + ' 条';
       header.append(label, total);
       header.onclick = () => {
-        if (sourceRawCollapsedFilterCategories.has(categoryId)) sourceRawCollapsedFilterCategories.delete(categoryId);
-        else sourceRawCollapsedFilterCategories.add(categoryId);
+        if (collapsed) {
+          sourceRawCollapsedFilterCategories.delete(categoryId);
+          sourceRawExpandedFilterCategories.add(categoryId);
+        } else {
+          sourceRawExpandedFilterCategories.delete(categoryId);
+          sourceRawCollapsedFilterCategories.add(categoryId);
+        }
         renderSourceRawResults('filtered');
       };
       container.appendChild(header);
@@ -4583,6 +4600,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     // 折叠状态只作用于当前查看会话；重新打开时始终展开来源分组。
     sourceRawCollapsedGroups = new Set();
     sourceRawCollapsedFilterCategories = new Set();
+    sourceRawExpandedFilterCategories = new Set();
     sourceRawFilterCategoryKeys = new Set();
     sourceRawSourceFilter = typeof viewState?.filter === 'string' ? viewState.filter : 'all';
     sourceRawSourceSort = ['config', 'count', 'error', 'name'].includes(viewState?.sort) ? viewState.sort : 'config';
@@ -4677,6 +4695,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
   if (expandGroups) expandGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set();
     sourceRawCollapsedFilterCategories = new Set();
+    sourceRawExpandedFilterCategories = new Set(sourceRawFilterCategoryKeys);
     renderSourceRawResults();
     renderSourceRawResults('filtered');
     renderSourceRawResults(true);
@@ -4686,6 +4705,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
   if (collapseGroups) collapseGroups.onclick = () => {
     sourceRawCollapsedGroups = new Set(sourceRawSourceMeta.keys());
     sourceRawCollapsedFilterCategories = new Set(sourceRawFilterCategoryKeys);
+    sourceRawExpandedFilterCategories = new Set();
     renderSourceRawResults();
     renderSourceRawResults('filtered');
     renderSourceRawResults(true);

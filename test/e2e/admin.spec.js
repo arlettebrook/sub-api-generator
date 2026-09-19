@@ -282,18 +282,19 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443");
   await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
   await page.locator('[data-source-raw-tab="filtered"]').click();
-  await expect(page.locator("#sourceRawFilteredContent")).toContainText("2.2.2.2:443#api");
-  // 备注规则命中的节点归入“备注规则”分类。
+  // 备注规则命中的节点归入“备注规则”分类，该分类默认折叠，展开后能看到节点与规则。
   await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["备注规则"]);
-  await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("备注规则：api");
-  // 分类标题可以折叠，收起后该分类的节点不再显示。
   const remarkCategory = page.locator("#sourceRawFilteredContent .source-raw-filter-category").first();
-  await remarkCategory.click();
   await expect(remarkCategory).toHaveAttribute("aria-expanded", "false");
+  await expect(remarkCategory).toContainText("2 条");
   await expect(page.locator("#sourceRawFilteredContent")).not.toContainText("3.3.3.3:443#api");
   await remarkCategory.click();
   await expect(remarkCategory).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#sourceRawFilteredContent")).toContainText("3.3.3.3:443#api");
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("备注规则：api");
+  // 再点一次可以收起。
+  await remarkCategory.click();
+  await expect(remarkCategory).toHaveAttribute("aria-expanded", "false");
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
 });
