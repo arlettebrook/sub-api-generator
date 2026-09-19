@@ -440,15 +440,45 @@ function isBlacklisted(value, blacklistRegex) {
   }
 }
 
+// 命中黑名单时回查具体命中的关键词，用于在“过滤节点”里标注过滤原因。
+function findBlacklistMatch(value, normalizedBlacklist = []) {
+  const text = String(value ?? "");
+  if (!text || !normalizedBlacklist.length) return "";
+  const variants = [text];
+  if (text.includes("%")) {
+    try { variants.push(decodeURIComponent(text)); } catch { /* 保留原始文本 */ }
+  }
+  for (const variant of variants) {
+    const lower = variant.toLowerCase();
+    let matched = "";
+    let matchedIndex = -1;
+    for (const word of normalizedBlacklist) {
+      const index = lower.indexOf(String(word).toLowerCase());
+      if (index < 0) continue;
+      if (matchedIndex < 0 || index < matchedIndex) { matched = String(word); matchedIndex = index; }
+    }
+    if (matched) return matched;
+  }
+  return "";
+}
+
 function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = []) {
-  const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
+  const normalizedBlacklist = normalizeBlacklist(blacklist);
+  const blacklistRegex = preparedRegex || getBlacklistRegex(normalizedBlacklist);
   const result = [];
   const filteredNodes = [];
+  const filterDetails = [];
   const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
   for (const value of lines) {
     stats.inputCount += 1;
     if (!value) { stats.invalidCount += 1; continue; }
-    if (isBlacklisted(value, blacklistRegex)) { stats.blacklistedCount += 1; filteredNodes.push(String(value).trim()); continue; }
+    if (isBlacklisted(value, blacklistRegex)) {
+      stats.blacklistedCount += 1;
+      const node = String(value).trim();
+      filteredNodes.push(node);
+      filterDetails.push({ node, reason: "blacklist", rule: findBlacklistMatch(node, normalizedBlacklist) });
+      continue;
+    }
     const hashIndex = value.indexOf("#");
     if (hashIndex < 0) {
       result.push(value);
@@ -460,15 +490,18 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
   stats.outputCount = result.length;
   Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
   Object.defineProperty(result, "filteredNodes", { value: filteredNodes, enumerable: false });
+  Object.defineProperty(result, "filterDetails", { value: filterDetails, enumerable: false });
   return result;
 }
 
 function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex = null, filterRules = DEFAULT_FILTER_RULES) {
   const result = [];
   const filteredNodes = [];
+  const filterDetails = [];
   const seen = new Set();
   const stats = { inputCount: 0, invalidCount: 0, blacklistedCount: 0, duplicateCount: 0, outputCount: 0 };
-  const blacklistRegex = preparedRegex || getBlacklistRegex(normalizeBlacklist(blacklist));
+  const normalizedBlacklist = normalizeBlacklist(blacklist);
+  const blacklistRegex = preparedRegex || getBlacklistRegex(normalizedBlacklist);
   for (const value of lines) {
     stats.inputCount += 1;
     if (!value) continue;
@@ -479,16 +512,27 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     const hashIndex = line.indexOf("#");
     const rawRemark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
     const rawFull = rawRemark ? `${node}#${rawRemark}` : node;
-    if (isBlacklisted(rawFull, blacklistRegex)) { stats.blacklistedCount += 1; filteredNodes.push(rawFull); continue; }
+    if (isBlacklisted(rawFull, blacklistRegex)) {
+      stats.blacklistedCount += 1;
+      filteredNodes.push(rawFull);
+      filterDetails.push({ node: rawFull, reason: "blacklist", rule: findBlacklistMatch(rawFull, normalizedBlacklist) });
+      continue;
+    }
     const remark = rawRemark ? cleanPreferredRemark(rawRemark, filterRules) : "";
     const cleaned = remark ? `${node}#${remark}` : node;
-    if (seen.has(cleaned)) { stats.duplicateCount += 1; filteredNodes.push(cleaned); continue; }
+    if (seen.has(cleaned)) {
+      stats.duplicateCount += 1;
+      filteredNodes.push(cleaned);
+      filterDetails.push({ node: cleaned, reason: "duplicate", rule: "" });
+      continue;
+    }
     seen.add(cleaned);
     result.push(cleaned);
   }
   stats.outputCount = result.length;
   Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
   Object.defineProperty(result, "filteredNodes", { value: filteredNodes, enumerable: false });
+  Object.defineProperty(result, "filterDetails", { value: filterDetails, enumerable: false });
   return result;
 }
 
@@ -676,6 +720,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         options.rawSources = cached.rawSources || [];
         options.filteredSources = cached.filteredSources || [];
         options.nodeSources = cached.nodeSources || [];
+        options.filterDetails = cached.filterDetails || [];
       }
       return new Response(cached.output, {
         headers: withSecurityHeaders(headers),
@@ -720,7 +765,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "subs", key: host, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterDetails: values.filterDetails || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "subs";
@@ -762,7 +807,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
               lastSuccessRawNodeCount: rawValues.length,
             } : {}),
           });
-          return { type: "apis", key: apiUrl, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "apis", key: apiUrl, remark: isPlainObject(entry) ? entry.remark || "" : "", values, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterDetails: values.filterDetails || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "apis";
@@ -810,7 +855,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
             lastAttemptAt: timestamp,
             ...(values.length > 0 ? { lastSuccessAt: timestamp, lastSuccessNodeCount: values.length, lastSuccessRawNodeCount: rawValues.length } : {}),
           });
-          return { type: "domains", key: domain, remark: isPlainObject(entry) ? entry.remark || "" : "", values, records: rawValues.records || {}, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
+          return { type: "domains", key: domain, remark: isPlainObject(entry) ? entry.remark || "" : "", values, records: rawValues.records || {}, unfilteredNodes: rawValues.unfilteredNodes || [], filteredNodes: values.filteredNodes || [], filterDetails: values.filterDetails || [], filterStats: values.filterStats || { inputCount: rawValues.length, outputCount: values.length } };
         } catch (error) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "domains";
@@ -840,6 +885,15 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const nodeSources = [];
     const sourceErrors = [];
     const filteredSources = [];
+    // 过滤节点对应的命中规则，按来源记录，便于查看弹窗在节点旁标注过滤原因。
+    const filterDetails = [];
+    const recordFilterDetails = (type, key, details) => {
+      (Array.isArray(details) ? details : []).forEach((detail) => {
+        const node = String(detail?.node ?? "").trim();
+        if (!node) return;
+        filterDetails.push({ type, key, node, reason: detail?.reason || "filtered", rule: detail?.rule || "" });
+      });
+    };
     if (selected && selected.length === 0) {
       sourceErrors.push({ type: "config", key: "", message: "未选择任何数据源" });
     }
@@ -848,6 +902,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         preferred.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
         filteredSources.push({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.filteredNodes || [] });
+        recordFilterDetails(result.value.type, result.value.key, result.value.filterDetails);
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "subs", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "subs", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -858,6 +913,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         extra.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
         filteredSources.push({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.filteredNodes || [] });
+        recordFilterDetails(result.value.type, result.value.key, result.value.filterDetails);
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "apis", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "apis", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -867,6 +923,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         extra.push(...result.value.values);
         mergeFilterStats(filterStats, result.value.filterStats);
         filteredSources.push({ type: result.value.type, key: result.value.key, remark: result.value.remark, nodes: result.value.filteredNodes || [] });
+        recordFilterDetails(result.value.type, result.value.key, result.value.filterDetails);
         result.value.values.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "domains", result.value.key, result.value.remark)));
       }
       else sourceErrors.push({ type: "domains", key: result.reason?.sourceKey || "", message: sourceErrorMessage(result.reason) });
@@ -880,6 +937,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       extra.push(...manualValues);
       mergeFilterStats(filterStats, manualValues.filterStats);
       filteredSources.push({ type: "manual", key: manualEntry.id, remark: manualEntry.name, nodes: manualValues.filteredNodes || [] });
+      recordFilterDetails("manual", manualEntry.id, manualValues.filterDetails);
       manualValues.forEach((value) => nodeSources.push(makeNodeSource(value, outputTransform, "manual", manualEntry.id, manualEntry.name)));
     }
 
@@ -905,13 +963,14 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       }
       filteredSource.nodes.push(source.originalValue || source.value);
       filterStats.duplicateCount += 1;
+      filterDetails.push({ type: source.type, key: source.key, node: source.originalValue || source.value, reason: "cross-duplicate", rule: "" });
     }
     const output = transformedValues.map((item) => item.value).join("\n");
     filterStats.outputCount = output ? output.split("\n").filter(Boolean).length : 0;
     const generatedAt = new Date().toISOString();
     // 空结果不缓存，避免上游短暂异常时需要等待缓存过期才能恢复。
     if (output.trim()) {
-      aggregateCache.set(cacheKey, { output, sourceErrors, nodeSources, filterStats, rawSources, filteredSources, generatedAt, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
+      aggregateCache.set(cacheKey, { output, sourceErrors, nodeSources, filterStats, rawSources, filteredSources, filterDetails, generatedAt, expiresAt: Date.now() + AGGREGATE_CACHE_TTL_MS });
       pruneAggregateCache();
     } else {
       aggregateCache.delete(cacheKey);
@@ -929,6 +988,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       options.rawSources = rawSources;
       options.filteredSources = filteredSources;
       options.nodeSources = nodeSources;
+      options.filterDetails = filterDetails;
     }
     return new Response(output, {
       headers: withSecurityHeaders(headers),

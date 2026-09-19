@@ -101,6 +101,7 @@ async function ensureDetectionHistorySchema(env) {
           raw_nodes_json TEXT NOT NULL DEFAULT '[]',
           raw_sources_json TEXT NOT NULL DEFAULT '[]',
           filtered_sources_json TEXT NOT NULL DEFAULT '[]',
+          filter_details_json TEXT NOT NULL DEFAULT '[]',
           node_sources_json TEXT NOT NULL DEFAULT '[]',
           source_meta_json TEXT NOT NULL DEFAULT '[]'
         )
@@ -109,6 +110,15 @@ async function ensureDetectionHistorySchema(env) {
         CREATE INDEX IF NOT EXISTS idx_detection_history_api_time
           ON detection_history(api_path, detected_at DESC, id DESC)
       `).bind().run();
+      // 兼容未执行 0002/0003 迁移的旧库：补齐后加的列，列已存在时报错可忽略。
+      const addedColumns = [
+        "ALTER TABLE detection_history ADD COLUMN filtered_nodes_json TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE detection_history ADD COLUMN filtered_sources_json TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE detection_history ADD COLUMN filter_details_json TEXT NOT NULL DEFAULT '[]'",
+      ];
+      for (const statement of addedColumns) {
+        await db.prepare(statement).bind().run().catch(() => { /* 列已存在 */ });
+      }
     })().catch((error) => {
       historySchemaPromises.delete(db);
       throw error;
@@ -132,8 +142,8 @@ async function saveDetectionHistory(env, path, result) {
     await db.prepare(`
       INSERT INTO detection_history
         (api_path, detected_at, raw_count, kept_count, filtered_count, error_count,
-         nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, node_sources_json, source_meta_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, filter_details_json, node_sources_json, source_meta_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       path,
       Date.now(),
@@ -146,6 +156,7 @@ async function saveDetectionHistory(env, path, result) {
       JSON.stringify(result.unfilteredNodes),
       JSON.stringify(result.rawSources),
       JSON.stringify(result.filteredSources || []),
+      JSON.stringify(result.filterDetails || []),
       JSON.stringify(result.nodeSources),
       JSON.stringify(result.sourceMeta),
     ).run();
@@ -177,7 +188,7 @@ async function readDetectionHistory(request, env) {
     const [rows, count] = await Promise.all([
       db.prepare(`
         SELECT id, api_path, detected_at, raw_count, kept_count, filtered_count, error_count,
-               nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, node_sources_json, source_meta_json
+               nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, filter_details_json, node_sources_json, source_meta_json
         FROM detection_history
         WHERE api_path = ?
         ORDER BY detected_at DESC, id DESC
@@ -197,6 +208,7 @@ async function readDetectionHistory(request, env) {
       unfilteredNodes: parseJsonArray(row.raw_nodes_json),
       rawSources: parseJsonArray(row.raw_sources_json),
       filteredSources: parseJsonArray(row.filtered_sources_json),
+      filterDetails: parseJsonArray(row.filter_details_json),
       nodeSources: parseJsonArray(row.node_sources_json),
       sourceMeta: parseJsonArray(row.source_meta_json),
     }));
@@ -729,6 +741,7 @@ async function handleSourceRaw(request, env) {
     const unfilteredNodes = rawSources.flatMap((source) => source.nodes || []);
     const filteredSources = resultOptions.filteredSources || [];
     const filteredNodes = filteredSources.flatMap((source) => source.nodes || []);
+    const filterDetails = resultOptions.filterDetails || [];
     const records = type === "domains"
       ? rawSources.find((source) => source.type === "domains")?.records || {}
       : null;
@@ -743,6 +756,7 @@ async function handleSourceRaw(request, env) {
         filteredSources,
         filteredNodes,
         unfilteredNodes,
+        filterDetails,
         ...(type === "domains" ? { records } : {}),
         localFilterOverride: true,
         status: {
@@ -766,6 +780,7 @@ async function handleSourceRaw(request, env) {
       filteredSources,
       filteredNodes,
       unfilteredNodes,
+      filterDetails,
       ...(type === "domains" ? { records } : {}),
       status: { ...(snapshot[type]?.[key] || {}), filterStats },
     }, response.ok ? 200 : response.status);
@@ -832,6 +847,7 @@ async function handleCustomApiPreview(request, env) {
   const unfilteredNodes = rawSources.flatMap((source) => source.nodes || []);
   const filteredSources = resultOptions.filteredSources || [];
   const filteredNodes = filteredSources.flatMap((source) => source.nodes || []);
+  const filterDetails = resultOptions.filterDetails || [];
   const nodeSources = resultOptions.nodeSources || [];
   const filterStats = rawSources.reduce((total, source) => {
     for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
@@ -865,6 +881,7 @@ async function handleCustomApiPreview(request, env) {
     filteredSources,
     filteredNodes,
     unfilteredNodes,
+    filterDetails,
     nodeSources,
     sourceMeta,
     status: {

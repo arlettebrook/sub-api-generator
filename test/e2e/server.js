@@ -14,8 +14,8 @@ const DB = {
         return {
           async run() {
             if (/INSERT INTO detection_history/i.test(sql)) {
-              const [api_path, detected_at, raw_count, kept_count, filtered_count, error_count, nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, node_sources_json, source_meta_json] = params;
-              detectionHistory.push({ id: detectionHistory.length + 1, api_path, detected_at, raw_count, kept_count, filtered_count, error_count, nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, node_sources_json, source_meta_json });
+              const [api_path, detected_at, raw_count, kept_count, filtered_count, error_count, nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, filter_details_json, node_sources_json, source_meta_json] = params;
+              detectionHistory.push({ id: detectionHistory.length + 1, api_path, detected_at, raw_count, kept_count, filtered_count, error_count, nodes_json, filtered_nodes_json, raw_nodes_json, raw_sources_json, filtered_sources_json, filter_details_json, node_sources_json, source_meta_json });
             }
             if (/DELETE FROM detection_history/i.test(sql)) {
               const path = params[0];

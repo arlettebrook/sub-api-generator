@@ -1206,6 +1206,7 @@ let sourceRawRecords = {};
 let sourceRawUnfilteredNodes = [];
 let sourceRawUnfilteredSourceNodes = new Map();
 let sourceRawFilteredSourceNodes = new Map();
+let sourceRawFilterDetails = new Map();
 const sourceRawCache = new Map();
 let sourceRawRefreshTimer = null;
 let sourceRawRetryTimer = null;
@@ -1304,10 +1305,23 @@ function renderSourceRawHistoryDialog() {
   }
   // 历史检测保留优选 API 来源分类，三个标签分别只展示各自的数据集合。
   if (sourceRawHistoryDialogTab === 'filtered' && Array.isArray(item.filteredSources) && item.filteredSources.length) {
+    const details = buildSourceRawFilterDetails(item.filterDetails);
+    const detailFor = (groupId, node) => {
+      const direct = groupId ? details.get(groupId) : null;
+      if (direct?.has(node)) return direct.get(node);
+      for (const map of details.values()) if (map.has(node)) return map.get(node);
+      return null;
+    };
     const sections = item.filteredSources.map((source) => {
       const nodes = (Array.isArray(source.nodes) ? source.nodes : []).filter((node) => sourceRawHistoryDialogVisible.includes(node));
       if (!nodes.length) return '';
-      return sourceGroupLabelFromMeta(source, true) + '\\n' + nodes.join('\\n');
+      const groupId = sourceGroupId(source.type, source.key);
+      const lines = nodes.map((node) => {
+        const detail = detailFor(groupId, node);
+        const reason = sourceRawFilterReasonLabel(detail);
+        return reason ? node + '  ← ' + reason : node;
+      });
+      return sourceGroupLabelFromMeta(source, true) + '\\n' + lines.join('\\n');
     }).filter(Boolean);
     content.textContent = sections.length ? sections.join('\\n\\n') : '没有匹配的数据。';
     return;
@@ -1347,6 +1361,15 @@ function renderSourceRawHistoryDialog() {
       const heading = id === '未识别来源' ? id : sourceGroupLabelFromMeta(metaById.get(id), true);
       return heading + '\\n' + nodes.join('\\n');
     }).join('\\n\\n');
+    return;
+  }
+  if (sourceRawHistoryDialogTab === 'filtered') {
+    const details = buildSourceRawFilterDetails(item.filterDetails);
+    const suffixByNode = new Map();
+    details.forEach((map) => map.forEach((detail, node) => { if (!suffixByNode.has(node)) suffixByNode.set(node, sourceRawFilterReasonLabel(detail)); }));
+    content.textContent = sourceRawHistoryDialogVisible
+      .map((node) => (suffixByNode.get(node) ? node + '  ← ' + suffixByNode.get(node) : node))
+      .join('\\n');
     return;
   }
   content.textContent = sourceRawHistoryDialogVisible.join('\\n');
@@ -1657,6 +1680,62 @@ function sourceGroupId(type, key) {
 
 function sourceGroupTypeLabel(type) {
   return type === 'apis' ? 'API 源' : type === 'domains' ? '优选域名' : type === 'manual' ? '手动优选' : type === 'subs' ? '订阅源' : '来源';
+}
+
+// 过滤节点的命中原因：Map<来源分组, Map<节点文本, { node, reason, rule }>>。
+function buildSourceRawFilterDetails(entries) {
+  const groups = new Map();
+  (Array.isArray(entries) ? entries : []).forEach((entry) => {
+    const id = sourceGroupId(entry?.type, entry?.key);
+    const node = String(entry?.node || '').trim();
+    if (!id || !node) return;
+    if (!groups.has(id)) groups.set(id, new Map());
+    const map = groups.get(id);
+    if (!map.has(node)) map.set(node, { node, reason: entry?.reason || '', rule: entry?.rule || '' });
+  });
+  return groups;
+}
+
+// 本地缓存里保存为 [分组, 条目数组] 的形式，避免直接序列化 Map。
+function serializeSourceRawFilterDetails() {
+  return [...sourceRawFilterDetails].map(([id, map]) => [id, [...map.values()]]);
+}
+
+function restoreSourceRawFilterDetails(value) {
+  const groups = new Map();
+  (Array.isArray(value) ? value : []).forEach((pair) => {
+    if (!Array.isArray(pair) || pair.length !== 2) return;
+    const map = new Map();
+    (Array.isArray(pair[1]) ? pair[1] : []).forEach((item) => {
+      const node = String(item?.node || '').trim();
+      if (!node) return;
+      map.set(node, { node, reason: item?.reason || '', rule: item?.rule || '' });
+    });
+    groups.set(String(pair[0]), map);
+  });
+  return groups;
+}
+
+function sourceRawFilterDetailFor(groupId, node) {
+  const key = String(node || '');
+  const group = groupId ? sourceRawFilterDetails.get(groupId) : null;
+  if (group?.has(key)) return group.get(key);
+  for (const map of sourceRawFilterDetails.values()) {
+    if (map.has(key)) return map.get(key);
+  }
+  return null;
+}
+
+function sourceRawFilterReasonLabel(detail) {
+  if (!detail) return '';
+  switch (detail.reason) {
+    case 'blacklist': return detail.rule ? '黑名单：' + detail.rule : '黑名单命中';
+    case 'duplicate': return '重复节点';
+    case 'cross-duplicate': return '与其他来源重复';
+    case 'invalid': return '格式无效';
+    case 'remark': return detail.rule ? '备注规则：' + detail.rule : '备注规则命中';
+    default: return '已过滤';
+  }
 }
 
 function sourceGroupShortName(key) {
@@ -3997,9 +4076,11 @@ function closeSourceRawDialog() {
   sourceRawFilteredNodes = [];
   sourceRawRawContent = '';
   sourceRawRecords = {};
+  sourceRawFilterDetails = new Map();
   sourceRawUnfilteredNodes = [];
   sourceRawUnfilteredSourceNodes = new Map();
   sourceRawFilteredSourceNodes = new Map();
+  sourceRawFilterDetails = new Map();
   sourceRawNodeSources = new Map();
   sourceRawSourceMeta = new Map();
   sourceRawSourceErrors = new Map();
@@ -4153,7 +4234,7 @@ function renderSourceRawResults(view = sourceRawTab) {
     content.textContent = allNodes.length ? '没有匹配的数据。' : emptyText;
   } else {
     const fragment = document.createDocumentFragment();
-    const renderNode = (node) => {
+    const renderNode = (node, groupId = '') => {
       const line = document.createElement('div');
       line.className = 'source-raw-node-line';
       const value = document.createElement('span');
@@ -4161,6 +4242,17 @@ function renderSourceRawResults(view = sourceRawTab) {
       value.textContent = node;
       value.title = node;
       line.appendChild(value);
+      // 过滤节点旁标注命中的规则，便于判断是黑名单、重复还是格式问题。
+      if (filteredMode) {
+        const detail = sourceRawFilterDetailFor(groupId, node);
+        if (detail) {
+          const rule = document.createElement('span');
+          rule.className = 'source-raw-node-rule' + (detail.rule ? '' : ' is-generic');
+          rule.textContent = sourceRawFilterReasonLabel(detail);
+          rule.title = rule.textContent;
+          line.appendChild(rule);
+        }
+      }
       return line;
     };
     if (showSources) {
@@ -4285,11 +4377,12 @@ function renderSourceRawResults(view = sourceRawTab) {
         heading.onclick = toggle;
         heading.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } };
         group.appendChild(sourceHeader);
-        if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node)));
+        if (!collapsed) groupNodes.forEach((node) => group.appendChild(renderNode(node, id)));
         fragment.appendChild(group);
       });
     } else {
-      visible.forEach((node) => fragment.appendChild(renderNode(node)));
+      const flatGroupId = sourceRawSelection ? sourceGroupId(sourceRawSelection.type, sourceRawSelection.key) : '';
+      visible.forEach((node) => fragment.appendChild(renderNode(node, flatGroupId)));
     }
     if (fragment.childNodes.length) content.appendChild(fragment);
     else content.textContent = allNodes.length ? '没有匹配的数据。' : emptyText;
@@ -4427,6 +4520,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     sourceRawUnfilteredNodes = Array.isArray(cachedResult.unfilteredNodes) ? cachedResult.unfilteredNodes.slice() : [];
     sourceRawUnfilteredSourceNodes = new Map(Array.isArray(cachedResult.unfilteredSourceNodes) ? cachedResult.unfilteredSourceNodes : []);
     sourceRawFilteredSourceNodes = new Map(Array.isArray(cachedResult.filteredSourceNodes) ? cachedResult.filteredSourceNodes : []);
+    sourceRawFilterDetails = restoreSourceRawFilterDetails(cachedResult.filterDetails);
     sourceRawNodeSources = new Map(Array.isArray(cachedResult.nodeSources) ? cachedResult.nodeSources : []);
     sourceRawSourceMeta = new Map(Array.isArray(cachedResult.sourceMeta) ? cachedResult.sourceMeta : []);
     sourceRawSourceErrors = new Map(Array.isArray(cachedResult.sourceErrors) ? cachedResult.sourceErrors : []);
@@ -4561,6 +4655,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     sourceRawNodes = Array.isArray(result.nodes) ? result.nodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawFilteredNodes = Array.isArray(result.filteredNodes) ? result.filteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
     sourceRawUnfilteredNodes = Array.isArray(result.unfilteredNodes) ? result.unfilteredNodes.filter((node) => typeof node === 'string' && node.trim()) : [];
+    sourceRawFilterDetails = buildSourceRawFilterDetails(result.filterDetails);
     sourceRawRecords = result.records && typeof result.records === 'object' ? result.records : {};
     sourceRawRawContent = sourceRawUnfilteredNodes.join('\\n');
     sourceRawUnfilteredSourceNodes = new Map();
@@ -4605,7 +4700,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     const nextStatus = result.status || { ...previousStatus, state: sourceRawNodes.length ? 'success' : 'empty', nodeCount: sourceRawNodes.length, rawNodeCount: sourceRawNodes.length };
     // 本次查看的独立规则结果不进入本地缓存、源状态和检测历史，避免污染全局数据。
     if (!localFilterOverride) {
-      saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), records: sourceRawRecords, filteredSourceNodes: [...sourceRawFilteredSourceNodes], unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
+      saveSourceRawCache(type, key, { nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), filterDetails: serializeSourceRawFilterDetails(), records: sourceRawRecords, filteredSourceNodes: [...sourceRawFilteredSourceNodes], unfilteredSourceNodes: [...sourceRawUnfilteredSourceNodes], rawContent: sourceRawRawContent, nodeSources: [...sourceRawNodeSources], sourceMeta: [...sourceRawSourceMeta], sourceErrors: [...sourceRawSourceErrors], sourceStats: [...sourceRawSourceStats], status: nextStatus, savedAt: Date.now() });
       if (isManagedSource) sourceStatuses[type][normalizedKey] = nextStatus;
       if (type === 'domains') setPreferredDomainStatus(normalizedKey, nextStatus);
     }
@@ -4614,7 +4709,7 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     if (type === 'customApis') {
       const rawTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.raw || 0), 0);
       const keptTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.kept || 0), 0);
-      if (!localFilterOverride) saveSourceRawHistory(type, key, { at: Date.now(), raw: rawTotal, kept: keptTotal, filtered: sourceRawFilteredNodes.length, errors: sourceRawSourceErrors.size, nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), rawSources: result.rawSources || [], filteredSources: result.filteredSources || [], nodeSources: result.nodeSources || [], sourceMeta: result.sourceMeta || [] });
+      if (!localFilterOverride) saveSourceRawHistory(type, key, { at: Date.now(), raw: rawTotal, kept: keptTotal, filtered: sourceRawFilteredNodes.length, errors: sourceRawSourceErrors.size, nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), filterDetails: result.filterDetails || [], rawSources: result.rawSources || [], filteredSources: result.filteredSources || [], nodeSources: result.nodeSources || [], sourceMeta: result.sourceMeta || [] });
       void loadSourceRawHistoryFromDb(type, key, controller.signal);
     }
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});

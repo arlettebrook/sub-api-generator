@@ -478,6 +478,71 @@ test("previews a source with nodes, raw content, and filtering statistics", asyn
   }
 });
 
+test("reports which rule filtered each node", async () => {
+  const apiKey = "https://filter-reason.example/data";
+  const apiKey2 = "https://filter-reason-second.example/data";
+  const subKey = "reason.example.com";
+  const values = {
+    subs: { [subKey]: { remark: "订阅源" } },
+    apis: { [apiKey]: { remark: "API 源" }, [apiKey2]: { remark: "API 源二" } },
+    blacklist: ["Ad-Node"],
+    custom_apis: {
+      reason_preview: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: apiKey }, { type: "apis", key: apiKey2 }] },
+    },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  const subLine = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#dup";
+  globalThis.fetch = async (resource) => {
+    const url = String(resource);
+    if (url.includes("/sub?host=")) return new Response(btoa([subLine, subLine].join("\n")), { status: 200 });
+    return new Response("1.1.1.1:443#ok\n2.2.2.2:443#ad-node-1", { status: 200 });
+  };
+  const preview = (body) => worker.fetch(new Request("https://example.test/api/source-raw", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  }), runtime);
+  try {
+    // API 源：命中黑名单时回填具体规则名（大小写不敏感匹配，显示配置里的写法）
+    const apiPreview = await preview({ type: "apis", key: apiKey });
+    assert.equal(apiPreview.status, 200);
+    const apiResult = await apiPreview.json();
+    assert.deepEqual(apiResult.filteredNodes, ["2.2.2.2:443#ad-node-1"]);
+    assert.deepEqual(apiResult.filterDetails, [
+      { type: "apis", key: apiKey, node: "2.2.2.2:443#ad-node-1", reason: "blacklist", rule: "Ad-Node" },
+    ]);
+
+    // 订阅源：同一节点重复出现时标记为重复节点
+    const subPreview = await preview({ type: "subs", key: subKey });
+    assert.equal(subPreview.status, 200);
+    const subResult = await subPreview.json();
+    assert.deepEqual(subResult.filteredNodes, ["43.129.217.38:443#dup"]);
+    assert.deepEqual(subResult.filterDetails, [
+      { type: "subs", key: subKey, node: "43.129.217.38:443#dup", reason: "duplicate", rule: "" },
+    ]);
+
+    // 优选 API：跨来源重复的节点归回后出现的来源，并标记为与其他来源重复
+    const customPreview = await worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ path: "reason_preview" }),
+    }), runtime);
+    assert.equal(customPreview.status, 200);
+    const customResult = await customPreview.json();
+    assert.deepEqual(customResult.nodes, ["1.1.1.1:443#ok"]);
+    assert.deepEqual(customResult.filterDetails, [
+      { type: "apis", key: apiKey, node: "2.2.2.2:443#ad-node-1", reason: "blacklist", rule: "Ad-Node" },
+      { type: "apis", key: apiKey2, node: "2.2.2.2:443#ad-node-1", reason: "blacklist", rule: "Ad-Node" },
+      { type: "apis", key: apiKey2, node: "1.1.1.1:443#ok", reason: "cross-duplicate", rule: "" },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("applies view-only blacklist and remark filters without touching global config", async () => {
   const globalKey = "https://view-global.example/data";
   const overrideKey = "https://view-override.example/data";

@@ -3348,6 +3348,26 @@ export const adminStyle = `
     white-space: normal;
   }
 
+  .source-raw-node-rule {
+    justify-self: start;
+    max-width: 100%;
+    padding: 1px 8px;
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border-color));
+    border-radius: 999px;
+    background: var(--danger-light);
+    color: var(--danger);
+    font-size: 11px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .source-raw-node-rule.is-generic {
+    border-color: var(--border-hover);
+    background: var(--bg-tertiary);
+    color: var(--text-tertiary);
+  }
+
   .source-raw-node-source {
     color: var(--text-tertiary);
     font-size: 11px;

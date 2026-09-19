@@ -259,6 +259,8 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
   await page.locator('[data-source-raw-tab="filtered"]').click();
   await expect(page.locator("#sourceRawFilteredContent")).toContainText("2.2.2.2:443#api");
+  // 过滤节点旁标注命中的规则（默认黑名单为空，这里展示本次查看的独立规则）
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("黑名单：2.2.2.2");
   await expect(page.locator("#sourceRawFilterStatus")).toContainText("仅对当前查看生效");
 
   // 独立规则只作用于当前查看，设置页里的全局黑名单保持不变。
