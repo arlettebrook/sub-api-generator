@@ -683,12 +683,34 @@ async function handlePostApis(request, env) {
   return pagesJsonResponse({ ok: true });
 }
 
+// 查看弹窗携带的黑名单/备注过滤规则只作用于本次请求：校验并规范化后作为请求级覆盖，
+// 既不写入 KV，也不会改变设置页里的全局配置。
+function readLookupFilterOverrides(body) {
+  const overrides = {};
+  if (body && typeof body === "object") {
+    if (Object.prototype.hasOwnProperty.call(body, "blacklist") && body.blacklist !== undefined) {
+      overrides.blacklist = validateBlacklistPayload(body.blacklist);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "filterRules") && body.filterRules !== undefined) {
+      overrides.filterRules = validateFilterRulesPayload(body.filterRules);
+    }
+  }
+  return overrides;
+}
+
 async function handleSourceRaw(request, env) {
   let body;
   try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
   const type = body?.type;
   const key = typeof body?.key === "string" ? body.key.trim() : "";
   if (!["subs", "apis", "domains"].includes(type) || !key) return pagesTextResponse("数据源参数无效", 400);
+  let filterOverrides;
+  try {
+    filterOverrides = readLookupFilterOverrides(body);
+  } catch (error) {
+    return pagesJsonResponse({ error: "过滤规则无效：" + (error.message || "格式错误"), code: "INVALID_FILTER_OVERRIDE" }, 400);
+  }
+  const hasFilterOverride = Object.keys(filterOverrides).length > 0;
   const configured = await env.KV.get(type === "subs" ? KV_KEY_SUBS : type === "apis" ? KV_KEY_APIS : KV_KEY_PREFERRED_DOMAINS, "json");
   const normalized = normalizeKvData(configured, type);
   if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
@@ -696,11 +718,11 @@ async function handleSourceRaw(request, env) {
   if (guard.error) return guard.error;
   subscriptions.clearAggregateCache();
   try {
-    const resultOptions = { includeRaw: true };
+    const startedAt = Date.now();
+    const resultOptions = { includeRaw: true, ...filterOverrides };
+    // 查看弹窗里的独立规则只服务本次查看：不写入全局源状态，也不影响列表里的检测结果。
+    if (hasFilterOverride) resultOptions.trackStatus = false;
     const response = await subscriptions.handleRoot(env, [{ type, key }], resultOptions);
-    const snapshot = await getSourceStatusSnapshot(env, false);
-    await persistPreferredDomainStatuses(env, snapshot, [{ type, key }]);
-    await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
     const text = await response.text();
     const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const rawSources = resultOptions.rawSources || [];
@@ -714,6 +736,30 @@ async function handleSourceRaw(request, env) {
       for (const [key, value] of Object.entries(source.filterStats || {})) total[key] = (total[key] || 0) + (Number(value) || 0);
       return total;
     }, {});
+    if (hasFilterOverride) {
+      return pagesJsonResponse({
+        nodes,
+        rawSources,
+        filteredSources,
+        filteredNodes,
+        unfilteredNodes,
+        ...(type === "domains" ? { records } : {}),
+        localFilterOverride: true,
+        status: {
+          state: nodes.length ? "success" : (unfilteredNodes.length ? "filtered" : "empty"),
+          nodeCount: nodes.length,
+          rawNodeCount: unfilteredNodes.length,
+          durationMs: Date.now() - startedAt,
+          statusCode: response.status,
+          error: "",
+          errorType: "",
+          filterStats,
+        },
+      }, response.ok ? 200 : response.status);
+    }
+    const snapshot = await getSourceStatusSnapshot(env, false);
+    await persistPreferredDomainStatuses(env, snapshot, [{ type, key }]);
+    await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
     return pagesJsonResponse({
       nodes,
       rawSources,
@@ -735,6 +781,13 @@ async function handleCustomApiPreview(request, env) {
   try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
   const path = typeof body?.path === "string" ? body.path.trim().replace(/^\/+/, "") : "";
   if (!path) return pagesTextResponse("优选 API 路径无效", 400);
+  let filterOverrides;
+  try {
+    filterOverrides = readLookupFilterOverrides(body);
+  } catch (error) {
+    return pagesJsonResponse({ error: "过滤规则无效：" + (error.message || "格式错误"), code: "INVALID_FILTER_OVERRIDE" }, 400);
+  }
+  const hasFilterOverride = Object.keys(filterOverrides).length > 0;
   const configured = normalizeCustomApiData(await env.KV.get(KV_KEY_CUSTOM_APIS, "json"));
   const entry = configured[path];
   if (!entry) return pagesTextResponse("优选 API 不存在", 404);
@@ -768,7 +821,10 @@ async function handleCustomApiPreview(request, env) {
     prefix: entry.prefix,
     suffix: entry.suffix,
     suffixStrategy: entry.suffixStrategy,
+    ...filterOverrides,
   };
+  // 独立规则只在本次查看生效：不更新全局源状态，也不写入全局检测历史。
+  if (hasFilterOverride) resultOptions.trackStatus = false;
   const response = await subscriptions.handleRoot(env, sourceSelection, resultOptions);
   const text = await response.text();
   const nodes = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -782,18 +838,23 @@ async function handleCustomApiPreview(request, env) {
     return total;
   }, {});
   const snapshot = await getSourceStatusSnapshot(env, false);
-  await persistPreferredDomainStatuses(env, snapshot, sourceSelection);
-  await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
+  if (!hasFilterOverride) {
+    await persistPreferredDomainStatuses(env, snapshot, sourceSelection);
+    await env.KV.put(KV_KEY_SOURCE_STATUS, JSON.stringify(snapshot));
+  }
   // 手动优选没有原始抓取数据，不进入原始数据查看的来源筛选。
   const sourceMeta = (sourceSelection || []).filter((source) => source.type !== "manual").map((source) => ({ type: source.type, key: source.key, remark: snapshot[source.type]?.[source.key]?.remark || "" }));
   const selectedStatuses = (sourceSelection || []).filter((source) => source.type !== "manual").map((source) => snapshot[source.type]?.[source.key]).filter(Boolean);
-  const rawNodeCount = selectedStatuses.reduce((count, status) => count + (status.rawNodeCount || 0), 0);
+  const rawNodeCount = hasFilterOverride
+    ? unfilteredNodes.length
+    : selectedStatuses.reduce((count, status) => count + (status.rawNodeCount || 0), 0);
   const errors = response.headers.get("x-source-errors");
   let errorList = [];
   if (errors) {
     try { errorList = JSON.parse(decodeURIComponent(errors)); } catch { /* ignore malformed diagnostics */ }
   }
-  if (!errorList.length) {
+  // 使用本次查看独立规则时，全局源状态可能与本次结果无关，错误只取本次检测的响应头。
+  if (!errorList.length && !hasFilterOverride) {
     errorList = selectedStatuses
       .filter((status) => status.state && !["success", "idle"].includes(status.state))
       .map((status) => ({ type: status.type, key: status.key, message: status.error || status.state }));
@@ -817,8 +878,8 @@ async function handleCustomApiPreview(request, env) {
       filterStats,
     },
   };
-  await saveDetectionHistory(env, path, previewResult);
-  return pagesJsonResponse(previewResult, response.ok ? 200 : response.status);
+  if (!hasFilterOverride) await saveDetectionHistory(env, path, previewResult);
+  return pagesJsonResponse(hasFilterOverride ? { ...previewResult, localFilterOverride: true } : previewResult, response.ok ? 200 : response.status);
   } finally {
     guard.release();
   }

@@ -2846,6 +2846,113 @@ export const adminStyle = `
     color: var(--text-primary);
   }
 
+  .source-raw-filters {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+  }
+
+  .source-raw-filters summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .source-raw-filters-title {
+    font-weight: 600;
+  }
+
+  .source-raw-filters-badge {
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-color));
+    border-radius: 999px;
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    font-size: 11px;
+  }
+
+  .source-raw-filters-body {
+    display: grid;
+    gap: 10px;
+    padding: 0 10px 12px;
+  }
+
+  .source-raw-filters-hint {
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .source-raw-filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+
+  .source-raw-filters-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .source-raw-filters-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .source-raw-filters-label em {
+    color: var(--text-tertiary);
+    font-style: normal;
+    font-size: 11px;
+  }
+
+  .source-raw-filters-field textarea {
+    width: 100%;
+    min-height: 108px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--surface-solid);
+    color: var(--text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    resize: vertical;
+  }
+
+  .source-raw-filters-field textarea:focus-visible {
+    border-color: var(--accent-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  }
+
+  .source-raw-filters-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .source-raw-filters-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .source-raw-filters-actions .btn-subtle {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
   .source-raw-metric {
     display: grid;
     gap: 3px;

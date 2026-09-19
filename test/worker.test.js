@@ -478,6 +478,130 @@ test("previews a source with nodes, raw content, and filtering statistics", asyn
   }
 });
 
+test("applies view-only blacklist and remark filters without touching global config", async () => {
+  const globalKey = "https://view-global.example/data";
+  const overrideKey = "https://view-override.example/data";
+  const emptyKey = "https://view-empty.example/data";
+  const values = {
+    apis: { [globalKey]: { remark: "全局预览源" }, [overrideKey]: { remark: "独立规则源" }, [emptyKey]: { remark: "空规则源" } },
+    subs: {},
+    blacklist: ["global-block"],
+    filter_rules: ["官网"],
+    custom_apis: {},
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  const upstream = "1.1.1.1:443#local-block\n2.2.2.2:443#global-block\n3.3.3.3:443#高速官网地址\n4.4.4.4:443#ok";
+  globalThis.fetch = async () => new Response(upstream, { status: 200 });
+  const preview = (body) => worker.fetch(new Request("https://example.test/api/source-raw", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  }), runtime);
+  try {
+    // 全局设置：只过滤 global-block，并按“官网”截断备注
+    const globalPreview = await preview({ type: "apis", key: globalKey });
+    assert.equal(globalPreview.status, 200);
+    const globalResult = await globalPreview.json();
+    assert.deepEqual(globalResult.nodes, ["1.1.1.1:443#local-block", "3.3.3.3:443#高速", "4.4.4.4:443#ok"]);
+    assert.equal(globalResult.localFilterOverride, undefined);
+    assert.equal(values.source_status.apis[globalKey].nodeCount, 3);
+
+    // 本次查看独立规则：过滤 local-block，并按“高速”截断备注
+    const localPreview = await preview({ type: "apis", key: overrideKey, blacklist: ["local-block"], filterRules: ["高速"] });
+    assert.equal(localPreview.status, 200);
+    const localResult = await localPreview.json();
+    assert.deepEqual(localResult.nodes, ["2.2.2.2:443#global-block", "3.3.3.3:443", "4.4.4.4:443#ok"]);
+    assert.deepEqual(localResult.filteredNodes, ["1.1.1.1:443#local-block"]);
+    assert.deepEqual(localResult.unfilteredNodes, upstream.split("\n"));
+    assert.equal(localResult.localFilterOverride, true);
+    assert.equal(localResult.status.state, "success");
+    assert.equal(localResult.status.filterStats.blacklistedCount, 1);
+
+    // 空数组覆盖表示“本次查看不过滤”，而不是回退到全局规则
+    const emptyPreview = await preview({ type: "apis", key: emptyKey, blacklist: [], filterRules: [] });
+    assert.equal(emptyPreview.status, 200);
+    const emptyResult = await emptyPreview.json();
+    assert.deepEqual(emptyResult.nodes, upstream.split("\n"));
+    assert.deepEqual(emptyResult.filteredNodes, []);
+    assert.equal(emptyResult.localFilterOverride, true);
+
+    // 全局配置与全局源状态都不受本次查看影响
+    assert.deepEqual(values.blacklist, ["global-block"]);
+    assert.deepEqual(values.filter_rules, ["官网"]);
+    // 独立规则的检测不会把源状态从 idle 更新为 success
+    assert.equal(values.source_status.apis[overrideKey].state, "idle");
+    assert.equal(values.source_status.apis[emptyKey].state, "idle");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects invalid view-only filter payloads", async () => {
+  const sourceKey = "https://view-invalid.example/data";
+  const values = { apis: { [sourceKey]: { remark: "API 源" } }, subs: {}, blacklist: ["global-block"], custom_apis: {} };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const response = await worker.fetch(new Request("https://example.test/api/source-raw", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ type: "apis", key: sourceKey, blacklist: "not-an-array" }),
+  }), runtime);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "INVALID_FILTER_OVERRIDE");
+  assert.deepEqual(values.blacklist, ["global-block"]);
+});
+
+test("keeps view-only filters isolated for custom API previews", async () => {
+  const sourceKey = "https://view-filter-api.example/data";
+  const values = {
+    apis: { [sourceKey]: { remark: "API 源" } },
+    subs: {},
+    blacklist: ["global-block"],
+    filter_rules: [],
+    custom_apis: {
+      view_filter_global: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] },
+      view_filter_local: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] },
+    },
+  };
+  const db = createD1();
+  const runtime = env({ KV: createKv(values), DB: db });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("5.5.5.5:443#local-block\n6.6.6.6:443#global-block", { status: 200 });
+  const preview = (body) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  }), runtime);
+  const historyInserts = () => db.calls.filter((call) => /INSERT INTO detection_history/i.test(call.sql)).length;
+  try {
+    const globalPreview = await preview({ path: "view_filter_global" });
+    assert.equal(globalPreview.status, 200);
+    const globalResult = await globalPreview.json();
+    assert.deepEqual(globalResult.nodes, ["5.5.5.5:443#local-block"]);
+    assert.equal(globalResult.localFilterOverride, undefined);
+    assert.equal(historyInserts(), 1);
+
+    const localPreview = await preview({ path: "view_filter_local", blacklist: ["local-block"] });
+    assert.equal(localPreview.status, 200);
+    const localResult = await localPreview.json();
+    assert.deepEqual(localResult.nodes, ["6.6.6.6:443#global-block"]);
+    assert.deepEqual(localResult.filteredNodes, ["5.5.5.5:443#local-block"]);
+    assert.equal(localResult.localFilterOverride, true);
+    // 独立规则的检测不写入全局检测历史，也不修改全局配置
+    assert.equal(historyInserts(), 1);
+    assert.deepEqual(values.blacklist, ["global-block"]);
+    assert.deepEqual(values.filter_rules, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("previews disabled custom APIs and rate-limits repeated checks", async () => {
   const sourceKey = "https://custom-preview.example/data";
   const values = {

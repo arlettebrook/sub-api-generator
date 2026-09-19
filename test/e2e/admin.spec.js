@@ -237,6 +237,42 @@ test("edits and saves the blacklist from settings", async ({ page }, testInfo) =
   await expect(page.locator("#blacklistSaveStatus")).toHaveText("配置已保存");
 });
 
+test("applies per-view blacklist and remark filters from the view dialog", async ({ page }, testInfo) => {
+  // 服务端对同一数据源的检测有冷却时间，两个项目并行打开同一个源的查看弹窗会互相触发限流，只在桌面项目执行。
+  test.skip(testInfo.project.name === "mobile", "同一数据源的检测冷却无法并行覆盖");
+  await login(page);
+  await page.goto("/admin/manage");
+  await expect(page.locator("#apisSection")).toBeVisible();
+  await page.locator("#apisList .row").first().getByRole("button", { name: /查看/ }).click();
+  await expect(page.locator("#sourceRawDialog")).toBeVisible();
+  await expect(page.locator("#sourceRawFiltersPanel")).toBeVisible();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
+  await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443#api");
+  await expect(page.locator("#sourceRawContent")).toContainText("3.3.3.3:443#api");
+
+  await page.locator("#sourceRawFiltersPanel summary").click();
+  await page.locator("#sourceRawBlacklistInput").fill("2.2.2.2");
+  await expect(page.locator("#sourceRawBlacklistMeta")).toHaveText("1 条");
+  await page.locator("#applySourceRawFiltersButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();
+  await expect(page.locator("#sourceRawContent")).toContainText("3.3.3.3:443#api");
+  await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
+  await page.locator('[data-source-raw-tab="filtered"]').click();
+  await expect(page.locator("#sourceRawFilteredContent")).toContainText("2.2.2.2:443#api");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("仅对当前查看生效");
+
+  // 独立规则只作用于当前查看，设置页里的全局黑名单保持不变。
+  const globalBlacklist = await page.evaluate(async () => (await (await fetch("/api/blacklist", { cache: "no-store" })).json()));
+  expect(globalBlacklist).toEqual([]);
+
+  await page.locator("#resetSourceRawFiltersButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
+  await page.locator('[data-source-raw-tab="nodes"]').click();
+  await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443#api");
+  await page.locator("#sourceRawDialog .dialog-close").click();
+  await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
+});
+
 test("logs out from the dashboard", async ({ page }) => {
   await login(page);
   await page.locator("#logoutButton").click();

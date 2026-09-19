@@ -636,8 +636,18 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
-    const blacklist = normalizeBlacklist(blacklistConfig);
-    const filterRules = normalizeFilterRules(filterRulesConfig);
+    // 查看弹窗可以携带仅本次生效的过滤规则：请求级覆盖不写入 KV，也不会影响其他查看和正式输出。
+    const blacklist = Object.prototype.hasOwnProperty.call(options, "blacklist")
+      ? normalizeBlacklist(options.blacklist)
+      : normalizeBlacklist(blacklistConfig);
+    const filterRules = Object.prototype.hasOwnProperty.call(options, "filterRules")
+      ? normalizeFilterRules(options.filterRules)
+      : normalizeFilterRules(filterRulesConfig);
+    // 独立规则的临时检测默认只服务当前查看，不覆盖全局源状态。
+    const trackStatus = options.trackStatus !== false;
+    const recordStatus = (type, key, details) => {
+      if (trackStatus) recordSourceStatus(type, key, details);
+    };
     const outputTransform = getOutputTransform(options);
     const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
     // includeManual 由优选 API 的数据源模式决定：全部数据源时包含手动优选，手动选择模式下需显式勾选。
@@ -695,7 +705,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const rawValues = await fetchPreferredSubs(host, filterRules);
           const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
           const timestamp = new Date().toISOString();
-          recordSourceStatus("subs", host, {
+          recordStatus("subs", host, {
             state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
             nodeCount: values.length,
             rawNodeCount: rawValues.length,
@@ -715,7 +725,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "subs";
           failure.sourceKey = host;
-          recordSourceStatus("subs", host, {
+          recordStatus("subs", host, {
             state: sourceFailureState(failure),
             nodeCount: 0,
             rawNodeCount: 0,
@@ -737,7 +747,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const rawValues = await fetchApiSubs(apiUrl);
           const values = filterBlacklistedLines(rawValues, blacklist, blacklistRegex, filterRules);
           const timestamp = new Date().toISOString();
-          recordSourceStatus("apis", apiUrl, {
+          recordStatus("apis", apiUrl, {
             state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
             nodeCount: values.length,
             rawNodeCount: rawValues.length,
@@ -757,7 +767,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "apis";
           failure.sourceKey = apiUrl;
-          recordSourceStatus("apis", apiUrl, {
+          recordStatus("apis", apiUrl, {
             state: sourceFailureState(failure),
             nodeCount: 0,
             rawNodeCount: 0,
@@ -784,7 +794,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
             if (item?.recordType) result[item.recordType] = item.message || "DNS 查询失败";
             return result;
           }, {});
-          recordSourceStatus("domains", domain, {
+          recordStatus("domains", domain, {
             state: values.length > 0 ? "success" : "empty",
             nodeCount: values.length,
             rawNodeCount: rawValues.length,
@@ -805,7 +815,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const failure = error instanceof Error ? error : new Error(String(error));
           failure.sourceType = "domains";
           failure.sourceKey = domain;
-          recordSourceStatus("domains", domain, {
+          recordStatus("domains", domain, {
             state: sourceFailureState(failure), nodeCount: 0, rawNodeCount: 0, durationMs: Date.now() - startedAt,
             dnsRecords: {},
             dnsErrors: { A: failure.message || "DNS 查询失败", AAAA: failure.message || "DNS 查询失败", CNAME: failure.message || "DNS 查询失败" },

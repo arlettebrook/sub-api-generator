@@ -118,6 +118,30 @@ export const adminHTML = `
       <div class="source-raw-history-list" id="sourceRawHistoryList"></div>
     </details>
     <div class="source-raw-process" id="sourceRawProcess" aria-live="polite"></div>
+    <details class="source-raw-filters" id="sourceRawFiltersPanel">
+      <summary>
+        <span class="source-raw-filters-title">本次查看过滤设置</span>
+        <span class="source-raw-filters-badge" id="sourceRawFilterBadge" hidden>独立规则</span>
+      </summary>
+      <div class="source-raw-filters-body">
+        <p class="source-raw-filters-hint">这里的黑名单和备注过滤规则仅对当前查看生效，不会修改设置页中的全局配置。</p>
+        <div class="source-raw-filters-grid">
+          <label class="source-raw-filters-field">
+            <span class="source-raw-filters-label">黑名单 <em id="sourceRawBlacklistMeta">0 条</em></span>
+            <textarea id="sourceRawBlacklistInput" rows="6" spellcheck="false" placeholder="每行一条，例如：&#10;过期&#10;剩余流量"></textarea>
+          </label>
+          <label class="source-raw-filters-field">
+            <span class="source-raw-filters-label">备注过滤规则 <em id="sourceRawFilterRulesMeta">0 条</em></span>
+            <textarea id="sourceRawFilterRulesInput" rows="6" spellcheck="false" placeholder="每行一条，例如：&#10;官网&#10;翻倍"></textarea>
+          </label>
+        </div>
+        <div class="source-raw-filters-actions">
+          <span class="source-raw-filters-status" id="sourceRawFilterStatus" aria-live="polite"></span>
+          <button class="btn-subtle" type="button" id="resetSourceRawFiltersButton">恢复全局设置</button>
+          <button class="btn-outline" type="button" id="applySourceRawFiltersButton">应用并重新检测</button>
+        </div>
+      </div>
+    </details>
     <div class="source-raw-tabs" role="tablist" aria-label="查看内容">
       <button class="source-raw-tab active" type="button" role="tab" aria-selected="true" data-source-raw-tab="nodes">节点结果</button>
       <button class="source-raw-tab" type="button" role="tab" aria-selected="false" data-source-raw-tab="filtered">过滤节点</button>
