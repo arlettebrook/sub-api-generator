@@ -65,6 +65,36 @@ test("applies configured remark cleanup rules", () => {
   assert.equal(parsePreferredIpLine(`${base}HKtelegram`, ["telegram"]), "8.218.36.133:9010#HK");
 });
 
+test("shows unfiltered subscription lines as ip:port#remark", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = [
+    "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#CN",
+    "expired-subscription",
+  ].join("\n");
+  globalThis.fetch = async () => new Response(btoa(source), { status: 200 });
+  try {
+    const parsed = await fetchPreferredSubs("e.ye.gs");
+    assert.deepEqual(parsed, ["43.129.217.38:443#CN", "expired-subscription"]);
+    // 未过滤节点与节点结果写法一致；解析不出的行保留上游原文，原始条数仍等于上游行数。
+    assert.deepEqual(parsed.unfilteredNodes, ["43.129.217.38:443#CN", "expired-subscription"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("applies remark rules before the blacklist", () => {
+  const values = filterPreferredIps([
+    "1.2.3.4:443#香港 | 广告",
+    "5.6.7.8:443#广告节点",
+  ], ["广告"], null, ["|"]);
+  // 第一行先被 “|” 截断，截掉的“广告”不再触发黑名单；第二行清理后仍然命中。
+  assert.deepEqual(values, ["1.2.3.4:443#香港"]);
+  assert.deepEqual(values.filterDetails, [
+    { node: "1.2.3.4:443#香港 | 广告", result: "1.2.3.4:443#香港", reason: "remark", rule: "|" },
+    { node: "5.6.7.8:443#广告节点", reason: "blacklist", rule: "广告" },
+  ]);
+});
+
 test("decodes Base64 responses from API sources", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@43.129.217.38:443?security=tls&sni=example.com#API";

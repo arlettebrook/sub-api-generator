@@ -131,12 +131,11 @@ async function fetchPreferredSubs(host, filterRules = []) {
   for (const line of rawContent.split(/\r?\n/)) {
     const text = line.trim();
     if (!text) continue;
-    // “未过滤节点”展示上游原文，这样原始条数就等于上游实际发来的行数（原始 ≥ 可用）。
-    unfilteredNodes.push(text);
     const parsed = parsePreferredIpLineDetail(text, []);
+    // “未过滤节点”按 ip:端口#备注 展示，和节点结果、过滤节点保持同一种写法；
+    // 条数仍然一行一条，解析不出的坏行保留上游原文，方便排查上游格式变化。
+    unfilteredNodes.push(parsed ? parsed.value : text);
     if (!parsed) {
-      // 统一交给 filterPreferredIps 做格式校验；这里保留无法解析的原文，
-      // 这样订阅源和其它来源一样，都能在“过滤节点”里展示上游坏行。
       invalidCount += 1;
       result.push(text);
       continue;
@@ -487,28 +486,29 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
   for (const value of lines) {
     stats.inputCount += 1;
     if (!value) { stats.invalidCount += 1; continue; }
-    if (isBlacklisted(value, blacklistRegex)) {
+    const hashIndex = value.indexOf("#");
+    const detail = hashIndex < 0 ? { remark: "", rule: "", original: "" } : matchRemarkRules(value.slice(hashIndex + 1), filterRules);
+    const cleaned = hashIndex < 0 ? value : `${value.slice(0, hashIndex)}${detail.remark ? `#${detail.remark}` : ""}`;
+    // 备注规则优先于黑名单：黑名单匹配的是清理后的整行。
+    if (isBlacklisted(cleaned, blacklistRegex)) {
       stats.blacklistedCount += 1;
       const node = displayFilteredNode(value);
       filteredNodes.push(node);
-      filterDetails.push({ node, reason: FILTER_REASON.BLACKLIST, rule: findBlacklistMatch(node, normalizedBlacklist) });
+      filterDetails.push({ node, reason: FILTER_REASON.BLACKLIST, rule: findBlacklistMatch(cleaned, normalizedBlacklist) });
       continue;
     }
-    const hashIndex = value.indexOf("#");
     if (hashIndex < 0) {
       result.push(value);
       continue;
     }
-    const detail = matchRemarkRules(value.slice(hashIndex + 1), filterRules);
     if (detail.rule) {
       // 备注被规则清理过的节点仍然输出，但会在“过滤节点”里标注命中的规则。
       stats.remarkCount += 1;
       const node = displayFilteredNode(value);
       filteredNodes.push(node);
-      const resultNode = `${value.slice(0, hashIndex)}${detail.remark ? `#${detail.remark}` : ""}`;
-      filterDetails.push({ node, result: displayFilteredNode(resultNode), reason: FILTER_REASON.REMARK, rule: detail.rule });
+      filterDetails.push({ node, result: displayFilteredNode(cleaned), reason: FILTER_REASON.REMARK, rule: detail.rule });
     }
-    result.push(`${value.slice(0, hashIndex)}${detail.remark ? `#${detail.remark}` : ""}`);
+    result.push(cleaned);
   }
   stats.outputCount = result.length;
   Object.defineProperty(result, "filterStats", { value: stats, enumerable: false });
@@ -542,16 +542,18 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     const hashIndex = line.indexOf("#");
     const rawRemark = hashIndex > -1 ? line.slice(hashIndex + 1) : "";
     const rawFull = rawRemark ? `${node}#${rawRemark}` : node;
-    if (isBlacklisted(rawFull, blacklistRegex)) {
-      stats.blacklistedCount += 1;
-      const display = displayFilteredNode(rawFull);
-      filteredNodes.push(display);
-      filterDetails.push({ node: display, reason: FILTER_REASON.BLACKLIST, rule: findBlacklistMatch(rawFull, normalizedBlacklist) });
-      continue;
-    }
+    // 备注规则优先于黑名单：先按规则清理备注，再拿清理后的节点匹配黑名单，
+    // 这样规则截掉的部分（例如 “|” 后面的广告语）不会再把节点拉进黑名单。
     const remarkDetail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "", original: "" };
     const remark = remarkDetail.remark;
     const cleaned = remark ? `${node}#${remark}` : node;
+    if (isBlacklisted(cleaned, blacklistRegex)) {
+      stats.blacklistedCount += 1;
+      const display = displayFilteredNode(rawFull);
+      filteredNodes.push(display);
+      filterDetails.push({ node: display, reason: FILTER_REASON.BLACKLIST, rule: findBlacklistMatch(cleaned, normalizedBlacklist) });
+      continue;
+    }
     if (seen.has(cleaned)) {
       stats.duplicateCount += 1;
       filteredNodes.push(cleaned);

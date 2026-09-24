@@ -608,6 +608,42 @@ test("reports which rule filtered each node", async () => {
   }
 });
 
+test("applies remark rules before the blacklist for API sources", async () => {
+  const apiKey = "https://filter-order.example/data";
+  const values = {
+    subs: {},
+    apis: { [apiKey]: { remark: "顺序源" } },
+    blacklist: ["广告"],
+    filter_rules: ["|"],
+    custom_apis: {},
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("1.1.1.1:443#香港 | 广告\n2.2.2.2:443#广告节点", { status: 200 });
+  try {
+    const response = await worker.fetch(new Request("https://example.test/api/source-raw", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ type: "apis", key: apiKey }),
+    }), runtime);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    // 先按 “|” 截断备注，截掉的“广告”不再触发黑名单；清理后仍命中的节点照常过滤。
+    assert.deepEqual(result.nodes, ["1.1.1.1:443#香港"]);
+    assert.deepEqual(result.unfilteredNodes, ["1.1.1.1:443#香港 | 广告", "2.2.2.2:443#广告节点"]);
+    assert.deepEqual(result.filterDetails, [
+      { type: "apis", key: apiKey, node: "1.1.1.1:443#香港 | 广告", result: "1.1.1.1:443#香港", reason: "remark", rule: "|" },
+      { type: "apis", key: apiKey, node: "2.2.2.2:443#广告节点", reason: "blacklist", rule: "广告" },
+    ]);
+    assert.equal(result.status.filterStats.remarkCount, 1);
+    assert.equal(result.status.filterStats.blacklistedCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("records unparsable upstream lines as format-invalid filter details", async () => {
   const values = {
     subs: {},
@@ -673,8 +709,8 @@ test("counts raw nodes from upstream lines so raw is never below kept", async ()
     assert.equal(result.status.filterStats.inputCount, 5);
     assert.equal(result.status.filterStats.invalidCount, 1);
     assert.deepEqual(result.rawSources.map((source) => source.nodes.length), [2, 2, 1]);
-    // 「未过滤节点」就是上游原文，订阅源不再只显示解析成功的节点。
-    assert.deepEqual(result.unfilteredNodes, [subLine, "订阅已过期，请续费", "2.2.2.2:443#api", "vmess://eyJhZGQiOiJ4In0=", "9.9.9.9:443#手动"]);
+    // 「未过滤节点」按 ip:端口#备注 展示，一条上游行仍然只占一条；坏行保留原文。
+    assert.deepEqual(result.unfilteredNodes, ["1.1.1.1:443#CN", "订阅已过期，请续费", "2.2.2.2:443#api", "vmess://eyJhZGQiOiJ4In0=", "9.9.9.9:443#手动"]);
     assert.deepEqual(result.filterDetails, [
       { type: "subs", key: subKey, node: "订阅已过期，请续费", reason: "invalid", rule: "" },
     ]);
@@ -696,7 +732,7 @@ test("counts raw nodes from upstream lines so raw is never below kept", async ()
     const subResult = await subPreview.json();
     assert.equal(subResult.status.rawNodeCount, 2);
     assert.equal(subResult.status.nodeCount, 1);
-    assert.deepEqual(subResult.unfilteredNodes, [subLine, "订阅已过期，请续费"]);
+    assert.deepEqual(subResult.unfilteredNodes, ["1.1.1.1:443#CN", "订阅已过期，请续费"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

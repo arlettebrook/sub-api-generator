@@ -124,7 +124,7 @@ export const adminHTML = `
         <span class="source-raw-filters-badge" id="sourceRawFilterBadge" hidden>独立规则</span>
       </summary>
       <div class="source-raw-filters-body">
-        <p class="source-raw-filters-hint">这里的黑名单和备注过滤规则仅对当前查看生效，不会修改设置页中的全局配置。</p>
+        <p class="source-raw-filters-hint">这里的黑名单和备注过滤规则仅对当前查看生效，不会修改设置页中的全局配置；备注过滤先执行，黑名单匹配的是清理后的备注。</p>
         <div class="source-raw-filters-grid">
           <label class="source-raw-filters-field">
             <span class="source-raw-filters-label">黑名单 <em id="sourceRawBlacklistMeta">0 条</em></span>
@@ -609,14 +609,14 @@ export const adminHTML = `
       <div class="setting-block-heading">
         <div class="setting-copy">
           <h4>黑名单</h4>
-          <p>过滤包含这些关键词的节点备注，支持添加、编辑和删除。</p>
+          <p>过滤包含这些关键词的节点备注，支持添加、编辑和删除。备注过滤规则先执行，黑名单匹配的是清理后的备注。</p>
         </div>
         <span class="section-summary" id="blacklistSummary">0 项</span>
       </div>
       <button class="btn-outline settings-edit-button" type="button" onclick="openSettingsDialog('blacklistDialog')">⚙ 编辑黑名单</button>
       <dialog class="settings-dialog settings-editor-dialog" id="blacklistDialog" aria-labelledby="blacklistDialogTitle">
         <div class="settings-dialog-head">
-          <div><span class="settings-dialog-kicker">数据过滤设置</span><h3 id="blacklistDialogTitle">黑名单</h3><p>过滤包含这些关键词的节点备注。</p></div>
+          <div><span class="settings-dialog-kicker">数据过滤设置</span><h3 id="blacklistDialogTitle">黑名单</h3><p>过滤包含这些关键词的节点备注，匹配的是备注过滤规则清理后的结果。</p></div>
           <button class="dialog-close" type="button" onclick="closeSettingsDialog('blacklistDialog')" aria-label="关闭">×</button>
         </div>
         <div class="settings-dialog-body">
@@ -661,7 +661,7 @@ export const adminHTML = `
       <div class="setting-block-heading">
         <div class="setting-copy">
           <h4>备注过滤规则</h4>
-          <p>匹配到规则后只保留前面的内容，例如 <code>|</code> 或 <code>【</code> 会在对应位置截断；“空格”从第一个空白字符处截断，“符号”会移除 emoji、国旗和商标符号。</p>
+          <p>匹配到规则后只保留前面的内容，例如 <code>|</code> 或 <code>【</code> 会在对应位置截断；“空格”从第一个空白字符处截断，“符号”会移除 emoji、国旗和商标符号。规则先于黑名单执行。</p>
         </div>
         <span class="section-summary" id="filterRulesSummary">0 项</span>
       </div>
