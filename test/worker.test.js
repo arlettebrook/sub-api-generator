@@ -868,10 +868,52 @@ test("keeps view-only filters isolated for custom API previews", async () => {
   }
 });
 
-test("previews disabled custom APIs and rate-limits repeated checks", async () => {
+test("previews disabled managed sources", async () => {
+  const subKey = "disabled-sub.example";
+  const apiKey = "https://disabled-api.example/data";
+  const domainKey = "disabled-domain.example";
+  const values = {
+    subs: { [subKey]: { remark: "禁用订阅源", enabled: false } },
+    apis: { [apiKey]: { remark: "禁用 API 源", enabled: false } },
+    preferred_domains: { [domainKey]: { remark: "禁用优选域名", enabled: false } },
+    custom_apis: {},
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    if (url.hostname === "cloudflare-dns.com") {
+      const type = url.searchParams.get("type");
+      const answers = type === "A"
+        ? [{ type: 1, data: "3.3.3.3" }]
+        : type === "AAAA"
+          ? [{ type: 28, data: "2001:db8::3" }]
+          : [{ type: 5, data: "disabled.example.net." }];
+      return new Response(JSON.stringify({ Status: 0, Answer: answers }), { status: 200 });
+    }
+    if (url.hostname === subKey) return new Response("1.1.1.1:443#sub", { status: 200 });
+    return new Response("2.2.2.2:443#api", { status: 200 });
+  };
+  const preview = (type, key) => worker.fetch(new Request("https://example.test/api/source-raw", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ type, key }),
+  }), runtime);
+  try {
+    assert.deepEqual((await (await preview("subs", subKey)).json()).nodes, ["1.1.1.1:443#sub"]);
+    assert.deepEqual((await (await preview("apis", apiKey)).json()).nodes, ["2.2.2.2:443#api"]);
+    assert.deepEqual((await (await preview("domains", domainKey)).json()).nodes, ["3.3.3.3:443", "[2001:db8::3]:443", "disabled.example.net:443"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("previews disabled custom APIs and their disabled sources, then rate-limits repeated checks", async () => {
   const sourceKey = "https://custom-preview.example/data";
   const values = {
-    apis: { [sourceKey]: { remark: "API 源" } },
+    apis: { [sourceKey]: { remark: "API 源", enabled: false } },
     subs: {},
     blacklist: ["blocked"],
     custom_apis: { disabled_preview: { enabled: false, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] } },
@@ -899,6 +941,40 @@ test("previews disabled custom APIs and rate-limits repeated checks", async () =
     const second = await request();
     assert.equal(second.status, 429);
     assert.equal((await second.json()).code, "RATE_LIMITED");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("keeps disabled-source previews isolated from production output cache", async () => {
+  const disabledKey = "https://cache-disabled.example/data";
+  const enabledKey = "https://cache-enabled.example/data";
+  const path = "cache_preview";
+  const values = {
+    apis: {
+      [disabledKey]: { remark: "禁用源", enabled: false },
+      [enabledKey]: { remark: "启用源", enabled: true },
+    },
+    subs: {},
+    custom_apis: { [path]: { enabled: true, sourceMode: "all", sources: [] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    return new Response(url.toString() === disabledKey ? "1.1.1.1:443#disabled" : "2.2.2.2:443#enabled", { status: 200 });
+  };
+  try {
+    const preview = await worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+      method: "POST",
+      headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+      body: JSON.stringify({ path }),
+    }), runtime);
+    assert.deepEqual((await preview.json()).nodes, ["1.1.1.1:443#disabled", "2.2.2.2:443#enabled"]);
+
+    const output = await worker.fetch(new Request(`https://example.test/${path}`), runtime);
+    assert.equal(await output.text(), "2.2.2.2:443#enabled");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1571,7 +1647,7 @@ test("serves custom API output from manual preferred entries alone", async () =>
 });
 
 test("disabling a preferred domain hides it from custom API output", async () => {
-  // 预览接口对同一路径有冷却限制，三个阶段各用一个路径避免被限流。
+  // 三个路径分别验证禁用前后及重新启用后的正式输出。
   const paths = ["all_api_a", "all_api_b", "all_api_c"];
   const values = {
     subs: {},
@@ -1599,17 +1675,14 @@ test("disabling a preferred domain hides it from custom API output", async () =>
   const postDomain = (body) => worker.fetch(new Request("https://example.test/api/preferred-domains", {
     method: "POST", headers, body: JSON.stringify(body),
   }), runtime);
-  const preview = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
-    method: "POST", headers, body: JSON.stringify({ path }),
-  }), runtime);
-  const previewNodes = async (path) => (await (await preview(path)).json()).nodes || [];
+  const outputNodes = async (path) => (await (await worker.fetch(new Request(`https://example.test/${path}`), runtime)).text()).split("\n").filter(Boolean);
   try {
     const added = await postDomain({ domain: "toggle.example.com" });
     assert.equal(added.status, 200);
     const addedEntry = await added.json();
     assert.equal(addedEntry.enabled, true);
 
-    assert.ok((await previewNodes(paths[0])).length > 0);
+    assert.ok((await outputNodes(paths[0])).length > 0);
 
     // 管理端脚本提供启用开关，并在优选 API 源选择中过滤禁用域名。
     assert.match(adminClientScript, /setPreferredDomainEnabled/);
@@ -1627,7 +1700,7 @@ test("disabling a preferred domain hides it from custom API output", async () =>
     const remarkOnly = await postDomain({ domain: "toggle.example.com", remark: "新备注", resolve: false });
     assert.equal((await remarkOnly.json()).enabled, false);
 
-    assert.deepEqual(await previewNodes(paths[1]), []);
+    assert.deepEqual(await outputNodes(paths[1]), []);
 
     const backup = await worker.fetch(new Request("https://example.test/api/backup", { headers }), runtime);
     const backupData = await backup.json();
@@ -1635,7 +1708,7 @@ test("disabling a preferred domain hides it from custom API output", async () =>
 
     const enabled = await postDomain({ domain: "toggle.example.com", resolve: false, enabled: true });
     assert.equal((await enabled.json()).enabled, true);
-    assert.ok((await previewNodes(paths[2])).length > 0);
+    assert.ok((await outputNodes(paths[2])).length > 0);
 
     const invalid = await postDomain({ domain: "toggle.example.com", resolve: false, enabled: "yes" });
     assert.equal(invalid.status, 400);
@@ -1646,7 +1719,6 @@ test("disabling a preferred domain hides it from custom API output", async () =>
 });
 
 test("disabling a preferred subscription hides it from custom API output", async () => {
-  // 预览接口对同一路径有冷却限制，两个阶段各用一个路径避免被限流。
   const paths = ["subs_api_a", "subs_api_b"];
   const values = {
     subs: {},
@@ -1662,20 +1734,17 @@ test("disabling a preferred subscription hides it from custom API output", async
   const postSubs = (body) => worker.fetch(new Request("https://example.test/api/subs", {
     method: "POST", headers, body: JSON.stringify(body),
   }), runtime);
-  const preview = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
-    method: "POST", headers, body: JSON.stringify({ path }),
-  }), runtime);
-  const previewNodes = async (path) => (await (await preview(path)).json()).nodes || [];
+  const outputNodes = async (path) => (await (await worker.fetch(new Request(`https://example.test/${path}`), runtime)).text()).split("\n").filter(Boolean);
   try {
     // 禁用的订阅源不参与优选 API 输出。
     const saved = await postSubs({ "sub.example.com": { remark: "订阅源", enabled: false } });
     assert.equal(saved.status, 200);
-    assert.deepEqual(await previewNodes(paths[0]), []);
+    assert.deepEqual(await outputNodes(paths[0]), []);
 
     // 重新启用后节点恢复输出，GET 配置时 enabled 字段保留。
     const enabled = await postSubs({ "sub.example.com": { remark: "订阅源", enabled: true } });
     assert.equal(enabled.status, 200);
-    assert.ok((await previewNodes(paths[1])).length > 0);
+    assert.ok((await outputNodes(paths[1])).length > 0);
     const list = await worker.fetch(new Request("https://example.test/api/subs", { headers }), runtime);
     assert.equal((await list.json())["sub.example.com"].enabled, true);
 
@@ -1700,18 +1769,15 @@ test("disabling a preferred API source hides it from custom API output", async (
   const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response("5.6.7.8:443#api", { status: 200 });
-  const preview = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
-    method: "POST", headers, body: JSON.stringify({ path }),
-  }), runtime);
-  const previewNodes = async (path) => (await (await preview(path)).json()).nodes || [];
+  const outputNodes = async (path) => (await (await worker.fetch(new Request(`https://example.test/${path}`), runtime)).text()).split("\n").filter(Boolean);
   try {
-    assert.deepEqual(await previewNodes(paths[0]), []);
+    assert.deepEqual(await outputNodes(paths[0]), []);
 
     const enabled = await worker.fetch(new Request("https://example.test/api/apis", {
       method: "POST", headers, body: JSON.stringify({ "https://api.example.com/data": { remark: "API 源", enabled: true } }),
     }), runtime);
     assert.equal(enabled.status, 200);
-    assert.ok((await previewNodes(paths[1])).length > 0);
+    assert.ok((await outputNodes(paths[1])).length > 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

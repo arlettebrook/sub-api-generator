@@ -624,13 +624,14 @@ function normalizeManualPreferredConfig(value) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualConfig = [], includeManual = true) {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualConfig = [], includeManual = true, includeDisabledSources = false) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
     apis: apisConfig,
     domains: domainsConfig,
     manual: includeManual ? manualConfig : [],
+    includeDisabledSources,
     blacklist,
     filterRules,
     outputTransform,
@@ -741,7 +742,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     const activeManualEntries = !includeManual ? []
       : selected === null ? manualEntries
         : manualEntries.filter((entry) => selectedManualKeys.has(entry.id));
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, activeManualEntries, true);
+    const includeDisabledSources = options.includeDisabledSources === true;
+    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, activeManualEntries, true, includeDisabledSources);
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -782,9 +784,9 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     };
     const blacklistRegex = getBlacklistRegex(blacklist);
     const sourceTasks = [];
-    // 禁用的订阅源不参与任何输出，无论是全部数据源还是手动选择模式。
+    // 正式输出跳过禁用源；查看预览可显式包含禁用源以支持诊断。
     selectedEntries(subsConfig, "subs")
-      .filter(([, entry]) => !(isPlainObject(entry) && entry.enabled === false))
+      .filter(([, entry]) => includeDisabledSources || !(isPlainObject(entry) && entry.enabled === false))
       .forEach(([host, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
@@ -834,9 +836,9 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           throw failure;
         }
       }));
-    // 禁用的 API 源不参与任何输出，无论是全部数据源还是手动选择模式。
+    // 正式输出跳过禁用源；查看预览可显式包含禁用源以支持诊断。
     selectedEntries(apisConfig, "apis")
-      .filter(([, entry]) => !(isPlainObject(entry) && entry.enabled === false))
+      .filter(([, entry]) => includeDisabledSources || !(isPlainObject(entry) && entry.enabled === false))
       .forEach(([apiUrl, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
@@ -876,9 +878,9 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           throw failure;
         }
       }));
-    // 禁用的优选域名不参与任何输出，无论是全部数据源还是手动选择模式。
+    // 正式输出跳过禁用源；查看预览可显式包含禁用源以支持诊断。
     selectedEntries(domainsConfig, "domains")
-      .filter(([, entry]) => !(isPlainObject(entry) && entry.enabled === false))
+      .filter(([, entry]) => includeDisabledSources || !(isPlainObject(entry) && entry.enabled === false))
       .forEach(([domain, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {

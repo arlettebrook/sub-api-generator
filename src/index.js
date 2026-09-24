@@ -731,7 +731,7 @@ async function handleSourceRaw(request, env) {
   subscriptions.clearAggregateCache();
   try {
     const startedAt = Date.now();
-    const resultOptions = { includeRaw: true, ...filterOverrides };
+    const resultOptions = { includeRaw: true, includeDisabledSources: true, ...filterOverrides };
     // 查看弹窗里的独立规则只服务本次查看：不写入全局源状态，也不影响列表里的检测结果。
     if (hasFilterOverride) resultOptions.trackStatus = false;
     const response = await subscriptions.handleRoot(env, [{ type, key }], resultOptions);
@@ -832,6 +832,8 @@ async function handleCustomApiPreview(request, env) {
   const startedAt = Date.now();
   const resultOptions = {
     includeRaw: true,
+    // 查看优选 API 时模拟其启用状态，底层禁用源也应正常参与诊断。
+    includeDisabledSources: true,
     includeManual,
     prefix: entry.prefix,
     suffix: entry.suffix,
