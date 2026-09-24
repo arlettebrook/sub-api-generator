@@ -1,4 +1,24 @@
-export const adminClientScript = `
+import { FILTER_REASON_CATEGORIES, FILTER_REASON_META } from "./config.js";
+import { REMARK_SYMBOL_REGEX, matchRemarkRules } from "./remark-rules.js";
+
+const FILTER_REASON_META_JSON = JSON.stringify(FILTER_REASON_META);
+const FILTER_REASON_CATEGORIES_JSON = JSON.stringify(FILTER_REASON_CATEGORIES);
+const FILTER_REASON_KEYS_JSON = JSON.stringify(
+  Object.fromEntries(Object.keys(FILTER_REASON_META).map((reason) => [reason.toUpperCase().replace(/-/g, "_"), reason])),
+);
+
+// 前端脚本用字符串拼接生成：函数源码里含有正则反斜杠，放进模板字符串会被
+// 当成转义序列解析（`/\s/` 会变成 `/s/`），拼接可以避免这类静默失真。
+const ADMIN_PREAMBLE = [
+  `const FILTER_REASON_META = ${FILTER_REASON_META_JSON};`,
+  `const FILTER_REASON_CATEGORIES = ${FILTER_REASON_CATEGORIES_JSON};`,
+  `const FILTER_REASON = ${FILTER_REASON_KEYS_JSON};`,
+  `const REMARK_SYMBOL_REGEX = new RegExp(${JSON.stringify(REMARK_SYMBOL_REGEX.source)}, ${JSON.stringify(REMARK_SYMBOL_REGEX.flags)});`,
+  matchRemarkRules.toString(),
+  "",
+].join("\n");
+
+export const adminClientScript = ADMIN_PREAMBLE + `
 // ======================== 全局缓存与工具 ========================
 // 缓存DOM元素，避免重复查询提升性能
 const $ = (id) => document.getElementById(id);
@@ -1707,7 +1727,7 @@ function buildSourceRawFilterDetails(entries) {
     if (!id || !node) return;
     if (!groups.has(id)) groups.set(id, new Map());
     const map = groups.get(id);
-    if (!map.has(node)) map.set(node, { node, reason: entry?.reason || '', rule: entry?.rule || '' });
+    if (!map.has(node)) map.set(node, { node, result: String(entry?.result || '').trim(), reason: entry?.reason || '', rule: entry?.rule || '' });
   });
   return groups;
 }
@@ -1725,7 +1745,7 @@ function restoreSourceRawFilterDetails(value) {
     (Array.isArray(pair[1]) ? pair[1] : []).forEach((item) => {
       const node = String(item?.node || '').trim();
       if (!node) return;
-      map.set(node, { node, reason: item?.reason || '', rule: item?.rule || '' });
+      map.set(node, { node, result: String(item?.result || '').trim(), reason: item?.reason || '', rule: item?.rule || '' });
     });
     groups.set(String(pair[0]), map);
   });
@@ -1744,27 +1764,27 @@ function sourceRawFilterDetailFor(groupId, node) {
 
 function sourceRawFilterReasonLabel(detail) {
   if (!detail) return '';
-  switch (detail.reason) {
-    case 'blacklist': return detail.rule ? '黑名单：' + detail.rule : '黑名单命中';
-    case 'duplicate': return '重复节点';
-    case 'cross-duplicate': return '与其他来源重复';
-    case 'invalid': return '格式无效';
-    case 'remark': return detail.rule ? '备注规则：' + detail.rule : '备注规则命中';
-    default: return '已过滤';
-  }
+  const meta = FILTER_REASON_META[detail.reason] || FILTER_REASON_META.filtered;
+  const label = detail.rule && meta.ruleLabel ? meta.ruleLabel + '：' + detail.rule : meta.label;
+  // 备注清理只截断备注、节点仍然输出，补上清理后的结果方便和节点列表对照。
+  return detail.result ? label + ' → ' + detail.result : label;
 }
 
-// 过滤节点的分类顺序：黑名单与备注规则各自成组，重复和格式问题单独归类。
-const SOURCE_RAW_FILTER_CATEGORIES = [
-  { key: 'blacklist', label: '黑名单', match: (reason) => reason === 'blacklist' },
-  { key: 'remark', label: '备注规则', match: (reason) => reason === 'remark' },
-  { key: 'duplicate', label: '重复节点', match: (reason) => reason === 'duplicate' || reason === 'cross-duplicate' },
-  { key: 'invalid', label: '格式无效', match: (reason) => reason === 'invalid' },
-  { key: 'other', label: '其他', match: () => true },
-];
+// 分类顺序、标题和 reason 归属均来自后端共享元数据，避免新增 reason 后前端漏同步。
+const SOURCE_RAW_FILTER_CATEGORIES = FILTER_REASON_CATEGORIES.map((category) => ({
+  ...category,
+  match: (reason) => {
+    const meta = FILTER_REASON_META[reason];
+    return meta ? meta.category === category.key : category.key === 'other';
+  },
+}));
 
-// 默认收起的分类：备注规则命中的节点仍会输出，数量往往很多，默认折叠避免刷屏。
-const SOURCE_RAW_DEFAULT_COLLAPSED_CATEGORIES = new Set(['remark']);
+// 只有黑名单分类默认展开，其余分类默认收起，避免过滤列表初次打开时过长。
+const SOURCE_RAW_DEFAULT_COLLAPSED_CATEGORIES = new Set(
+  SOURCE_RAW_FILTER_CATEGORIES
+    .map((category) => category.key)
+    .filter((key) => key !== FILTER_REASON_META.blacklist.category),
+);
 
 // 分类是否收起：用户的展开/收起操作优先于默认值。
 function sourceRawFilterCategoryCollapsed(categoryId, categoryKey) {
@@ -1848,11 +1868,11 @@ function sourceRawFilterCountsByGroup(details) {
     const id = sourceGroupId(detail?.type, detail?.key);
     if (!id) return;
     const entry = counts.get(id) || { filtered: 0, remark: 0, cross: 0 };
-    if (detail?.reason === 'remark') entry.remark += 1;
+    if (detail?.reason === FILTER_REASON.REMARK) entry.remark += 1;
     else {
       entry.filtered += 1;
       // 跨来源重复是聚合阶段去掉的，保留数要按每条实际输出扣掉一次。
-      if (detail?.reason === 'cross-duplicate') entry.cross += 1;
+      if (detail?.reason === FILTER_REASON.CROSS_DUPLICATE) entry.cross += 1;
     }
     counts.set(id, entry);
   });
@@ -4335,7 +4355,7 @@ function renderSourceRawResults(view = sourceRawTab) {
         if (detail) {
           const rule = document.createElement('span');
           // 备注规则只是清理备注、节点仍会输出，用不同配色与黑名单/重复区分。
-          rule.className = 'source-raw-node-rule' + (detail.rule ? '' : ' is-generic') + (detail.reason === 'remark' ? ' is-remark' : '');
+          rule.className = 'source-raw-node-rule' + (detail.rule ? '' : ' is-generic') + (detail.reason === FILTER_REASON.REMARK ? ' is-remark' : '');
           rule.textContent = sourceRawFilterReasonLabel(detail);
           rule.title = rule.textContent;
           line.appendChild(rule);
@@ -4632,7 +4652,8 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     setSourceRawTab('nodes');
     renderSourceRawCacheStatus('正在检测数据…', 'checking');
   }
-  renderSourceRawHistory(type === 'customApis' ? loadSourceRawHistory(type, key) : []);
+  // 本地检测历史按 类型:来源 记录，订阅源/API 源/优选 API 都可用；优选 API 还会从 D1 补齐。
+  renderSourceRawHistory(loadSourceRawHistory(type, key));
   const sourceLabel = type === 'subs' ? '订阅源 · ' : type === 'apis' ? 'API 源 · ' : type === 'domains' ? '优选域名 · ' : '优选 API · /';
   if (title) title.textContent = sourceLabel + key;
   if (!preserveState) {
@@ -4855,12 +4876,10 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     }
     renderSourceRawSummary(nextStatus);
     renderSourceRawCacheStatus('本次检测完成：' + formatSourceRawTime(Date.now()) + (localFilterOverride ? '（本次查看独立规则）' : ''), sourceRawSourceErrors.size ? 'warning' : '');
-    if (type === 'customApis') {
-      const rawTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.raw || 0), 0);
-      const keptTotal = [...sourceRawSourceStats.values()].reduce((sum, item) => sum + Number(item.kept || 0), 0);
-      if (!localFilterOverride) saveSourceRawHistory(type, key, { at: Date.now(), raw: rawTotal, kept: keptTotal, filtered: sourceRawFilteredNodes.length, errors: sourceRawSourceErrors.size, nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), filterDetails: result.filterDetails || [], rawSources: result.rawSources || [], filteredSources: result.filteredSources || [], nodeSources: result.nodeSources || [], sourceMeta: result.sourceMeta || [] });
-      void loadSourceRawHistoryFromDb(type, key, controller.signal);
-    }
+    // 每次真实检测都写一条本地历史，订阅源/API 源的查看弹窗也能看到历史变化。
+    if (!localFilterOverride) saveSourceRawHistory(type, key, { at: Date.now(), raw: Number(nextStatus.rawNodeCount) || sourceRawUnfilteredNodes.length, kept: Number(nextStatus.nodeCount) || sourceRawNodes.length, filtered: sourceRawFilteredNodes.length, errors: sourceRawSourceErrors.size, nodes: sourceRawNodes.slice(), filteredNodes: sourceRawFilteredNodes.slice(), unfilteredNodes: sourceRawUnfilteredNodes.slice(), filterDetails: result.filterDetails || [], rawSources: result.rawSources || [], filteredSources: result.filteredSources || [], nodeSources: result.nodeSources || [], sourceMeta: result.sourceMeta || [] });
+    // 只有优选 API 的检测历史会落到 D1，跨设备可用；其余来源使用本地历史。
+    void loadSourceRawHistoryFromDb(type, key, controller.signal);
     renderSourceRawProcess(nextStatus.filterStats || result.status?.filterStats || {});
     renderSourceRawResults();
     renderSourceRawResults('filtered');
@@ -5487,24 +5506,26 @@ function updateSettingsActionState() {
   if (filterUndo) filterUndo.disabled = !filterRulesDirty;
 }
 
-function filterRuleText(value, ruleList) {
-  let result = String(value || '');
-  let cutIndex = -1;
-  for (const rule of ruleList) {
-    if (rule === '符号') continue;
-    const index = rule === '空格' ? result.search(/\s/u) : result.toLowerCase().indexOf(rule.toLowerCase());
-    if (index >= 0 && (cutIndex < 0 || index < cutIndex)) cutIndex = index;
-  }
-  if (cutIndex >= 0) result = result.slice(0, cutIndex);
-  if (ruleList.includes('符号')) result = result.replace(/[\p{So}\uFE0F]+/gu, '');
-  return result.trim();
-}
-
 function updateFilterPreview() {
   const input = $('filterPreviewInput');
   const output = $('filterPreviewOutput');
+  const ruleOutput = $('filterPreviewRule');
   if (!input || !output) return;
-  output.textContent = filterRuleText(input.value, filterRules);
+  const raw = input.value.trim();
+  if (!raw) {
+    output.textContent = '无';
+    output.classList.add('is-empty');
+    if (ruleOutput) { ruleOutput.textContent = '无'; ruleOutput.classList.add('is-empty'); }
+    return;
+  }
+  // 与后端过滤共用 matchRemarkRules，预览结果和实际输出必然一致。
+  const detail = matchRemarkRules(raw, filterRules);
+  output.textContent = detail.remark || '（备注被清空）';
+  output.classList.toggle('is-empty', !detail.remark);
+  if (ruleOutput) {
+    ruleOutput.textContent = detail.rule || (filterRules.length ? '未命中规则' : '未配置规则');
+    ruleOutput.classList.toggle('is-empty', !detail.rule);
+  }
 }
 function normalizeFilterRulesClient(value) {
   if (!Array.isArray(value)) return [];

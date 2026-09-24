@@ -6,6 +6,7 @@ import { resolvePreferredDomainRecords } from "../src/subscriptions.js";
 import { adminHTML } from "../src/admin-page.js";
 import { adminClientScript } from "../src/admin-client.js";
 import { sha256Hex } from "../src/auth.js";
+import { matchRemarkRules } from "../src/remark-rules.js";
 
 function createKv(values = {}) {
   return {
@@ -155,6 +156,31 @@ test("keeps the generated admin script valid JavaScript", () => {
   assert.ok(overviewStart >= 0 && customApiLoad > overviewStart && nodeLoad > customApiLoad);
   assert.equal(adminClientScript.indexOf("void fetchNodes();", overviewStart), -1);
   assert.doesNotMatch(adminClientScript, /updates\.api\s*=/);
+});
+
+test("shares remark rule matching between backend filtering and admin preview", () => {
+  // 管理端脚本必须内联同一份实现，避免设置页预览和后端清理结果各说各话。
+  assert.ok(adminClientScript.includes(matchRemarkRules.toString()));
+  assert.doesNotMatch(adminClientScript, /function filterRuleText/);
+  // 模板字符串会把 /\s/ 转义成 /s/，这里固定住正则反斜杠，防止再次静默失真。
+  assert.ok(adminClientScript.includes("remark.search(/\\s/u)"));
+
+  const start = adminClientScript.indexOf("const REMARK_SYMBOL_REGEX");
+  const end = adminClientScript.indexOf("\n}", adminClientScript.indexOf("function matchRemarkRules")) + 2;
+  const context = vm.createContext({});
+  vm.runInContext(`${adminClientScript.slice(start, end)}\nglobalThis.previewMatch = matchRemarkRules;`, context);
+  const samples = [
+    ["🇭🇰 香港 | IEPL 专线", ["|"]],
+    ["香港 01 | 专线", ["|", "空格"]],
+    ["HK🐲™️", ["符号"]],
+    ["SG%20%5B%E4%BC%98%E9%80%89%5D%2075.7ms", ["空格"]],
+    ["没有命中的备注", ["|"]],
+  ];
+  samples.forEach(([value, rules]) => {
+    // 跨 vm 上下文的原型不同，这里比较结构化数据即可。
+    const previewed = JSON.parse(JSON.stringify(context.previewMatch(value, rules)));
+    assert.deepEqual(previewed, matchRemarkRules(value, rules));
+  });
 });
 
 test("serves admin frontend assets", async () => {
@@ -536,7 +562,7 @@ test("reports which rule filtered each node", async () => {
     assert.deepEqual(remarkResult.nodes, ["6.6.6.6:443#A"]);
     assert.deepEqual(remarkResult.filteredNodes, ["6.6.6.6:443#A|B"]);
     assert.deepEqual(remarkResult.filterDetails, [
-      { type: "apis", key: remarkApiKey, node: "6.6.6.6:443#A|B", reason: "remark", rule: "|" },
+      { type: "apis", key: remarkApiKey, node: "6.6.6.6:443#A|B", result: "6.6.6.6:443#A", reason: "remark", rule: "|" },
     ]);
     assert.equal(remarkResult.status.filterStats.remarkCount, 1);
 
@@ -545,10 +571,11 @@ test("reports which rule filtered each node", async () => {
     assert.equal(subRemarkPreview.status, 200);
     const subRemarkResult = await subRemarkPreview.json();
     assert.deepEqual(subRemarkResult.nodes, ["43.129.217.38:443"]);
-    assert.deepEqual(subRemarkResult.filteredNodes, ["43.129.217.38:443", "43.129.217.38:443#dup"]);
+    // 统一过滤后先记录第一行的备注清理，再记录第二行清理后产生的重复。
+    assert.deepEqual(subRemarkResult.filteredNodes, ["43.129.217.38:443#dup", "43.129.217.38:443"]);
     assert.deepEqual(subRemarkResult.filterDetails, [
+      { type: "subs", key: subRemarkKey, node: "43.129.217.38:443#dup", result: "43.129.217.38:443", reason: "remark", rule: "dup" },
       { type: "subs", key: subRemarkKey, node: "43.129.217.38:443", reason: "duplicate", rule: "" },
-      { type: "subs", key: subRemarkKey, node: "43.129.217.38:443#dup", reason: "remark", rule: "dup" },
     ]);
     assert.equal(subRemarkResult.status.filterStats.remarkCount, 1);
 
@@ -559,7 +586,7 @@ test("reports which rule filtered each node", async () => {
     assert.deepEqual(encodedResult.nodes, ["5.5.5.5:443#SG"]);
     assert.deepEqual(encodedResult.filteredNodes, ["5.5.5.5:443#SG [优选] 75.7ms"]);
     assert.deepEqual(encodedResult.filterDetails, [
-      { type: "apis", key: encodedApiKey, node: "5.5.5.5:443#SG [优选] 75.7ms", reason: "remark", rule: "空格" },
+      { type: "apis", key: encodedApiKey, node: "5.5.5.5:443#SG [优选] 75.7ms", result: "5.5.5.5:443#SG", reason: "remark", rule: "空格" },
     ]);
 
     // 优选 API：跨来源重复的节点归回后出现的来源，并标记为与其他来源重复
@@ -715,7 +742,7 @@ test("applies view-only blacklist and remark filters without touching global con
     assert.deepEqual(localResult.filteredNodes, ["1.1.1.1:443#local-block", "3.3.3.3:443#高速官网地址"]);
     assert.deepEqual(localResult.filterDetails, [
       { type: "apis", key: overrideKey, node: "1.1.1.1:443#local-block", reason: "blacklist", rule: "local-block" },
-      { type: "apis", key: overrideKey, node: "3.3.3.3:443#高速官网地址", reason: "remark", rule: "高速" },
+      { type: "apis", key: overrideKey, node: "3.3.3.3:443#高速官网地址", result: "3.3.3.3:443", reason: "remark", rule: "高速" },
     ]);
     assert.deepEqual(localResult.unfilteredNodes, upstream.split("\n"));
     assert.equal(localResult.localFilterOverride, true);

@@ -1,6 +1,7 @@
 import {
   DEFAULT_BLACKLIST,
   DEFAULT_FILTER_RULES,
+  FILTER_REASON_META,
   isPlainObject,
   KV_KEY_APIS,
   KV_KEY_BLACKLIST,
@@ -14,6 +15,7 @@ import {
   normalizeSourceKey,
 } from "./config.js";
 import { textResponse, withSecurityHeaders } from "./http.js";
+import { matchRemarkRules } from "./remark-rules.js";
 
 const OUTBOUND_TIMEOUT_MS = 15000;
 const DNS_TIMEOUT_MS = 5000;
@@ -26,7 +28,6 @@ const HTTP_PROTOCOL_REGEX = /^https?:\/\//i;
 const NODE_ADDRESS_REGEX = /:\/\/[^@]+@([^?]+)/;
 const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
-const REMARK_SYMBOL_REGEX = /[\p{So}\uFE0F]+/gu;
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const AGGREGATE_CACHE_MAX_ENTRIES = 128;
 const SOURCE_CHECK_CONCURRENCY = 6;
@@ -47,6 +48,7 @@ const blacklistRegexCache = new Map();
 const sourceStatus = new Map();
 const dnsCache = new Map();
 const dnsInflight = new Map();
+const FILTER_REASON = Object.freeze(Object.fromEntries(Object.keys(FILTER_REASON_META).map((reason) => [reason.toUpperCase().replace(/-/g, "_"), reason])));
 
 async function fetchWithTimeout(resource, options = {}, timeoutMs = OUTBOUND_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -65,34 +67,6 @@ async function fetchWithTimeout(resource, options = {}, timeoutMs = OUTBOUND_TIM
   }
 }
 
-// 备注过滤规则命中判定：文本/空格规则会在命中位置截断，“符号”规则会移除符号。
-// 返回清理后的备注与命中的规则名，便于在“过滤节点”里标注是哪条规则清理了备注。
-function matchRemarkRules(value, filterRules = []) {
-  let remark = String(value ?? "");
-  if (remark.includes("%")) {
-    try { remark = decodeURIComponent(remark); } catch { /* keep the original remark */ }
-  }
-  const original = remark;
-  const hits = [];
-  let cutIndex = -1;
-  let cutRule = "";
-  for (const rule of filterRules) {
-    if (rule === "符号") continue;
-    const index = rule === "空格" ? remark.search(/\s/u) : remark.toLowerCase().indexOf(rule.toLowerCase());
-    if (index >= 0 && (cutIndex < 0 || index < cutIndex)) { cutIndex = index; cutRule = rule; }
-  }
-  if (cutIndex >= 0) {
-    hits.push(cutRule);
-    remark = remark.slice(0, cutIndex);
-  }
-  if (filterRules.includes("符号")) {
-    const stripped = remark.replace(REMARK_SYMBOL_REGEX, "");
-    if (stripped !== remark) hits.push("符号");
-    remark = stripped;
-  }
-  return { remark: remark.trim(), rule: hits.join("、"), original };
-}
-
 // 上游备注常用百分号编码（例如 %20%5BSG%5D），展示时解码，失败则保留原文。
 function decodeRemarkForDisplay(value) {
   const text = String(value ?? "");
@@ -109,7 +83,7 @@ function displayFilteredNode(value) {
 }
 
 // 解析订阅源节点，同时给出原始节点和备注命中的规则，供“过滤节点”展示使用。
-function parsePreferredIpLineDetail(line, filterRules = DEFAULT_FILTER_RULES) {
+function parsePreferredIpLineDetail(line, filterRules = []) {
   if (!line.includes(FIXED_UUID) || !line.includes(FIXED_HOST)) return null;
   const addressMatch = NODE_ADDRESS_REGEX.exec(line);
   if (!addressMatch) return null;
@@ -143,7 +117,7 @@ function decodeSubscriptionBody(content) {
   return text;
 }
 
-async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
+async function fetchPreferredSubs(host, filterRules = []) {
   const rawHost = String(host || "").trim().replace(/\/+$/, "");
   const baseHost = HTTP_PROTOCOL_REGEX.test(rawHost) ? rawHost : `https://${rawHost}`;
   const response = await fetchSourceText(`${baseHost}/sub?host=${FIXED_HOST}&uuid=${FIXED_UUID}`, {
@@ -153,37 +127,27 @@ async function fetchPreferredSubs(host, filterRules = DEFAULT_FILTER_RULES) {
   const rawContent = decodeSubscriptionBody(response.content);
   const result = [];
   const unfilteredNodes = [];
-  const filteredNodes = [];
-  const filterDetails = [];
-  const remarkSeen = new Set();
   let invalidCount = 0;
   for (const line of rawContent.split(/\r?\n/)) {
     const text = line.trim();
     if (!text) continue;
     // “未过滤节点”展示上游原文，这样原始条数就等于上游实际发来的行数（原始 ≥ 可用）。
     unfilteredNodes.push(text);
-    const parsed = parsePreferredIpLineDetail(text, filterRules);
+    const parsed = parsePreferredIpLineDetail(text, []);
     if (!parsed) {
-      // 解析不出节点的行会被丢弃，这里保留原文，方便在“过滤节点”里排查上游格式变化。
+      // 统一交给 filterPreferredIps 做格式校验；这里保留无法解析的原文，
+      // 这样订阅源和其它来源一样，都能在“过滤节点”里展示上游坏行。
       invalidCount += 1;
-      const display = displayFilteredNode(text);
-      filteredNodes.push(display);
-      filterDetails.push({ node: display, reason: "invalid", rule: "" });
+      result.push(text);
       continue;
     }
+    // 这里只做订阅协议解析，不执行黑名单或备注规则；规则统一在
+    // filterPreferredIps 中执行，避免同一条订阅路径被清理两次。
     result.push(parsed.value);
-    // 备注被规则清理过的节点仍然输出（保留截断后的备注），但会在“过滤节点”里标注命中的规则。
-    if (parsed.rule && !remarkSeen.has(parsed.original)) {
-      remarkSeen.add(parsed.original);
-      filteredNodes.push(parsed.original);
-      filterDetails.push({ node: parsed.original, reason: "remark", rule: parsed.rule });
-    }
   }
   Object.defineProperty(result, "statusCode", { value: response.statusCode, enumerable: false });
   Object.defineProperty(result, "invalidCount", { value: invalidCount, enumerable: false });
   Object.defineProperty(result, "unfilteredNodes", { value: unfilteredNodes, enumerable: false });
-  Object.defineProperty(result, "filteredNodes", { value: filteredNodes, enumerable: false });
-  Object.defineProperty(result, "filterDetails", { value: filterDetails, enumerable: false });
   return result;
 }
 
@@ -527,7 +491,7 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
       stats.blacklistedCount += 1;
       const node = displayFilteredNode(value);
       filteredNodes.push(node);
-      filterDetails.push({ node, reason: "blacklist", rule: findBlacklistMatch(node, normalizedBlacklist) });
+      filterDetails.push({ node, reason: FILTER_REASON.BLACKLIST, rule: findBlacklistMatch(node, normalizedBlacklist) });
       continue;
     }
     const hashIndex = value.indexOf("#");
@@ -541,7 +505,8 @@ function filterBlacklistedLines(lines, blacklist = DEFAULT_BLACKLIST, preparedRe
       stats.remarkCount += 1;
       const node = displayFilteredNode(value);
       filteredNodes.push(node);
-      filterDetails.push({ node, reason: "remark", rule: detail.rule });
+      const resultNode = `${value.slice(0, hashIndex)}${detail.remark ? `#${detail.remark}` : ""}`;
+      filterDetails.push({ node, result: displayFilteredNode(resultNode), reason: FILTER_REASON.REMARK, rule: detail.rule });
     }
     result.push(`${value.slice(0, hashIndex)}${detail.remark ? `#${detail.remark}` : ""}`);
   }
@@ -570,7 +535,7 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
       stats.invalidCount += 1;
       const display = displayFilteredNode(line);
       filteredNodes.push(display);
-      filterDetails.push({ node: display, reason: "invalid", rule: "" });
+      filterDetails.push({ node: display, reason: FILTER_REASON.INVALID, rule: "" });
       continue;
     }
     const node = match[0];
@@ -581,7 +546,7 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
       stats.blacklistedCount += 1;
       const display = displayFilteredNode(rawFull);
       filteredNodes.push(display);
-      filterDetails.push({ node: display, reason: "blacklist", rule: findBlacklistMatch(rawFull, normalizedBlacklist) });
+      filterDetails.push({ node: display, reason: FILTER_REASON.BLACKLIST, rule: findBlacklistMatch(rawFull, normalizedBlacklist) });
       continue;
     }
     const remarkDetail = rawRemark ? matchRemarkRules(rawRemark, filterRules) : { remark: "", rule: "", original: "" };
@@ -590,7 +555,7 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
     if (seen.has(cleaned)) {
       stats.duplicateCount += 1;
       filteredNodes.push(cleaned);
-      filterDetails.push({ node: cleaned, reason: "duplicate", rule: "" });
+      filterDetails.push({ node: cleaned, reason: FILTER_REASON.DUPLICATE, rule: "" });
       continue;
     }
     if (remarkDetail.rule) {
@@ -598,7 +563,7 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
       stats.remarkCount += 1;
       const display = remarkDetail.original ? `${node}#${remarkDetail.original}` : rawFull;
       filteredNodes.push(display);
-      filterDetails.push({ node: display, reason: "remark", rule: remarkDetail.rule });
+      filterDetails.push({ node: display, result: displayFilteredNode(cleaned), reason: FILTER_REASON.REMARK, rule: remarkDetail.rule });
     }
     seen.add(cleaned);
     result.push(cleaned);
@@ -823,18 +788,15 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         try {
           const rawValues = await fetchPreferredSubs(host, filterRules);
           const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
-          // 订阅源在 fetchPreferredSubs 里已经判定过“格式无效”和“备注被清理”，这里把两次结果合起来。
-          const sourceNodes = rawValues.filteredNodes || [];
-          const sourceDetails = rawValues.filterDetails || [];
-          const filteredNodes = [...new Set([...(values.filteredNodes || []), ...sourceNodes])];
-          const filterDetails = [...(values.filterDetails || []), ...sourceDetails];
+          const filteredNodes = values.filteredNodes || [];
+          const filterDetails = values.filterDetails || [];
           const rawNodeCount = (rawValues.unfilteredNodes || []).length;
           const filterStats = {
             ...(values.filterStats || {}),
             // 上游返回数按原始行数统计（包含格式无效的行），与「原始节点」口径一致。
             inputCount: rawNodeCount,
-            invalidCount: (Number(values.filterStats?.invalidCount) || 0) + (Number(rawValues.invalidCount) || 0),
-            remarkCount: (Number(values.filterStats?.remarkCount) || 0) + sourceDetails.filter((detail) => detail.reason === "remark").length,
+            invalidCount: Number(values.filterStats?.invalidCount) || 0,
+            remarkCount: Number(values.filterStats?.remarkCount) || 0,
           };
           const timestamp = new Date().toISOString();
           recordStatus("subs", host, {
@@ -978,7 +940,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       (Array.isArray(details) ? details : []).forEach((detail) => {
         const node = String(detail?.node ?? "").trim();
         if (!node) return;
-        filterDetails.push({ type, key, node, reason: detail?.reason || "filtered", rule: detail?.rule || "" });
+        filterDetails.push({ type, key, node, ...(detail?.result ? { result: detail.result } : {}), reason: detail?.reason || FILTER_REASON.FILTERED, rule: detail?.rule || "" });
       });
     };
     if (selected && selected.length === 0) {
@@ -1052,7 +1014,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       }
       filteredSource.nodes.push(source.originalValue || source.value);
       filterStats.duplicateCount += 1;
-      filterDetails.push({ type: source.type, key: source.key, node: source.originalValue || source.value, reason: "cross-duplicate", rule: "" });
+      filterDetails.push({ type: source.type, key: source.key, node: source.originalValue || source.value, reason: FILTER_REASON.CROSS_DUPLICATE, rule: "" });
     }
     const output = transformedValues.map((item) => item.value).join("\n");
     filterStats.outputCount = output ? output.split("\n").filter(Boolean).length : 0;

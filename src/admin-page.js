@@ -699,11 +699,12 @@ export const adminHTML = `
             <div id="filterRulesEmpty" class="blacklist-empty" hidden>暂无过滤规则。</div>
           </section>
           <div class="filter-preview settings-editor-preview" aria-live="polite">
-            <details class="settings-editor-preview-details">
-              <summary><strong>实时预览</strong><span>输入示例备注查看处理结果</span></summary>
+            <details class="settings-editor-preview-details" open>
+              <summary><strong>试一条备注</strong><span>实时查看清理结果和命中的规则</span></summary>
               <div class="settings-editor-preview-body">
-                <label><span class="sr-only">输入示例备注</span><input id="filterPreviewInput" type="text" value="🇭🇰 香港 | IEPL 专线" placeholder="输入一段备注查看处理结果" /></label>
-                <div class="filter-preview-result"><span>处理结果</span><code id="filterPreviewOutput">🇭🇰 香港</code></div>
+                <label><span class="sr-only">试一条备注</span><input id="filterPreviewInput" type="text" value="🇭🇰 香港 | IEPL 专线" placeholder="输入一段备注，实时查看清理结果" /></label>
+                <div class="filter-preview-result"><span>清理结果</span><code id="filterPreviewOutput">🇭🇰 香港</code></div>
+                <div class="filter-preview-result filter-preview-rule"><span>命中规则</span><code id="filterPreviewRule">无</code></div>
               </div>
             </details>
           </div>

@@ -30,6 +30,25 @@ export const DEFAULT_SETTINGS = {
   redirectUrl: "/",
 };
 
+// 过滤原因的唯一元数据来源。后端记录 reason，管理端按同一份元数据
+// 生成分类标题和原因标签，避免新增原因时前后端各漏改一处。
+export const FILTER_REASON_META = Object.freeze({
+  blacklist: Object.freeze({ category: "blacklist", categoryLabel: "黑名单", label: "黑名单命中", ruleLabel: "黑名单" }),
+  remark: Object.freeze({ category: "remark", categoryLabel: "备注清理 · 节点仍保留", label: "备注规则命中", ruleLabel: "备注规则" }),
+  duplicate: Object.freeze({ category: "duplicate", categoryLabel: "重复节点", label: "重复节点", ruleLabel: "" }),
+  "cross-duplicate": Object.freeze({ category: "duplicate", categoryLabel: "重复节点", label: "与其他来源重复", ruleLabel: "" }),
+  invalid: Object.freeze({ category: "invalid", categoryLabel: "格式无效", label: "格式无效", ruleLabel: "" }),
+  filtered: Object.freeze({ category: "other", categoryLabel: "其他", label: "已过滤", ruleLabel: "" }),
+});
+
+export const FILTER_REASON_CATEGORIES = Object.freeze([
+  Object.freeze({ key: "blacklist", label: "黑名单" }),
+  Object.freeze({ key: "remark", label: "备注清理 · 节点仍保留" }),
+  Object.freeze({ key: "duplicate", label: "重复节点" }),
+  Object.freeze({ key: "invalid", label: "格式无效" }),
+  Object.freeze({ key: "other", label: "其他" }),
+]);
+
 const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);
 const SETTINGS_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;

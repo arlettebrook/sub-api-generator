@@ -17,7 +17,7 @@ test("filters invalid and duplicate nodes", () => {
     { node: "1.2.3.4:443#good", reason: "duplicate", rule: "" },
     { node: "5.6.7.8:8443#telegram", reason: "blacklist", rule: "telegram" },
     { node: "not-a-node", reason: "invalid", rule: "" },
-    { node: "9.9.9.9:443#good @extra", reason: "remark", rule: "空格" },
+    { node: "9.9.9.9:443#good @extra", result: "9.9.9.9:443#good", reason: "remark", rule: "空格" },
   ]);
   assert.equal(values.filterStats.invalidCount, 1);
   assert.equal(values.filterStats.remarkCount, 1);
@@ -49,7 +49,10 @@ test("removes emoji and trademark symbols when the symbol rule is configured", a
   const source = `vless://00000000-0000-4000-8000-000000000000@8.218.36.133:9010?security=tls&sni=example.com#${remark}`;
   globalThis.fetch = async () => new Response(btoa(source), { status: 200 });
   try {
-    assert.deepEqual(await fetchPreferredSubs("e.ye.gs", ["符号"]), ["8.218.36.133:9010#HK"]);
+    // fetchPreferredSubs 只负责解析；备注规则统一由 filterPreferredIps 执行。
+    const parsed = await fetchPreferredSubs("e.ye.gs", ["符号"]);
+    assert.deepEqual(parsed, ["8.218.36.133:9010#HK🐲™️"]);
+    assert.deepEqual(filterPreferredIps(parsed, [], null, ["符号"]), ["8.218.36.133:9010#HK"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

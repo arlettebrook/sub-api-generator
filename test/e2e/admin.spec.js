@@ -261,6 +261,7 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await expect(page.locator("#sourceRawFilteredContent")).toContainText("2.2.2.2:443#api");
   // 过滤节点按原因分类展示，黑名单单独成组。
   await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["黑名单"]);
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category").first()).toHaveAttribute("aria-expanded", "true");
   // 过滤节点旁标注命中的规则（默认黑名单为空，这里展示本次查看的独立规则）
   await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("黑名单：2.2.2.2");
   await expect(page.locator("#sourceRawFilterStatus")).toContainText("仅对当前查看生效");
@@ -283,7 +284,7 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
   await page.locator('[data-source-raw-tab="filtered"]').click();
   // 备注规则命中的节点归入“备注规则”分类，该分类默认折叠，展开后能看到节点与规则。
-  await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["备注规则"]);
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["备注清理 · 节点仍保留"]);
   const remarkCategory = page.locator("#sourceRawFilteredContent .source-raw-filter-category").first();
   await expect(remarkCategory).toHaveAttribute("aria-expanded", "false");
   await expect(remarkCategory).toContainText("2 条");
@@ -291,12 +292,41 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await remarkCategory.click();
   await expect(remarkCategory).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#sourceRawFilteredContent")).toContainText("3.3.3.3:443#api");
-  await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("备注规则：api");
+  await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("备注规则：api → 2.2.2.2:443");
   // 再点一次可以收起。
   await remarkCategory.click();
   await expect(remarkCategory).toHaveAttribute("aria-expanded", "false");
+  // 单个数据源的查看弹窗也要记录检测历史，而不是永远显示“暂无检测记录”。
+  await expect(page.locator("#sourceRawHistoryPanel")).toBeVisible();
+  await expect(page.locator("#sourceRawHistoryList")).not.toContainText("暂无检测记录");
+  await expect(page.locator("#sourceRawHistoryList .source-raw-history-item").first()).toContainText("原始 2");
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
+});
+
+test("previews remark cleanup rules from the settings dialog", async ({ page }) => {
+  await login(page);
+  await page.locator('a[data-nav-page="settings"]').click();
+  await expect(page.locator("#filterRulesSettings")).toBeVisible();
+  await page.locator('#filterRulesSettings .settings-edit-button').click();
+  await expect(page.locator("#filterRulesDialog")).toBeVisible();
+
+  await page.locator("#newFilterRule").fill("|");
+  await page.locator("#addFilterRuleButton").click();
+  await page.locator("#filterPreviewInput").fill("香港 01 | 专线");
+  await expect(page.locator("#filterPreviewOutput")).toHaveText("香港 01");
+  await expect(page.locator("#filterPreviewRule")).toHaveText("|");
+
+  // 空格规则按最早的空白位置截断，并且优先于后面的 “|” 命中。
+  await page.locator('#filterRulesDialog .rule-preset[data-filter-rule="空格"]').click();
+  await expect(page.locator("#filterPreviewOutput")).toHaveText("香港");
+  await expect(page.locator("#filterPreviewRule")).toHaveText("空格");
+
+  // 未命中的备注原样保留，并提示没有命中规则。
+  await page.locator("#filterPreviewInput").fill("没有命中的备注");
+  await expect(page.locator("#filterPreviewOutput")).toHaveText("没有命中的备注");
+  await expect(page.locator("#filterPreviewRule")).toHaveText("未命中规则");
+  await page.locator("#filterRulesDialog .dialog-close").click();
 });
 
 test("logs out from the dashboard", async ({ page }) => {

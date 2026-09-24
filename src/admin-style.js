@@ -1029,6 +1029,14 @@ export const adminStyle = `
     font-size: 13px;
   }
 
+  .filter-preview-rule code {
+    color: var(--accent-primary);
+  }
+
+  .filter-preview-result code.is-empty {
+    color: var(--text-tertiary);
+  }
+
   .blacklist-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
