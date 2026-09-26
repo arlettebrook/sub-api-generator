@@ -113,7 +113,9 @@ export const adminStyle = `
     padding: 0 24px;
     line-height: 1.6;
     transition: background 0.25s ease, color 0.25s ease;
-    min-height: 100vh;
+    /* body 自带上下 48px 外边距，减去后才能避免短页面凭空产生滚动。 */
+    min-height: calc(100vh - 96px);
+    min-height: calc(100dvh - 96px);
     font-synthesis: none;
     -webkit-font-smoothing: antialiased;
   }
@@ -1945,6 +1947,8 @@ export const adminStyle = `
     align-items: center;
     padding: 16px;
     gap: 12px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .custom-api-row:hover {
@@ -1958,6 +1962,7 @@ export const adminStyle = `
     align-items: center;
     gap: 10px;
     width: 100%;
+    min-width: 0;
   }
 
   .custom-api-identity {
@@ -2006,6 +2011,8 @@ export const adminStyle = `
     gap: 6px;
     flex-shrink: 0;
     flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
   }
 
   /* 宽屏下优选 API 行与优选管理数据源行使用同样的固定网格：
@@ -4717,6 +4724,8 @@ export const adminStyle = `
       margin: 8px auto;
       padding: 0 8px calc(84px + env(safe-area-inset-bottom, 0px));
       background-attachment: scroll;
+      min-height: calc(100vh - 16px);
+      min-height: calc(100dvh - 16px);
     }
     .card,
     .admin-nav,

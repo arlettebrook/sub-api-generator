@@ -29,6 +29,12 @@ test("loads the dashboard and switches theme", async ({ page }) => {
   await page.locator('a[data-nav-page="customApis"]').click();
   await expect(page).toHaveURL(/\/admin\/custom-apis$/);
   await expect(page.locator("#customApiSection")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+    await page.evaluate(() => window.innerHeight) + 1,
+  );
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    await page.evaluate(() => window.innerWidth),
+  );
   await page.evaluate(() => {
     const spacer = document.createElement("div");
     spacer.id = "e2e-scroll-spacer";
@@ -183,18 +189,16 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#sourceRawHistoryPanel")).toBeVisible();
   await page.locator("#sourceRawFiltersPanel summary").click();
   await expect(page.locator("#sourceRawFilterModeActions")).toBeVisible();
-  await expect(page.locator("#sourceRawAddRulesButton")).toHaveText("添加规则");
+  await expect(page.locator("#sourceRawAddRulesButton")).toHaveCount(0);
   await expect(page.locator("#sourceRawApplyGlobalRulesButton")).toBeEnabled();
   await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
-  await expect(page.locator("#sourceRawBlacklistInput")).toBeDisabled();
-  await expect(page.locator("#sourceRawFilterRulesInput")).toBeDisabled();
+  await expect(page.locator("#sourceRawBlacklistInput")).toBeEnabled();
+  await expect(page.locator("#sourceRawFilterRulesInput")).toBeEnabled();
   await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("");
   await expect(page.locator("#sourceRawFilterRulesInput")).toHaveValue("");
-  await expect(page.locator("#sourceRawFilterStatus")).toContainText("未设置管理规则");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("当前未启用优选 API 管理规则");
 
-  // 手动添加的规则保存到优选 API 配置，并立即参与预览过滤。
-  await page.locator("#sourceRawAddRulesButton").click();
-  await expect(page.locator("#sourceRawBlacklistInput")).toBeEnabled();
+  // 管理规则直接可编辑，保存后写入优选 API 配置并立即参与预览过滤。
   await page.locator("#sourceRawBlacklistInput").fill("2.2.2.2");
   await page.locator("#applySourceRawFiltersButton").click();
   await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();

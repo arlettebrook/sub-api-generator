@@ -1249,7 +1249,6 @@ let sourceRawPageScrollY = 0;
 let sourceRawPageScrollLocked = false;
 // 查看弹窗的过滤规则：优选管理中的源保存源级规则，优选 API 保存自身的 API 管理规则。
 let sourceRawFilterOverride = null;
-let sourceRawFilterEditing = false;
 let sourceRawGlobalFilters = null;
 let sourceRawGlobalFiltersPromise = null;
 
@@ -1626,12 +1625,9 @@ function renderSourceRawFilterStatus() {
   const customApi = selectionType === 'customApis';
   const active = sourceRawFilterOverride;
   const hasActive = hasSourceRawFilterValues(active);
-  const editing = customApi && sourceRawFilterEditing;
   const unavailable = (managed || customApi) && Boolean(globals.unavailable);
   const modeActions = $('sourceRawFilterModeActions');
   if (modeActions) modeActions.hidden = !customApi;
-  const addRules = $('sourceRawAddRulesButton');
-  if (addRules) addRules.textContent = hasActive ? '编辑规则' : '添加规则';
   const applyGlobalRules = $('sourceRawApplyGlobalRulesButton');
   if (applyGlobalRules) applyGlobalRules.disabled = unavailable;
   if (badge) {
@@ -1644,11 +1640,11 @@ function renderSourceRawFilterStatus() {
   }
   const apply = $('applySourceRawFiltersButton');
   if (apply) {
-    apply.disabled = managed ? unavailable : !editing;
+    apply.disabled = managed ? unavailable : false;
     apply.textContent = '保存并重新检测';
   }
   [$('sourceRawBlacklistInput'), $('sourceRawFilterRulesInput')].forEach((input) => {
-    if (input) input.disabled = managed ? unavailable : !editing;
+    if (input) input.disabled = managed ? unavailable : false;
   });
   if (status) {
     if (managed) {
@@ -1656,16 +1652,12 @@ function renderSourceRawFilterStatus() {
       else if (hasActive) status.textContent = '已保存该数据源的独立规则（黑名单 ' + active.blacklist.length + ' 条 · 备注 ' + active.filterRules.length + ' 条），优选 API 会优先使用';
       else if (globals.unavailable) status.textContent = '暂时无法读取全局规则；修改后将使用该数据源的独立规则';
       else status.textContent = '当前使用设置页的全局规则（黑名单 ' + globals.blacklist.length + ' 条 · 备注 ' + globals.filterRules.length + ' 条）';
-    } else if (editing) {
-      status.textContent = hasActive
-        ? '正在编辑该优选 API 的管理规则；保存后会追加在各数据源自身规则之后执行。'
-        : '正在添加该优选 API 的管理规则；保存后才会生效，未保存时不会影响当前查看结果。';
     } else if (hasActive) {
       status.textContent = '该优选 API 已启用管理规则（黑名单 ' + active.blacklist.length + ' 条 · 备注 ' + active.filterRules.length + ' 条），并追加在各数据源自身规则之后执行。';
     } else if (unavailable) {
-      status.textContent = '未设置管理规则：各数据源直接使用优选管理中保存的规则。当前无法读取设置页全局规则，但仍可手动添加规则。';
+      status.textContent = '当前未启用优选 API 管理规则，各数据源直接使用优选管理中保存的规则；可在下方直接编辑并保存。';
     } else {
-      status.textContent = '未设置管理规则：各数据源直接使用优选管理中保存的规则，不会额外应用设置页的全局规则。';
+      status.textContent = '当前未启用优选 API 管理规则，各数据源直接使用优选管理中保存的规则；可在下方直接编辑并保存。';
     }
   }
   updateSourceRawFilterCounts();
@@ -1694,14 +1686,12 @@ async function initSourceRawFilters(type, key) {
   const hint = document.querySelector('#sourceRawFiltersPanel .source-raw-filters-hint');
   const applyButton = $('applySourceRawFiltersButton');
   const modeActions = $('sourceRawFilterModeActions');
-  const addRulesButton = $('sourceRawAddRulesButton');
   const applyGlobalRulesButton = $('sourceRawApplyGlobalRulesButton');
-  sourceRawFilterEditing = false;
   if (title) title.textContent = managedSource ? '数据源过滤设置' : '优选 API 管理规则';
   if (hint) {
     hint.textContent = managedSource
       ? '保存后仅作用于该数据源，优选 API 生成时会优先使用；未设置时使用设置页中的全局规则。备注过滤先执行，黑名单匹配的是清理后的备注。'
-      : '默认不额外过滤，直接使用各数据源在优选管理中保存的规则。需要时可添加该优选 API 的管理规则，或复制设置页的全局规则。';
+      : '默认不额外过滤，直接使用各数据源在优选管理中保存的规则。可直接编辑下方管理规则，或复制设置页的全局规则；保存后生效。';
   }
   if (applyButton) applyButton.textContent = '保存并重新检测';
   if (modeActions) modeActions.hidden = managedSource;
@@ -1723,11 +1713,6 @@ async function initSourceRawFilters(type, key) {
   const blacklistInput = $('sourceRawBlacklistInput');
   const rulesInput = $('sourceRawFilterRulesInput');
   [blacklistInput, rulesInput].forEach((input) => { if (input) input.oninput = updateSourceRawFilterCounts; });
-  if (addRulesButton) addRulesButton.onclick = () => {
-    sourceRawFilterEditing = true;
-    renderSourceRawFiltersPanel();
-    blacklistInput?.focus();
-  };
   if (applyGlobalRulesButton) applyGlobalRulesButton.onclick = () => applyGlobalSourceRawFilters(type, key);
   const apply = $('applySourceRawFiltersButton');
   if (apply) apply.onclick = () => applySourceRawFilters(type, key);
@@ -1746,7 +1731,6 @@ async function applyGlobalSourceRawFilters(type, key) {
     const saved = await persistCustomApiFilters(key, values);
     if (!saved) return;
     sourceRawFilterOverride = values;
-    sourceRawFilterEditing = false;
     renderSourceRawFiltersPanel({ fillInputs: true });
     await openSourceRawDialog(type, key, true);
   } catch (error) {
@@ -1770,11 +1754,9 @@ async function applySourceRawFilters(type, key) {
       sourceRawFilterOverride = normalizeSourceRawFilters(result);
       updateManagedSourceFilterState(type, key, sourceRawFilterOverride);
     } else {
-      if (!sourceRawFilterEditing) return;
       const saved = await persistCustomApiFilters(key, values);
       if (!saved) return;
       sourceRawFilterOverride = values;
-      sourceRawFilterEditing = false;
       renderSourceRawFiltersPanel({ fillInputs: true });
     }
     await openSourceRawDialog(type, key, true);
@@ -1801,7 +1783,6 @@ async function resetSourceRawFilters(type, key) {
       if (!saved) return;
     }
     sourceRawFilterOverride = null;
-    sourceRawFilterEditing = false;
     renderSourceRawFiltersPanel({ fillInputs: true });
     await openSourceRawDialog(type, key, true);
   } catch (error) {
@@ -4343,7 +4324,6 @@ function closeSourceRawDialog() {
   sourceRawRequest = null;
   sourceRawSelection = null;
   sourceRawFilterOverride = null;
-  sourceRawFilterEditing = false;
   sourceRawNodes = [];
   sourceRawFilteredNodes = [];
   sourceRawRawContent = '';
