@@ -108,16 +108,21 @@ export const adminStyle = `
     background: var(--bg-gradient);
     background-attachment: fixed;
     color: var(--text-primary);
-    max-width: 1100px;
-    margin: 48px auto;
-    padding: 0 24px;
+    margin: 0;
+    padding: 0;
     line-height: 1.6;
     transition: background 0.25s ease, color 0.25s ease;
-    /* body 自带上下 48px 外边距，减去后才能避免短页面凭空产生滚动。 */
-    min-height: calc(100vh - 96px);
-    min-height: calc(100dvh - 96px);
     font-synthesis: none;
     -webkit-font-smoothing: antialiased;
+  }
+
+  .page-shell {
+    width: 100%;
+    max-width: 1100px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0 auto;
+    padding: 48px 24px;
   }
 
   /* 顶部标题栏 */
@@ -2881,6 +2886,14 @@ export const adminStyle = `
     font-weight: 600;
   }
 
+  .source-raw-filters-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+
   .source-raw-filters-badge {
     padding: 2px 8px;
     border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-color));
@@ -2894,6 +2907,39 @@ export const adminStyle = `
     display: grid;
     gap: 10px;
     padding: 0 10px 12px;
+  }
+
+  .source-raw-filter-chain {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--border-color);
+  }
+
+  .source-raw-filter-chain-item {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 10px;
+    background: var(--surface-solid);
+  }
+
+  .source-raw-filter-chain-item span {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .source-raw-filter-chain-item strong {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
   }
 
   .source-raw-filters-hint {
@@ -4721,11 +4767,10 @@ export const adminStyle = `
   /* 响应式适配 */
   @media screen and (max-width: 768px), screen and (max-device-width: 768px) {
     body {
-      margin: 8px auto;
-      padding: 0 8px calc(84px + env(safe-area-inset-bottom, 0px));
       background-attachment: scroll;
-      min-height: calc(100vh - 16px);
-      min-height: calc(100dvh - 16px);
+    }
+    .page-shell {
+      padding: 8px 8px calc(84px + env(safe-area-inset-bottom, 0px));
     }
     .card,
     .admin-nav,
@@ -4940,6 +4985,20 @@ export const adminStyle = `
     .source-raw-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .source-raw-filter-chain {
+      grid-template-columns: 1fr;
+    }
+    .source-raw-filters summary {
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .source-raw-filters-badge {
+      margin-left: auto;
+    }
+    .source-raw-filters-summary {
+      flex-basis: 100%;
+      order: 3;
+    }
     .source-raw-history-item {
       align-items: flex-start;
       flex-direction: column;
@@ -5125,7 +5184,7 @@ export const adminStyle = `
     .btn-logout span {
       font-size: 13px;
     }
-    body > .admin-nav {
+    .page-shell > .admin-nav {
       position: fixed !important;
       top: auto !important;
       right: 8px;

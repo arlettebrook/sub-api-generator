@@ -1251,6 +1251,8 @@ let sourceRawPageScrollLocked = false;
 let sourceRawFilterOverride = null;
 let sourceRawGlobalFilters = null;
 let sourceRawGlobalFiltersPromise = null;
+let sourceRawFilterBaseline = { blacklist: [], filterRules: [] };
+let sourceRawFilterDirty = false;
 
 function lockSourceRawPageScroll() {
   if (sourceRawPageScrollLocked) return;
@@ -1283,6 +1285,8 @@ function saveSourceRawHistory(type, key, item) {
   renderSourceRawHistory(history);
 }
 function renderSourceRawHistory(history = []) {
+  const panelSummary = $('sourceRawHistorySummary');
+  if (panelSummary) panelSummary.textContent = '检测历史（' + history.length + ' 条）';
   const list = $('sourceRawHistoryList');
   if (!list) return;
   list.replaceChildren();
@@ -1521,6 +1525,31 @@ function hasSourceRawFilterValues(values) {
   return Boolean(values && (values.blacklist?.length || values.filterRules?.length));
 }
 
+function sourceRawFiltersEqual(left, right) {
+  const a = normalizeSourceRawFilters(left);
+  const b = normalizeSourceRawFilters(right);
+  return a.blacklist.length === b.blacklist.length
+    && a.filterRules.length === b.filterRules.length
+    && a.blacklist.every((value, index) => value === b.blacklist[index])
+    && a.filterRules.every((value, index) => value === b.filterRules[index]);
+}
+
+function setSourceRawFilterBaseline(values) {
+  sourceRawFilterBaseline = normalizeSourceRawFilters(values);
+  sourceRawFilterDirty = false;
+}
+
+function updateSourceRawFilterDraftState() {
+  sourceRawFilterDirty = !sourceRawFiltersEqual(readSourceRawFilterInputs(), sourceRawFilterBaseline);
+  updateSourceRawFilterCounts();
+  renderSourceRawFilterStatus();
+}
+
+function confirmDiscardSourceRawFilters() {
+  if (!sourceRawFilterDirty) return true;
+  return typeof window.confirm !== 'function' || window.confirm('当前有未保存的过滤规则修改，确定关闭并放弃吗？');
+}
+
 async function loadSavedSourceFilters(type, key) {
   const result = await readJsonResponse(
     '/api/source-filters?type=' + encodeURIComponent(type) + '&key=' + encodeURIComponent(key),
@@ -1615,6 +1644,58 @@ function updateSourceRawFilterCounts() {
   if ($('sourceRawFilterRulesMeta')) $('sourceRawFilterRulesMeta').textContent = values.filterRules.length + ' 条';
 }
 
+function formatSourceRawFilterCounts(values) {
+  const filters = normalizeSourceRawFilters(values);
+  return '黑名单 ' + filters.blacklist.length + ' 条 · 备注 ' + filters.filterRules.length + ' 条';
+}
+
+function renderSourceRawFilterChain({ managed, customApi, active, hasActive, unavailable }) {
+  const source = $('sourceRawFilterChainSource');
+  const apiLabel = $('sourceRawFilterChainApiLabel');
+  const api = $('sourceRawFilterChainApi');
+  const draft = sourceRawFilterDirty ? readSourceRawFilterInputs() : null;
+
+  if (managed) {
+    if (source) {
+      if (draft) source.textContent = '未保存草稿（' + formatSourceRawFilterCounts(draft) + '）；保存后仅作用于该数据源';
+      else if (unavailable) source.textContent = '未配置独立规则，且设置页全局规则暂时不可用';
+      else if (hasActive) source.textContent = '已配置独立规则（' + formatSourceRawFilterCounts(active) + '）';
+      else source.textContent = '未配置独立规则，使用全局兜底（' + formatSourceRawFilterCounts(sourceRawGlobalFilters) + '）';
+    }
+    if (apiLabel) apiLabel.textContent = '优选 API 管理规则';
+    if (api) api.textContent = '在生成优选 API 时追加；本页不修改';
+    return;
+  }
+
+  if (source) source.textContent = '源级优先，未配置时使用全局兜底';
+  if (apiLabel) apiLabel.textContent = customApi ? '本 API 管理规则' : '优选 API 管理规则';
+  if (api) {
+    if (draft) api.textContent = '草稿（' + formatSourceRawFilterCounts(draft) + '，未保存）';
+    else if (hasActive) api.textContent = formatSourceRawFilterCounts(active);
+    else api.textContent = '空（不额外过滤，不等于禁用数据源）';
+  }
+}
+
+function renderSourceRawFilterSummary({ managed, customApi, active, hasActive, unavailable }) {
+  const summary = $('sourceRawFilterSummary');
+  if (!summary) return;
+  const draft = sourceRawFilterDirty ? readSourceRawFilterInputs() : null;
+
+  if (draft) {
+    summary.textContent = '未保存修改 · ' + formatSourceRawFilterCounts(draft);
+  } else if (managed) {
+    if (unavailable) summary.textContent = '全局规则暂不可用';
+    else if (hasActive) summary.textContent = '独立规则 · ' + formatSourceRawFilterCounts(active);
+    else summary.textContent = '全局兜底 · ' + formatSourceRawFilterCounts(sourceRawGlobalFilters);
+  } else if (customApi) {
+    summary.textContent = hasActive
+      ? '管理规则 · ' + formatSourceRawFilterCounts(active)
+      : '空规则 · 不额外过滤';
+  } else {
+    summary.textContent = '未配置额外规则';
+  }
+}
+
 function renderSourceRawFilterStatus() {
   const badge = $('sourceRawFilterBadge');
   const status = $('sourceRawFilterStatus');
@@ -1626,10 +1707,17 @@ function renderSourceRawFilterStatus() {
   const active = sourceRawFilterOverride;
   const hasActive = hasSourceRawFilterValues(active);
   const unavailable = (managed || customApi) && Boolean(globals.unavailable);
+  renderSourceRawFilterChain({ managed, customApi, active, hasActive, unavailable });
+  renderSourceRawFilterSummary({ managed, customApi, active, hasActive, unavailable });
   const modeActions = $('sourceRawFilterModeActions');
   if (modeActions) modeActions.hidden = !customApi;
   const applyGlobalRules = $('sourceRawApplyGlobalRulesButton');
-  if (applyGlobalRules) applyGlobalRules.disabled = unavailable;
+  if (applyGlobalRules) {
+    applyGlobalRules.disabled = unavailable;
+    applyGlobalRules.textContent = globals.unavailable
+      ? '复制全局规则'
+      : '复制全局规则（黑名单 ' + globals.blacklist.length + ' · 备注 ' + globals.filterRules.length + '）';
+  }
   if (badge) {
     badge.hidden = !hasActive;
     badge.textContent = managed ? '独立规则' : 'API 管理规则';
@@ -1640,24 +1728,26 @@ function renderSourceRawFilterStatus() {
   }
   const apply = $('applySourceRawFiltersButton');
   if (apply) {
-    apply.disabled = managed ? unavailable : false;
+    apply.disabled = (managed && unavailable) || !sourceRawFilterDirty;
     apply.textContent = '保存并重新检测';
   }
   [$('sourceRawBlacklistInput'), $('sourceRawFilterRulesInput')].forEach((input) => {
     if (input) input.disabled = managed ? unavailable : false;
   });
   if (status) {
-    if (managed) {
+    if (sourceRawFilterDirty) {
+      status.textContent = managed
+        ? '有未保存修改；保存后该数据源将使用独立规则，优选 API 会优先使用它。'
+        : '有未保存修改；保存后这组规则会作为优选 API 管理规则追加在数据源规则之后执行。';
+    } else if (managed) {
       if (unavailable) status.textContent = '无法读取设置页的全局过滤规则，本次查看暂不支持修改规则';
-      else if (hasActive) status.textContent = '已保存该数据源的独立规则（黑名单 ' + active.blacklist.length + ' 条 · 备注 ' + active.filterRules.length + ' 条），优选 API 会优先使用';
+      else if (hasActive) status.textContent = '已保存该数据源的独立规则（黑名单 ' + active.blacklist.length + ' 条 · 备注 ' + active.filterRules.length + ' 条），优选 API 会优先使用；设置页全局规则不会参与该数据源。';
       else if (globals.unavailable) status.textContent = '暂时无法读取全局规则；修改后将使用该数据源的独立规则';
-      else status.textContent = '当前使用设置页的全局规则（黑名单 ' + globals.blacklist.length + ' 条 · 备注 ' + globals.filterRules.length + ' 条）';
+      else status.textContent = '当前未设置独立规则，使用设置页全局规则兜底（黑名单 ' + globals.blacklist.length + ' 条 · 备注 ' + globals.filterRules.length + ' 条）。';
     } else if (hasActive) {
-      status.textContent = '该优选 API 已启用管理规则（黑名单 ' + active.blacklist.length + ' 条 · 备注 ' + active.filterRules.length + ' 条），并追加在各数据源自身规则之后执行。';
-    } else if (unavailable) {
-      status.textContent = '当前未启用优选 API 管理规则，各数据源直接使用优选管理中保存的规则；可在下方直接编辑并保存。';
+      status.textContent = '该优选 API 已启用管理规则（黑名单 ' + active.blacklist.length + ' 条 · 备注 ' + active.filterRules.length + ' 条），在数据源规则之后执行；本层不会重复应用设置页全局规则。';
     } else {
-      status.textContent = '当前未启用优选 API 管理规则，各数据源直接使用优选管理中保存的规则；可在下方直接编辑并保存。';
+      status.textContent = '本 API 管理规则为空：不执行本阶段额外过滤，不等于禁用数据源、停止检测或关闭优选 API；各数据源仍按源级规则优先执行，未配置时使用设置页全局规则兜底。';
     }
   }
   updateSourceRawFilterCounts();
@@ -1691,7 +1781,7 @@ async function initSourceRawFilters(type, key) {
   if (hint) {
     hint.textContent = managedSource
       ? '保存后仅作用于该数据源，优选 API 生成时会优先使用；未设置时使用设置页中的全局规则。备注过滤先执行，黑名单匹配的是清理后的备注。'
-      : '默认不额外过滤，直接使用各数据源在优选管理中保存的规则。可直接编辑下方管理规则，或复制设置页的全局规则；保存后生效。';
+      : '默认不额外过滤；各数据源在优选管理中保存的规则仍会执行，源级规则优先，未配置时使用设置页全局规则兜底。可直接添加本 API 管理规则，或复制全局规则；保存后追加在数据源规则之后。';
   }
   if (applyButton) applyButton.textContent = '保存并重新检测';
   if (modeActions) modeActions.hidden = managedSource;
@@ -1709,10 +1799,11 @@ async function initSourceRawFilters(type, key) {
   } else {
     sourceRawFilterOverride = normalizeSourceRawFilters();
   }
+  setSourceRawFilterBaseline(sourceRawFilterOverride || sourceRawGlobalFilters || normalizeSourceRawFilters());
   renderSourceRawFiltersPanel({ fillInputs: true });
   const blacklistInput = $('sourceRawBlacklistInput');
   const rulesInput = $('sourceRawFilterRulesInput');
-  [blacklistInput, rulesInput].forEach((input) => { if (input) input.oninput = updateSourceRawFilterCounts; });
+  [blacklistInput, rulesInput].forEach((input) => { if (input) input.oninput = updateSourceRawFilterDraftState; });
   if (applyGlobalRulesButton) applyGlobalRulesButton.onclick = () => applyGlobalSourceRawFilters(type, key);
   const apply = $('applySourceRawFiltersButton');
   if (apply) apply.onclick = () => applySourceRawFilters(type, key);
@@ -1723,24 +1814,33 @@ async function initSourceRawFilters(type, key) {
 async function applyGlobalSourceRawFilters(type, key) {
   if (type !== 'customApis') return;
   const button = $('sourceRawApplyGlobalRulesButton');
-  setButtonBusy(button, true, '应用中…');
+  let copied = false;
+  setButtonBusy(button, true, '复制中…');
   try {
     const globals = await ensureSourceRawGlobalFilters();
     if (globals.unavailable) throw new Error('无法读取设置页的全局过滤规则');
     const values = normalizeSourceRawFilters(globals);
+    const current = normalizeSourceRawFilters(customApis[key]);
+    if ((hasSourceRawFilterValues(current) || sourceRawFilterDirty)
+      && !(typeof window.confirm !== 'function' || window.confirm(
+        '将用设置页全局规则覆盖当前优选 API 管理规则（黑名单 ' + values.blacklist.length
+        + ' 条 · 备注 ' + values.filterRules.length + ' 条），包括未保存修改。确定继续吗？',
+      ))) return;
     const saved = await persistCustomApiFilters(key, values);
     if (!saved) return;
     sourceRawFilterOverride = values;
+    setSourceRawFilterBaseline(values);
     renderSourceRawFiltersPanel({ fillInputs: true });
     await openSourceRawDialog(type, key, true);
+    copied = true;
   } catch (error) {
     showToast(error.message || '全局过滤规则应用失败', 'error');
     return;
   } finally {
     setButtonBusy(button, false);
+    renderSourceRawFilterStatus();
   }
-  renderSourceRawFilterStatus();
-  showToast('已应用设置页的全局规则', 'success');
+  if (copied) showToast('已复制设置页的全局规则', 'success');
 }
 
 async function applySourceRawFilters(type, key) {
@@ -1757,16 +1857,17 @@ async function applySourceRawFilters(type, key) {
       const saved = await persistCustomApiFilters(key, values);
       if (!saved) return;
       sourceRawFilterOverride = values;
-      renderSourceRawFiltersPanel({ fillInputs: true });
     }
+    setSourceRawFilterBaseline(sourceRawFilterOverride);
+    renderSourceRawFiltersPanel({ fillInputs: true });
     await openSourceRawDialog(type, key, true);
   } catch (error) {
     showToast(error.message || '过滤规则保存失败', 'error');
     return;
   } finally {
     setButtonBusy(apply, false);
+    renderSourceRawFilterStatus();
   }
-  renderSourceRawFilterStatus();
   showToast(managed ? '已保存该数据源的过滤规则' : '已保存优选 API 管理规则', 'success');
 }
 
@@ -1783,6 +1884,7 @@ async function resetSourceRawFilters(type, key) {
       if (!saved) return;
     }
     sourceRawFilterOverride = null;
+    setSourceRawFilterBaseline(managed ? sourceRawGlobalFilters : normalizeSourceRawFilters());
     renderSourceRawFiltersPanel({ fillInputs: true });
     await openSourceRawDialog(type, key, true);
   } catch (error) {
@@ -1790,8 +1892,8 @@ async function resetSourceRawFilters(type, key) {
     return;
   } finally {
     setButtonBusy(reset, false);
+    renderSourceRawFilterStatus();
   }
-  renderSourceRawFilterStatus();
   if (!managed) showToast('已清空优选 API 管理规则', 'success');
 }
 
@@ -4317,6 +4419,7 @@ function sourceRawEntry(type, key) {
 }
 
 function closeSourceRawDialog() {
+  if (!confirmDiscardSourceRawFilters()) return;
   if (sourceRawRequest) sourceRawRequest.abort();
   if (sourceRawRetryTimer) clearTimeout(sourceRawRetryTimer);
   sourceRawRetryTimer = null;
@@ -4324,6 +4427,8 @@ function closeSourceRawDialog() {
   sourceRawRequest = null;
   sourceRawSelection = null;
   sourceRawFilterOverride = null;
+  sourceRawFilterBaseline = { blacklist: [], filterRules: [] };
+  sourceRawFilterDirty = false;
   sourceRawNodes = [];
   sourceRawFilteredNodes = [];
   sourceRawRawContent = '';
@@ -4767,6 +4872,11 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
   dialog.onclose = () => {
     resetSourceRawScroll();
     unlockSourceRawPageScroll();
+    sourceRawFilterDirty = false;
+  };
+  dialog.oncancel = (event) => {
+    event.preventDefault();
+    closeSourceRawDialog();
   };
   if (sourceRawRequest) sourceRawRequest.abort();
   const controller = new AbortController();
@@ -4787,9 +4897,12 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
   const autoRefresh = $('sourceRawAutoRefresh');
   const refreshInterval = $('sourceRawRefreshInterval');
   const historyPanel = $('sourceRawHistoryPanel');
+  const filtersPanel = $('sourceRawFiltersPanel');
   if (historyPanel) historyPanel.hidden = type === 'domains';
   if (!preserveState) {
     const viewState = type === 'customApis' ? loadSourceRawViewState(type, key) : null;
+    if (historyPanel) historyPanel.open = false;
+    if (filtersPanel) filtersPanel.open = false;
     // 折叠状态只作用于当前查看会话；重新打开时始终展开来源分组。
     sourceRawCollapsedGroups = new Set();
     sourceRawCollapsedFilterCategories = new Set();
@@ -5805,17 +5918,19 @@ function initSettingsEnhancements() {
   if (blacklistSearch && blacklistSearch.dataset.bound !== 'true') {
     blacklistSearch.dataset.bound = 'true';
     blacklistSearch.value = blacklistSearchTerm;
-    const updateBlacklistSearch = () => { blacklistSearchTerm = blacklistSearch.value; blacklistPage = 1; renderBlacklist(); };
-    blacklistSearch.addEventListener('input', debounce(updateBlacklistSearch, 180));
-    blacklistSearch.addEventListener('search', updateBlacklistSearch);
+    const syncBlacklistSearch = () => { blacklistSearchTerm = blacklistSearch.value; blacklistPage = 1; };
+    const renderBlacklistSearch = debounce(renderBlacklist, 180);
+    blacklistSearch.addEventListener('input', () => { syncBlacklistSearch(); renderBlacklistSearch(); });
+    blacklistSearch.addEventListener('search', () => { syncBlacklistSearch(); renderBlacklist(); });
   }
   const filterSearch = $('filterRulesSearch');
   if (filterSearch && filterSearch.dataset.bound !== 'true') {
     filterSearch.dataset.bound = 'true';
     filterSearch.value = filterRulesSearchTerm;
-    const updateFilterSearch = () => { filterRulesSearchTerm = filterSearch.value; filterRulesPage = 1; renderFilterRules(); };
-    filterSearch.addEventListener('input', debounce(updateFilterSearch, 180));
-    filterSearch.addEventListener('search', updateFilterSearch);
+    const syncFilterSearch = () => { filterRulesSearchTerm = filterSearch.value; filterRulesPage = 1; };
+    const renderFilterSearch = debounce(renderFilterRules, 180);
+    filterSearch.addEventListener('input', () => { syncFilterSearch(); renderFilterSearch(); });
+    filterSearch.addEventListener('search', () => { syncFilterSearch(); renderFilterRules(); });
   }
   const previewInput = $('filterPreviewInput');
   if (previewInput && previewInput.dataset.bound !== 'true') {

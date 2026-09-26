@@ -17,6 +17,7 @@ export const adminHTML = `
 <link rel="stylesheet" href="/admin.css?v=__ADMIN_ASSET_VERSION__" />
 </head>
 <body data-page="__PAGE__" data-admin-base-path="__ADMIN_BASE_PATH__">
+<div class="page-shell">
 
 <!-- Toast 提示容器 -->
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -114,19 +115,34 @@ export const adminHTML = `
     <div class="source-raw-summary" id="sourceRawSummary" aria-live="polite"></div>
     <div class="source-raw-cache-status" id="sourceRawCacheStatus" aria-live="polite" hidden></div>
     <details class="source-raw-history" id="sourceRawHistoryPanel">
-      <summary>检测历史</summary>
+      <summary><span id="sourceRawHistorySummary">检测历史（0 条）</span></summary>
       <div class="source-raw-history-list" id="sourceRawHistoryList"></div>
     </details>
     <div class="source-raw-process" id="sourceRawProcess" aria-live="polite"></div>
     <details class="source-raw-filters" id="sourceRawFiltersPanel">
       <summary>
         <span class="source-raw-filters-title">数据源过滤设置</span>
+        <span class="source-raw-filters-summary" id="sourceRawFilterSummary"></span>
         <span class="source-raw-filters-badge" id="sourceRawFilterBadge" hidden>独立规则</span>
       </summary>
       <div class="source-raw-filters-body">
-        <p class="source-raw-filters-hint">保存后仅作用于该数据源，优选 API 生成时会优先使用；未设置时使用设置页中的全局规则。备注过滤先执行，黑名单匹配的是清理后的备注。</p>
+        <div class="source-raw-filter-chain" id="sourceRawFilterChain" aria-label="过滤规则生效顺序">
+          <div class="source-raw-filter-chain-item">
+            <span>数据源规则</span>
+            <strong id="sourceRawFilterChainSource">源级优先，未配置时使用全局兜底</strong>
+          </div>
+          <div class="source-raw-filter-chain-item">
+            <span id="sourceRawFilterChainApiLabel">本 API 管理规则</span>
+            <strong id="sourceRawFilterChainApi">空（不额外过滤，不等于禁用数据源）</strong>
+          </div>
+          <div class="source-raw-filter-chain-item">
+            <span>最终顺序</span>
+            <strong>数据源规则 -> API 管理规则 -> 去重和前后缀</strong>
+          </div>
+        </div>
+        <p class="source-raw-filters-hint">数据源独立规则优先，未单独配置的数据源使用设置页全局规则兜底。备注过滤先执行，黑名单匹配的是清理后的备注。</p>
         <div class="source-raw-filters-mode-actions" id="sourceRawFilterModeActions" hidden>
-          <button class="btn-outline" type="button" id="sourceRawApplyGlobalRulesButton">应用全局规则</button>
+          <button class="btn-outline" type="button" id="sourceRawApplyGlobalRulesButton">复制全局规则</button>
         </div>
         <div class="source-raw-filters-grid">
           <label class="source-raw-filters-field">
@@ -830,6 +846,7 @@ export const adminHTML = `
 
 </main>
 
+</div>
 <script src="/admin-client.js?v=__ADMIN_ASSET_VERSION__" defer></script>
 </body>
 </html>

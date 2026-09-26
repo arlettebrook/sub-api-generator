@@ -944,6 +944,68 @@ test("applies custom API management rules after source filters", async () => {
   }
 });
 
+test("keeps copied custom API rules independent from later global changes", async () => {
+  const sourceKey = "https://copied-rule.example/data";
+  const values = {
+    subs: {},
+    apis: { [sourceKey]: { remark: "源级规则", blacklist: ["source-block"] } },
+    blacklist: ["global-block"],
+    filter_rules: [],
+    custom_apis: {
+      copied_rule: {
+        enabled: true,
+        sourceMode: "selected",
+        sources: [{ type: "apis", key: sourceKey }],
+        blacklist: ["copied-block"],
+      },
+    },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response([
+    "1.1.1.1:443#source-block",
+    "2.2.2.2:443#global-block",
+    "3.3.3.3:443#copied-block",
+    "4.4.4.4:443#allowed",
+  ].join("\n"), { status: 200 });
+  const preview = () => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ path: "copied_rule" }),
+  }), runtime);
+  const expectedNodes = ["2.2.2.2:443#global-block", "4.4.4.4:443#allowed"];
+  try {
+    const first = await preview();
+    assert.equal(first.status, 200);
+    const firstResult = await first.json();
+    assert.deepEqual(firstResult.nodes, expectedNodes);
+    assert.deepEqual(firstResult.filteredNodes, ["1.1.1.1:443#source-block", "3.3.3.3:443#copied-block"]);
+    assert.deepEqual(firstResult.filterDetails, [
+      { type: "apis", key: sourceKey, node: "1.1.1.1:443#source-block", reason: "blacklist", rule: "source-block" },
+      { type: "apis", key: sourceKey, node: "3.3.3.3:443#copied-block", reason: "blacklist", rule: "copied-block" },
+    ]);
+
+    const saved = await worker.fetch(new Request("https://example.test/api/blacklist", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(["changed-global"]),
+    }), runtime);
+    assert.equal(saved.status, 200);
+
+    // 优选 API 查看接口对同一路径有 2.5 秒防重复刷新限制。
+    await new Promise((resolve) => setTimeout(resolve, 2600));
+    const second = await preview();
+    assert.equal(second.status, 200);
+    assert.deepEqual((await second.json()).nodes, expectedNodes);
+    assert.deepEqual(values.blacklist, ["changed-global"]);
+    assert.deepEqual(values.custom_apis.copied_rule.blacklist, ["copied-block"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("previews disabled managed sources", async () => {
   const subKey = "disabled-sub.example";
   const apiKey = "https://disabled-api.example/data";

@@ -11,6 +11,8 @@ async function login(page) {
 
 test("loads the dashboard and switches theme", async ({ page }) => {
   await login(page);
+  await expect(page.locator(".page-shell")).toBeVisible();
+  await expect(page.locator("body")).toHaveCSS("margin", "0px");
   await expect(page.locator("#nodesContainer")).toBeVisible();
   const scrollTopButton = page.locator("#scrollTopButton");
   await expect(scrollTopButton).toBeHidden();
@@ -168,7 +170,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   expect(savedConfig.blacklist).toEqual([]);
   expect(savedConfig.filterRules).toEqual([]);
   const createdRow = page.locator("#customApisList .custom-api-row").last();
-  // 只在该页面覆盖读取全局规则，验证“应用全局规则”确实会复制到优选 API 配置。
+  // 只在该页面覆盖读取全局规则，验证“复制全局规则”确实会写入优选 API 配置。
   await page.route("**/api/blacklist", async (route) => {
     if (route.request().method() === "GET") return route.fulfill({ json: ["2.2.2.2"] });
     return route.continue();
@@ -187,22 +189,47 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#sourceRawSourceSort")).toHaveValue("config");
   await expect(page.locator(".source-raw-source-stats").first()).toContainText("原始");
   await expect(page.locator("#sourceRawHistoryPanel")).toBeVisible();
+  await expect(page.locator("#sourceRawHistoryPanel")).not.toHaveAttribute("open", /.*/);
+  await expect(page.locator("#sourceRawFiltersPanel")).not.toHaveAttribute("open", /.*/);
+  await expect(page.locator("#sourceRawHistorySummary")).toHaveText(/检测历史（\d+ 条）/);
   await page.locator("#sourceRawFiltersPanel summary").click();
   await expect(page.locator("#sourceRawFilterModeActions")).toBeVisible();
   await expect(page.locator("#sourceRawAddRulesButton")).toHaveCount(0);
   await expect(page.locator("#sourceRawApplyGlobalRulesButton")).toBeEnabled();
+  await expect(page.locator("#sourceRawApplyGlobalRulesButton")).toHaveText("复制全局规则（黑名单 1 · 备注 0）");
+  await expect(page.locator("#sourceRawFiltersPanel .source-raw-filters-hint")).toHaveText("默认不额外过滤；各数据源在优选管理中保存的规则仍会执行，源级规则优先，未配置时使用设置页全局规则兜底。可直接添加本 API 管理规则，或复制全局规则；保存后追加在数据源规则之后。");
+  await expect(page.locator("#sourceRawFilterSummary")).toHaveText("空规则 · 不额外过滤");
+  await expect(page.locator("#sourceRawFilterChainSource")).toHaveText("源级优先，未配置时使用全局兜底");
+  await expect(page.locator("#sourceRawFilterChainApi")).toHaveText("空（不额外过滤，不等于禁用数据源）");
+  await expect(page.locator("#sourceRawFilterChain")).toContainText("数据源规则 -> API 管理规则 -> 去重和前后缀");
   await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
   await expect(page.locator("#sourceRawBlacklistInput")).toBeEnabled();
   await expect(page.locator("#sourceRawFilterRulesInput")).toBeEnabled();
   await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("");
   await expect(page.locator("#sourceRawFilterRulesInput")).toHaveValue("");
-  await expect(page.locator("#sourceRawFilterStatus")).toContainText("当前未启用优选 API 管理规则");
+  await expect(page.locator("#applySourceRawFiltersButton")).toBeDisabled();
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("本 API 管理规则为空");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("不等于禁用数据源");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("停止检测或关闭优选 API");
 
   // 管理规则直接可编辑，保存后写入优选 API 配置并立即参与预览过滤。
   await page.locator("#sourceRawBlacklistInput").fill("2.2.2.2");
+  await expect(page.locator("#applySourceRawFiltersButton")).toBeEnabled();
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("有未保存修改");
+  await expect(page.locator("#sourceRawFilterSummary")).toHaveText("未保存修改 · 黑名单 1 条 · 备注 0 条");
+  await expect(page.locator("#sourceRawFilterChainApi")).toHaveText("草稿（黑名单 1 条 · 备注 0 条，未保存）");
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("当前有未保存的过滤规则修改");
+    await dialog.dismiss();
+  });
+  await page.locator("#sourceRawDialog .dialog-close").click();
+  await expect(page.locator("#sourceRawDialog")).toBeVisible();
   await page.locator("#applySourceRawFiltersButton").click();
+  await expect(page.locator("#applySourceRawFiltersButton")).toBeDisabled();
   await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();
   await expect(page.locator("#sourceRawFilterBadge")).toHaveText("API 管理规则");
+  await expect(page.locator("#sourceRawFilterSummary")).toHaveText("管理规则 · 黑名单 1 条 · 备注 0 条");
+  await expect(page.locator("#sourceRawFilterChainApi")).toHaveText("黑名单 1 条 · 备注 0 条");
   await expect(page.locator("#sourceRawContent")).toContainText("3.3.3.3:443#api");
   await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
   await expect.poll(async () => page.evaluate(async (path) => {
@@ -212,13 +239,14 @@ test("navigates to the custom API page and selects data sources", async ({ page 
 
   await page.locator("#resetSourceRawFiltersButton").click();
   await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
+  await expect(page.locator("#sourceRawFilterSummary")).toHaveText("空规则 · 不额外过滤");
   await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443#api");
   await expect.poll(async () => page.evaluate(async (path) => {
     const response = await fetch('/api/custom-apis', { cache: 'no-store' });
     return (await response.json())[path]?.blacklist;
   }, customPath)).toEqual([]);
 
-  // 应用全局规则会把设置页规则复制为优选 API 管理规则，而不是只在本次查看临时生效。
+  // 复制全局规则会把设置页规则写入优选 API 管理规则，而不是只在本次查看临时生效。
   await page.locator("#sourceRawApplyGlobalRulesButton").click();
   await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();
   await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("2.2.2.2");
@@ -227,6 +255,23 @@ test("navigates to the custom API page and selects data sources", async ({ page 
     const response = await fetch('/api/custom-apis', { cache: 'no-store' });
     return (await response.json())[path]?.blacklist;
   }, customPath)).toEqual(["2.2.2.2"]);
+
+  // 已有规则或未保存修改时，复制前确认覆盖；取消不改变草稿和已保存配置。
+  await page.locator("#sourceRawBlacklistInput").fill("3.3.3.3");
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("将用设置页全局规则覆盖当前优选 API 管理规则（黑名单 1 条 · 备注 0 条），包括未保存修改");
+    await dialog.dismiss();
+  });
+  await page.locator("#sourceRawApplyGlobalRulesButton").click();
+  await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("3.3.3.3");
+  await expect.poll(async () => page.evaluate(async (path) => {
+    const response = await fetch('/api/custom-apis', { cache: 'no-store' });
+    return (await response.json())[path]?.blacklist;
+  }, customPath)).toEqual(["2.2.2.2"]);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#sourceRawApplyGlobalRulesButton").click();
+  await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("2.2.2.2");
+  await expect(page.locator("#sourceRawFilterStatus")).not.toContainText("有未保存修改");
 
   await page.locator("#resetSourceRawFiltersButton").click();
   await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
@@ -238,9 +283,18 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   const rawSourceHeading = rawSourceGroup.locator(".source-raw-source-heading");
   await rawSourceGroup.locator(".source-raw-source-header").click({ position: { x: 12, y: 28 } });
   await expect(rawSourceHeading).toHaveAttribute("aria-expanded", "false");
+  await page.locator("#sourceRawBlacklistInput").fill("9.9.9.9");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("有未保存修改");
+  page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
   await createdRow.getByRole("button", { name: "查看" }).click();
+  await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("");
+  await expect(page.locator("#applySourceRawFiltersButton")).toBeDisabled();
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("本 API 管理规则为空");
+  await expect(page.locator("#sourceRawFiltersPanel")).not.toHaveAttribute("open", /.*/);
+  await expect(page.locator("#sourceRawHistoryPanel")).not.toHaveAttribute("open", /.*/);
+  await expect(page.locator("#sourceRawFilterSummary")).toHaveText("空规则 · 不额外过滤");
   await page.locator("#sourceRawDialog .source-raw-body").evaluate((element) => {
     const spacer = document.createElement("div");
     spacer.style.height = "1200px";
@@ -258,6 +312,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator('[data-source-raw-tab="raw"]')).toHaveAttribute("aria-selected", "false");
   await expect(page.locator("#sourceRawRawContent .source-raw-source-heading").first()).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#sourceRawHistoryPanel")).toContainText("原始");
+  await expect(page.locator("#sourceRawHistorySummary")).toHaveText(/检测历史（\d+ 条）/);
   await page.locator("#sourceRawHistoryPanel summary").click();
   await page.locator("#sourceRawHistoryList .source-raw-history-view").first().click();
   await expect(page.locator("#sourceRawHistoryDialog")).toBeVisible();
@@ -315,15 +370,27 @@ test("applies source-level blacklist and remark filters from the view dialog", a
   await page.locator("#apisList .row").first().getByRole("button", { name: /查看/ }).click();
   await expect(page.locator("#sourceRawDialog")).toBeVisible();
   await expect(page.locator("#sourceRawFiltersPanel")).toBeVisible();
+  await expect(page.locator("#sourceRawFiltersPanel")).not.toHaveAttribute("open", /.*/);
+  await expect(page.locator("#sourceRawHistoryPanel")).not.toHaveAttribute("open", /.*/);
   await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
   await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443#api");
   await expect(page.locator("#sourceRawContent")).toContainText("3.3.3.3:443#api");
 
   await page.locator("#sourceRawFiltersPanel summary").click();
+  await expect(page.locator("#sourceRawFiltersPanel .source-raw-filters-hint")).toHaveText("保存后仅作用于该数据源，优选 API 生成时会优先使用；未设置时使用设置页中的全局规则。备注过滤先执行，黑名单匹配的是清理后的备注。");
+  await expect(page.locator("#sourceRawFilterSummary")).toContainText("全局兜底");
+  await expect(page.locator("#sourceRawFilterChainSource")).toContainText("全局兜底");
+  await expect(page.locator("#applySourceRawFiltersButton")).toBeDisabled();
   await page.locator("#sourceRawBlacklistInput").fill("2.2.2.2");
   await expect(page.locator("#sourceRawBlacklistMeta")).toHaveText("1 条");
+  await expect(page.locator("#applySourceRawFiltersButton")).toBeEnabled();
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("有未保存修改");
+  await expect(page.locator("#sourceRawFilterSummary")).toHaveText("未保存修改 · 黑名单 1 条 · 备注 0 条");
+  await expect(page.locator("#sourceRawFilterChainSource")).toContainText("未保存草稿");
   await page.locator("#applySourceRawFiltersButton").click();
   await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();
+  await expect(page.locator("#sourceRawFilterSummary")).toHaveText("独立规则 · 黑名单 1 条 · 备注 0 条");
+  await expect(page.locator("#sourceRawFilterChainSource")).toContainText("已配置独立规则");
   await expect(page.locator("#sourceRawContent")).toContainText("3.3.3.3:443#api");
   await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
   await page.locator('[data-source-raw-tab="filtered"]').click();
@@ -334,6 +401,7 @@ test("applies source-level blacklist and remark filters from the view dialog", a
   // 过滤节点旁标注命中的规则（默认黑名单为空，这里展示该数据源的独立规则）
   await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("黑名单：2.2.2.2");
   await expect(page.locator("#sourceRawFilterStatus")).toContainText("优选 API 会优先使用");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("设置页全局规则不会参与该数据源");
 
   // 源级规则不修改设置页里的全局黑名单。
   const globalBlacklist = await page.evaluate(async () => (await (await fetch("/api/blacklist", { cache: "no-store" })).json()));
@@ -373,6 +441,7 @@ test("applies source-level blacklist and remark filters from the view dialog", a
   await expect(remarkCategory).toHaveAttribute("aria-expanded", "false");
   // 单个数据源的查看弹窗也要记录检测历史，而不是永远显示“暂无检测记录”。
   await expect(page.locator("#sourceRawHistoryPanel")).toBeVisible();
+  await expect(page.locator("#sourceRawHistorySummary")).toHaveText(/检测历史（\d+ 条）/);
   await expect(page.locator("#sourceRawHistoryList")).not.toContainText("暂无检测记录");
   await expect(page.locator("#sourceRawHistoryList .source-raw-history-item").first()).toContainText("原始 2");
   await page.locator("#resetSourceRawFiltersButton").click();
