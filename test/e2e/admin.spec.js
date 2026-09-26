@@ -78,6 +78,9 @@ test("loads the dashboard and switches theme", async ({ page }) => {
 });
 
 test("navigates to the custom API page and selects data sources", async ({ page }, testInfo) => {
+  // 页面保存的是整份 custom_apis；两个项目并行会互相覆盖临时 API，只在桌面项目跑完整 CRUD 流程。
+  test.skip(testInfo.project.name === "mobile", "共享 KV 下无法并行覆盖优选 API CRUD");
+  test.setTimeout(90_000);
   await login(page);
   await page.evaluate(() => { window.__spaNavigationMarker = "kept"; });
   await page.locator('a[data-nav-page="customApis"]').click();
@@ -94,7 +97,7 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await expect(page.locator("#customApiDialog")).toBeVisible();
   await expect.poll(() => page.locator("#newCustomApiPath").evaluate((input) => getComputedStyle(input).boxShadow)).toBe("none");
   // 数据源选择器：订阅源 + API 源 + 手动优选（优选域名未配置时不显示）。
-  await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(3);
+  await expect(page.locator("#newCustomApiSources input[type=checkbox]")).toHaveCount(4);
   await expect(page.locator("#newCustomApiSources .source-group-title")).toHaveCount(3);
   await expect(page.locator("#newCustomApiSources .source-group-title").last()).toHaveText("手动优选 · 1");
   await expect(page.locator("#newCustomApiSources .source-option").first()).not.toContainText("订阅源 ·");
@@ -108,13 +111,14 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#newCustomApiSources").getByRole("button", { name: "仅显示已选" }).click();
   await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(0);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "全选" }).click();
-  await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(3);
+  await expect(page.locator("#newCustomApiSources input[type=checkbox]:checked")).toHaveCount(4);
   await page.locator("#newCustomApiSources").getByRole("button", { name: "清空" }).click();
   await page.locator("#newCustomApiPath").fill("bad path");
   await expect(page.locator("#newCustomApiPathHint")).toHaveClass(/error/);
   const customPath = "preview-api-" + Date.now().toString(36) + "-" + testInfo.project.name;
   await page.locator("#newCustomApiPath").fill(customPath);
-  await page.locator("#newCustomApiSources input[type=checkbox]").first().check();
+  const customPreviewSource = page.locator("#newCustomApiSources .source-option").filter({ hasText: "优选 API 测试源" });
+  await customPreviewSource.locator("input[type=checkbox]").check();
   const initialApiCount = await page.locator("#customApisList .row").count();
   await page.getByRole("button", { name: "创建 API" }).click();
   await expect(page.locator("#customApiDialog")).not.toBeVisible();
@@ -142,9 +146,9 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#customApisList .custom-api-row").last().getByRole("button", { name: "✎ 编辑" }).click();
   await expect(page.locator("#customApiEditDialog")).toBeVisible();
   // 编辑面板数据源：订阅源 + API 源 + 手动优选。
-  await expect(page.locator("#editCustomApiSources input[type=checkbox]")).toHaveCount(3);
+  await expect(page.locator("#editCustomApiSources input[type=checkbox]")).toHaveCount(4);
   await page.locator("#editCustomApiSources").getByRole("button", { name: "清空" }).click();
-  await page.locator("#editCustomApiSources input[type=checkbox]").nth(1).check();
+  await page.locator("#editCustomApiSources .source-option").filter({ hasText: "优选 API 测试源" }).locator("input[type=checkbox]").check();
   await page.locator("#saveCustomApiEditButton").click();
   await expect(page.locator("#customApiEditDialog")).not.toBeVisible();
   const savedConfig = await page.evaluate(async (path) => {
@@ -155,13 +159,74 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   expect(savedConfig.sourceMode).toBe("selected");
   expect(savedConfig.sources).toHaveLength(1);
   expect(savedConfig.sources[0].type).toBe("apis");
+  expect(savedConfig.blacklist).toEqual([]);
+  expect(savedConfig.filterRules).toEqual([]);
   const createdRow = page.locator("#customApisList .custom-api-row").last();
+  // 只在该页面覆盖读取全局规则，验证“应用全局规则”确实会复制到优选 API 配置。
+  await page.route("**/api/blacklist", async (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: ["2.2.2.2"] });
+    return route.continue();
+  });
+  await page.route("**/api/filter-rules", async (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: [] });
+    return route.continue();
+  });
+  const previewRequestPromise = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/custom-api-preview"));
   await createdRow.getByRole("button", { name: "查看" }).click();
+  const previewBody = (await previewRequestPromise).postDataJSON();
+  expect(previewBody).not.toHaveProperty("blacklist");
+  expect(previewBody).not.toHaveProperty("filterRules");
   await expect(page.locator("#sourceRawDialog")).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/source-raw-scroll-locked/);
   await expect(page.locator("#sourceRawSourceSort")).toHaveValue("config");
   await expect(page.locator(".source-raw-source-stats").first()).toContainText("原始");
   await expect(page.locator("#sourceRawHistoryPanel")).toBeVisible();
+  await page.locator("#sourceRawFiltersPanel summary").click();
+  await expect(page.locator("#sourceRawFilterModeActions")).toBeVisible();
+  await expect(page.locator("#sourceRawAddRulesButton")).toHaveText("添加规则");
+  await expect(page.locator("#sourceRawApplyGlobalRulesButton")).toBeEnabled();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
+  await expect(page.locator("#sourceRawBlacklistInput")).toBeDisabled();
+  await expect(page.locator("#sourceRawFilterRulesInput")).toBeDisabled();
+  await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("");
+  await expect(page.locator("#sourceRawFilterRulesInput")).toHaveValue("");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("未设置管理规则");
+
+  // 手动添加的规则保存到优选 API 配置，并立即参与预览过滤。
+  await page.locator("#sourceRawAddRulesButton").click();
+  await expect(page.locator("#sourceRawBlacklistInput")).toBeEnabled();
+  await page.locator("#sourceRawBlacklistInput").fill("2.2.2.2");
+  await page.locator("#applySourceRawFiltersButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();
+  await expect(page.locator("#sourceRawFilterBadge")).toHaveText("API 管理规则");
+  await expect(page.locator("#sourceRawContent")).toContainText("3.3.3.3:443#api");
+  await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
+  await expect.poll(async () => page.evaluate(async (path) => {
+    const response = await fetch('/api/custom-apis', { cache: 'no-store' });
+    return (await response.json())[path]?.blacklist;
+  }, customPath)).toEqual(["2.2.2.2"]);
+
+  await page.locator("#resetSourceRawFiltersButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
+  await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443#api");
+  await expect.poll(async () => page.evaluate(async (path) => {
+    const response = await fetch('/api/custom-apis', { cache: 'no-store' });
+    return (await response.json())[path]?.blacklist;
+  }, customPath)).toEqual([]);
+
+  // 应用全局规则会把设置页规则复制为优选 API 管理规则，而不是只在本次查看临时生效。
+  await page.locator("#sourceRawApplyGlobalRulesButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeVisible();
+  await expect(page.locator("#sourceRawBlacklistInput")).toHaveValue("2.2.2.2");
+  await expect(page.locator("#sourceRawContent")).not.toContainText("2.2.2.2:443#api");
+  await expect.poll(async () => page.evaluate(async (path) => {
+    const response = await fetch('/api/custom-apis', { cache: 'no-store' });
+    return (await response.json())[path]?.blacklist;
+  }, customPath)).toEqual(["2.2.2.2"]);
+
+  await page.locator("#resetSourceRawFiltersButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
+  await expect(page.locator("#sourceRawContent")).toContainText("2.2.2.2:443#api");
   await page.locator("#sourceRawSourceSort").selectOption("count");
   await page.locator("#sourceRawSearch").fill("2.2.2.2");
   await page.locator('[data-source-raw-tab="raw"]').click();
@@ -407,13 +472,15 @@ test.describe("manual preferred editor", () => {
     await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n"))
       .toBe(await textarea.inputValue());
 
-    // 覆盖粘贴：用剪贴板内容整体替换（带确认弹窗，自动接受）。
-    page.on("dialog", (dialog) => dialog.accept());
+    // 覆盖粘贴：用剪贴板内容整体替换（使用页面自定义确认弹窗）。
     const savedValue = await textarea.inputValue();
     await page.evaluate(async (suffix) => {
       await navigator.clipboard.writeText(["7.7.7.7:443#over-" + suffix, "8.8.8.8:443#over-" + suffix].join("\n"));
     }, marker);
     await page.locator("#preferredManualOverwriteButton").click();
+    await expect(page.locator("#preferredManualDialog")).toBeVisible();
+    await expect(page.locator("#preferredManualDialog")).toContainText("确认覆盖内容");
+    await page.locator("#confirmPreferredManualDialogButton").click();
     await expect(textarea).toHaveValue([
       "7.7.7.7:443#over-" + marker,
       "8.8.8.8:443#over-" + marker,
@@ -422,6 +489,9 @@ test.describe("manual preferred editor", () => {
 
     // 一键清空：确认后清空文本框，撤销按钮可用。
     await page.locator("#preferredManualClearButton").click();
+    await expect(page.locator("#preferredManualDialog")).toBeVisible();
+    await expect(page.locator("#preferredManualDialog")).toContainText("确认清空内容");
+    await page.locator("#confirmPreferredManualDialogButton").click();
     await expect(textarea).toHaveValue("");
     await expect(page.locator("#preferredManualStats")).toHaveText("共 0 条");
     await expect(page.locator("#preferredManualClearButton")).toBeDisabled();
@@ -431,7 +501,7 @@ test.describe("manual preferred editor", () => {
     await page.locator("#preferredManualUndoButton").click();
     await expect(textarea).toHaveValue(savedValue);
     await expect(page.locator("#preferredManualUndoButton")).toBeDisabled();
-    await expect(page.locator("#toast")).toContainText("已恢复到上次保存的版本");
+    await expect(page.locator("#toast")).toContainText("已恢复全部手动优选到上次保存的版本");
   });
 });
 

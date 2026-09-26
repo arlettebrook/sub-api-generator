@@ -2895,6 +2895,13 @@ export const adminStyle = `
     font-size: 11px;
   }
 
+  .source-raw-filters-mode-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
   .source-raw-filters-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

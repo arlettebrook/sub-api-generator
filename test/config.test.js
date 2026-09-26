@@ -155,6 +155,8 @@ test("validates custom API access paths", () => {
         { type: "subs", key: "sub.example.com" },
         { type: "apis", key: "https://api.example.com" },
       ],
+      blacklist: [],
+      filterRules: [],
     },
   });
   assert.throws(() => validateApiPathPayload({ "admin": true }), /访问路径无效/);
@@ -163,8 +165,8 @@ test("validates custom API access paths", () => {
     first: { enabled: true },
     second: { enabled: true, sources: null },
   }), {
-    first: { enabled: true, remark: "", sourceMode: "all", sources: [] },
-    second: { enabled: true, remark: "", sourceMode: "all", sources: [] },
+    first: { enabled: true, remark: "", sourceMode: "all", sources: [], blacklist: [], filterRules: [] },
+    second: { enabled: true, remark: "", sourceMode: "all", sources: [], blacklist: [], filterRules: [] },
   });
 });
 
@@ -182,6 +184,8 @@ test("normalizes optional custom API result suffix settings", () => {
     suffix: "-后缀",
     sourceMode: "all",
     sources: [],
+    blacklist: [],
+    filterRules: [],
   });
 });
 

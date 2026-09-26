@@ -577,6 +577,34 @@ function filterPreferredIps(lines, blacklist = DEFAULT_BLACKLIST, preparedRegex 
   return result;
 }
 
+function applyApiStageFilters(values, type, blacklist, preparedRegex, filterRules) {
+  if (!blacklist.length && !filterRules.length) return values;
+  const filtered = type === "apis"
+    ? filterBlacklistedLines(values, blacklist, preparedRegex, filterRules)
+    : filterPreferredIps(values, blacklist, preparedRegex, filterRules);
+  const baseStats = values.filterStats || {};
+  const nextStats = filtered.filterStats || {};
+  const result = filtered.slice();
+  const filterStats = {
+    inputCount: Number(baseStats.inputCount) || 0,
+    invalidCount: (Number(baseStats.invalidCount) || 0) + (Number(nextStats.invalidCount) || 0),
+    blacklistedCount: (Number(baseStats.blacklistedCount) || 0) + (Number(nextStats.blacklistedCount) || 0),
+    duplicateCount: (Number(baseStats.duplicateCount) || 0) + (Number(nextStats.duplicateCount) || 0),
+    remarkCount: (Number(baseStats.remarkCount) || 0) + (Number(nextStats.remarkCount) || 0),
+    outputCount: Number(nextStats.outputCount) || result.length,
+  };
+  Object.defineProperty(result, "filterStats", { value: filterStats, enumerable: false });
+  Object.defineProperty(result, "filteredNodes", {
+    value: [...(values.filteredNodes || []), ...(filtered.filteredNodes || [])],
+    enumerable: false,
+  });
+  Object.defineProperty(result, "filterDetails", {
+    value: [...(values.filterDetails || []), ...(filtered.filterDetails || [])],
+    enumerable: false,
+  });
+  return result;
+}
+
 function sourceEntries(config) {
   if (!isPlainObject(config)) return [];
   return Object.entries(config).filter(([, entry]) => entry === true || isPlainObject(entry));
@@ -624,7 +652,7 @@ function normalizeManualPreferredConfig(value) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform = {}, manualConfig = [], includeManual = true, includeDisabledSources = false) {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, apiBlacklist, apiFilterRules, outputTransform = {}, manualConfig = [], includeManual = true, includeDisabledSources = false) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
@@ -634,6 +662,8 @@ function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsC
     includeDisabledSources,
     blacklist,
     filterRules,
+    apiBlacklist,
+    apiFilterRules,
     outputTransform,
   });
 }
@@ -731,6 +761,9 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       : null;
     const globalBlacklist = normalizeBlacklist(blacklistConfig);
     const globalFilterRules = normalizeFilterRules(filterRulesConfig);
+    const apiBlacklist = normalizeBlacklist(options.apiBlacklist);
+    const apiFilterRules = normalizeFilterRules(options.apiFilterRules);
+    const apiBlacklistRegex = getBlacklistRegex(apiBlacklist);
     const getSourceFilters = (entry) => {
       const source = isPlainObject(entry) ? entry : {};
       return {
@@ -759,6 +792,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       domainsConfig,
       requestBlacklist ?? globalBlacklist,
       requestFilterRules ?? globalFilterRules,
+      apiBlacklist,
+      apiFilterRules,
       outputTransform,
       activeManualEntries,
       true,
@@ -812,7 +847,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const sourceFilters = getSourceFilters(entry);
           const sourceBlacklistRegex = getBlacklistRegex(sourceFilters.blacklist);
           const rawValues = await fetchPreferredSubs(host, sourceFilters.filterRules);
-          const values = filterPreferredIps(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
+          const sourceValues = filterPreferredIps(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
+          const values = applyApiStageFilters(sourceValues, "preferred", apiBlacklist, apiBlacklistRegex, apiFilterRules);
           const filteredNodes = values.filteredNodes || [];
           const filterDetails = values.filterDetails || [];
           const rawNodeCount = (rawValues.unfilteredNodes || []).length;
@@ -866,7 +902,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const sourceFilters = getSourceFilters(entry);
           const sourceBlacklistRegex = getBlacklistRegex(sourceFilters.blacklist);
           const rawValues = await fetchApiSubs(apiUrl);
-          const values = filterBlacklistedLines(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
+          const sourceValues = filterBlacklistedLines(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
+          const values = applyApiStageFilters(sourceValues, "apis", apiBlacklist, apiBlacklistRegex, apiFilterRules);
           const timestamp = new Date().toISOString();
           recordStatus("apis", apiUrl, {
             state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
@@ -910,7 +947,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           const sourceFilters = getSourceFilters(entry);
           const sourceBlacklistRegex = getBlacklistRegex(sourceFilters.blacklist);
           const rawValues = await fetchPreferredDomain(domain, options.forceDns === true);
-          const values = filterPreferredIps(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
+          const sourceValues = filterPreferredIps(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
+          const values = applyApiStageFilters(sourceValues, "preferred", apiBlacklist, apiBlacklistRegex, apiFilterRules);
           const timestamp = new Date().toISOString();
           const dnsRecords = rawValues.records || {};
           const dnsErrors = (rawValues.errors || []).reduce((result, item) => {
@@ -1013,7 +1051,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     for (const manualEntry of activeManualEntries) {
       const manualLines = manualEntry.content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       if (!manualLines.length) continue;
-      const manualValues = filterPreferredIps(manualLines, manualFilters.blacklist, manualBlacklistRegex, manualFilters.filterRules);
+      const sourceManualValues = filterPreferredIps(manualLines, manualFilters.blacklist, manualBlacklistRegex, manualFilters.filterRules);
+      const manualValues = applyApiStageFilters(sourceManualValues, "preferred", apiBlacklist, apiBlacklistRegex, apiFilterRules);
       extra.push(...manualValues);
       mergeFilterStats(filterStats, manualValues.filterStats);
       // 手动优选同样登记原始节点，保证“未过滤节点”和来源统计（原始/保留/过滤）与其它来源一致。

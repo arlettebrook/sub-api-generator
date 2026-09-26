@@ -125,6 +125,10 @@ export const adminHTML = `
       </summary>
       <div class="source-raw-filters-body">
         <p class="source-raw-filters-hint">保存后仅作用于该数据源，优选 API 生成时会优先使用；未设置时使用设置页中的全局规则。备注过滤先执行，黑名单匹配的是清理后的备注。</p>
+        <div class="source-raw-filters-mode-actions" id="sourceRawFilterModeActions" hidden>
+          <button class="btn-outline" type="button" id="sourceRawAddRulesButton">添加规则</button>
+          <button class="btn-outline" type="button" id="sourceRawApplyGlobalRulesButton">应用全局规则</button>
+        </div>
         <div class="source-raw-filters-grid">
           <label class="source-raw-filters-field">
             <span class="source-raw-filters-label">黑名单 <em id="sourceRawBlacklistMeta">0 条</em></span>

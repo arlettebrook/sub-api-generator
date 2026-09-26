@@ -911,7 +911,8 @@ async function handleCustomApiPreview(request, env) {
     prefix: entry.prefix,
     suffix: entry.suffix,
     suffixStrategy: entry.suffixStrategy,
-    ...filterOverrides,
+    apiBlacklist: filterOverrides.blacklist ?? entry.blacklist ?? [],
+    apiFilterRules: filterOverrides.filterRules ?? entry.filterRules ?? [],
   };
   // 独立规则只在本次查看生效：不更新全局源状态，也不写入全局检测历史。
   if (hasFilterOverride) resultOptions.trackStatus = false;
@@ -1352,6 +1353,8 @@ async function handleCustomApiPath(path, env) {
     prefix: api.prefix,
     suffix: api.suffix,
     suffixStrategy: api.suffixStrategy,
+    apiBlacklist: api.blacklist,
+    apiFilterRules: api.filterRules,
   });
 }
 

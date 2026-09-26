@@ -224,6 +224,8 @@ test("creates and serves custom API access paths", async () => {
       sourceMode: "selected",
       // 手动优选是全局唯一数据源，key 统一归一为 manual。
       sources: [{ type: "subs", key: "sub.example.com" }, { type: "manual", key: "manual" }],
+      blacklist: [],
+      filterRules: [],
     },
   });
 
@@ -886,7 +888,7 @@ test("rejects invalid view-only filter payloads", async () => {
   assert.deepEqual(values.blacklist, ["global-block"]);
 });
 
-test("keeps view-only filters isolated for custom API previews", async () => {
+test("applies custom API management rules after source filters", async () => {
   const sourceKey = "https://view-filter-api.example/data";
   const values = {
     apis: { [sourceKey]: { remark: "API 源" } },
@@ -895,7 +897,12 @@ test("keeps view-only filters isolated for custom API previews", async () => {
     filter_rules: [],
     custom_apis: {
       view_filter_global: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] },
-      view_filter_local: { enabled: true, sourceMode: "selected", sources: [{ type: "apis", key: sourceKey }] },
+      view_filter_api: {
+        enabled: true,
+        sourceMode: "selected",
+        sources: [{ type: "apis", key: sourceKey }],
+        blacklist: ["local-block"],
+      },
     },
   };
   const db = createD1();
@@ -918,14 +925,18 @@ test("keeps view-only filters isolated for custom API previews", async () => {
     assert.equal(globalResult.localFilterOverride, undefined);
     assert.equal(historyInserts(), 1);
 
-    const localPreview = await preview({ path: "view_filter_local", blacklist: ["local-block"] });
-    assert.equal(localPreview.status, 200);
-    const localResult = await localPreview.json();
-    assert.deepEqual(localResult.nodes, ["6.6.6.6:443#global-block"]);
-    assert.deepEqual(localResult.filteredNodes, ["5.5.5.5:443#local-block"]);
-    assert.equal(localResult.localFilterOverride, true);
-    // 独立规则的检测不写入全局检测历史，也不修改全局配置
-    assert.equal(historyInserts(), 1);
+    const apiPreview = await preview({ path: "view_filter_api" });
+    assert.equal(apiPreview.status, 200);
+    const apiResult = await apiPreview.json();
+    assert.deepEqual(apiResult.nodes, []);
+    assert.deepEqual(apiResult.filteredNodes, ["6.6.6.6:443#global-block", "5.5.5.5:443#local-block"]);
+    assert.deepEqual(apiResult.filterDetails, [
+      { type: "apis", key: sourceKey, node: "6.6.6.6:443#global-block", reason: "blacklist", rule: "global-block" },
+      { type: "apis", key: sourceKey, node: "5.5.5.5:443#local-block", reason: "blacklist", rule: "local-block" },
+    ]);
+    assert.equal(apiResult.localFilterOverride, undefined);
+    // 正式接口的管理规则会按正常检测记录历史，且不修改全局配置。
+    assert.equal(historyInserts(), 2);
     assert.deepEqual(values.blacklist, ["global-block"]);
     assert.deepEqual(values.filter_rules, []);
   } finally {

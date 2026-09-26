@@ -338,6 +338,7 @@ export function validateApiPathPayload(body) {
     if (typeof suffixStrategy !== "string" || !API_SUFFIX_STRATEGIES.has(suffixStrategy)) {
       throw new Error(`后缀追加策略无效: ${rawPath}`);
     }
+    const filters = validateSourceFilterFields(value);
     normalized[path] = {
       enabled: value.enabled === true,
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
@@ -346,6 +347,8 @@ export function validateApiPathPayload(body) {
       ...(suffixStrategy !== "skip" ? { suffixStrategy } : {}),
       sourceMode,
       sources: sourceMode === SOURCE_MODE_SELECTED ? normalizedSources : [],
+      blacklist: filters.blacklist || [],
+      filterRules: filters.filterRules || [],
     };
   }
   return normalized;
@@ -356,7 +359,7 @@ export function normalizeCustomApiData(data) {
   const normalized = {};
   for (const [path, value] of Object.entries(data)) {
     if (typeof value === "boolean") {
-      normalized[path] = { enabled: value, remark: "", sourceMode: SOURCE_MODE_ALL, sources: [] };
+      normalized[path] = { enabled: value, remark: "", sourceMode: SOURCE_MODE_ALL, sources: [], blacklist: [], filterRules: [] };
     } else if (isPlainObject(value)) {
       const sourceMode = value.sourceMode === SOURCE_MODE_SELECTED
         ? SOURCE_MODE_SELECTED
@@ -364,6 +367,7 @@ export function normalizeCustomApiData(data) {
       const prefix = typeof value.prefix === "string" ? value.prefix.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_PREFIX_LENGTH) : "";
       const suffix = typeof value.suffix === "string" ? value.suffix.replace(/[\u0000-\u001F\u007F]/gu, "").trim().slice(0, MAX_API_SUFFIX_LENGTH) : "";
       const suffixStrategy = API_SUFFIX_STRATEGIES.has(value.suffixStrategy) ? value.suffixStrategy : "skip";
+      const filters = normalizeSourceFilterFields(value);
       normalized[path] = {
         enabled: value.enabled === true,
         remark: typeof value.remark === "string" ? value.remark : "",
@@ -375,6 +379,8 @@ export function normalizeCustomApiData(data) {
           ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis", "domains", "manual"].includes(source.type) && typeof source.key === "string")
               .map((source) => ({ type: source.type, key: source.type === "manual" ? "manual" : normalizeSourceKey(source.type, source.key) }))
           : [],
+        blacklist: filters.blacklist || [],
+        filterRules: filters.filterRules || [],
       };
     }
   }

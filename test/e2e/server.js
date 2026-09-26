@@ -3,8 +3,20 @@ import worker from "../../src/index.js";
 
 const values = {
   subs: { "e.ye.gs": { remark: "e.ye.gs" } },
-  apis: { "https://api.example.com": { remark: "测试 API" } },
+  apis: {
+    "https://api.example.com": { remark: "测试 API" },
+    "https://custom-preview-api.example": { remark: "优选 API 测试源" },
+  },
   custom_apis: {},
+  preferred_manual: {
+    items: {
+      manual: {
+        name: "手动优选",
+        content: "4.4.4.4:443#manual",
+        updatedAt: 1,
+      },
+    },
+  },
 };
 const detectionHistory = [];
 const DB = {
@@ -54,6 +66,7 @@ const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input?.url;
   if (url === "https://api.example.com") return new Response("2.2.2.2:443#api\n3.3.3.3:443#api", { status: 200 });
+  if (url === "https://custom-preview-api.example") return new Response("2.2.2.2:443#api\n3.3.3.3:443#api", { status: 200 });
   if (url === "https://e.ye.gs" || url === "https://e.ye.gs/") return new Response("1.1.1.1:443#sub", { status: 200 });
   return nativeFetch(input, init);
 };
