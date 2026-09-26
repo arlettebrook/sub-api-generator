@@ -6,11 +6,13 @@ import {
   normalizeFilterRules,
   normalizeSettings,
   normalizeKvData,
+  normalizeSourceFilterFields,
   normalizeSourceKey,
   readJsonObject,
   validateApiPathPayload,
   validateConfigPayload,
   validateBlacklistPayload,
+  validateSourceFilterFields,
   validateSettingsPayload,
 } from "../src/config.js";
 
@@ -26,6 +28,33 @@ test("normalizes legacy boolean KV entries", () => {
     "one.example": { remark: "" },
     "two.example": { remark: "test", enabled: false },
     "three.example": { remark: "kept" },
+  });
+});
+
+test("preserves source-level filter rules while normalizing configuration", () => {
+  const source = {
+    "edge.example": {
+      remark: "边缘",
+      enabled: false,
+      blacklist: [" Blocked ", "blocked"],
+      filterRules: [" | "],
+    },
+  };
+  assert.deepEqual(normalizeKvData(source, "subs"), {
+    "edge.example": {
+      remark: "边缘",
+      blacklist: ["Blocked"],
+      filterRules: ["|"],
+      enabled: false,
+    },
+  });
+  assert.deepEqual(validateConfigPayload(source, "subs"), {
+    "edge.example": {
+      remark: "边缘",
+      enabled: false,
+      blacklist: ["Blocked"],
+      filterRules: ["|"],
+    },
   });
 });
 
@@ -55,6 +84,25 @@ test("normalizes configurable remark filter rules", () => {
   assert.deepEqual(normalizeFilterRules([" 🐲 ", "🐲", "", 1, "-VIP"]), ["🐲", "-VIP"]);
   const defaults = normalizeFilterRules(null);
   assert.deepEqual(defaults, []);
+});
+
+test("normalizes and validates source-level filter rules", () => {
+  assert.deepEqual(normalizeSourceFilterFields({
+    blacklist: [" Blocked ", "blocked"],
+    filterRules: [" | ", "|"],
+    ignored: true,
+  }), {
+    blacklist: ["Blocked"],
+    filterRules: ["|"],
+  });
+  assert.deepEqual(validateSourceFilterFields({
+    blacklist: ["Blocked"],
+    filterRules: ["|"],
+  }), {
+    blacklist: ["Blocked"],
+    filterRules: ["|"],
+  });
+  assert.throws(() => validateSourceFilterFields({ blacklist: "Blocked" }), /字符串数组/);
 });
 
 test("normalizes source identifiers at the configuration boundary", () => {

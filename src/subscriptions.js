@@ -722,13 +722,22 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       return textResponse("KV 未配置 subs", 500, { "cache-control": "no-store" });
     }
 
-    // 查看弹窗可以携带仅本次生效的过滤规则：请求级覆盖不写入 KV，也不会影响其他查看和正式输出。
-    const blacklist = Object.prototype.hasOwnProperty.call(options, "blacklist")
+    // 查看弹窗可以携带仅本次生效的临时规则；未传时优先使用源级规则，再回退到设置页的全局规则。
+    const requestBlacklist = Object.prototype.hasOwnProperty.call(options, "blacklist")
       ? normalizeBlacklist(options.blacklist)
-      : normalizeBlacklist(blacklistConfig);
-    const filterRules = Object.prototype.hasOwnProperty.call(options, "filterRules")
+      : null;
+    const requestFilterRules = Object.prototype.hasOwnProperty.call(options, "filterRules")
       ? normalizeFilterRules(options.filterRules)
-      : normalizeFilterRules(filterRulesConfig);
+      : null;
+    const globalBlacklist = normalizeBlacklist(blacklistConfig);
+    const globalFilterRules = normalizeFilterRules(filterRulesConfig);
+    const getSourceFilters = (entry) => {
+      const source = isPlainObject(entry) ? entry : {};
+      return {
+        blacklist: requestBlacklist ?? (Array.isArray(source.blacklist) ? normalizeBlacklist(source.blacklist) : globalBlacklist),
+        filterRules: requestFilterRules ?? (Array.isArray(source.filterRules) ? normalizeFilterRules(source.filterRules) : globalFilterRules),
+      };
+    };
     // 独立规则的临时检测默认只服务当前查看，不覆盖全局源状态。
     const trackStatus = options.trackStatus !== false;
     const recordStatus = (type, key, details) => {
@@ -743,7 +752,18 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       : selected === null ? manualEntries
         : manualEntries.filter((entry) => selectedManualKeys.has(entry.id));
     const includeDisabledSources = options.includeDisabledSources === true;
-    const cacheKey = makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, outputTransform, activeManualEntries, true, includeDisabledSources);
+    const cacheKey = makeAggregateCacheKey(
+      sourceSelection,
+      subsConfig,
+      apisConfig,
+      domainsConfig,
+      requestBlacklist ?? globalBlacklist,
+      requestFilterRules ?? globalFilterRules,
+      outputTransform,
+      activeManualEntries,
+      true,
+      includeDisabledSources,
+    );
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -782,7 +802,6 @@ export async function handleRoot(env, sourceSelection, options = {}) {
           && (typeof entry === "boolean" || isPlainObject(entry));
       });
     };
-    const blacklistRegex = getBlacklistRegex(blacklist);
     const sourceTasks = [];
     // 正式输出跳过禁用源；查看预览可显式包含禁用源以支持诊断。
     selectedEntries(subsConfig, "subs")
@@ -790,8 +809,10 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       .forEach(([host, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
-          const rawValues = await fetchPreferredSubs(host, filterRules);
-          const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
+          const sourceFilters = getSourceFilters(entry);
+          const sourceBlacklistRegex = getBlacklistRegex(sourceFilters.blacklist);
+          const rawValues = await fetchPreferredSubs(host, sourceFilters.filterRules);
+          const values = filterPreferredIps(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
           const filteredNodes = values.filteredNodes || [];
           const filterDetails = values.filterDetails || [];
           const rawNodeCount = (rawValues.unfilteredNodes || []).length;
@@ -842,8 +863,10 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       .forEach(([apiUrl, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
+          const sourceFilters = getSourceFilters(entry);
+          const sourceBlacklistRegex = getBlacklistRegex(sourceFilters.blacklist);
           const rawValues = await fetchApiSubs(apiUrl);
-          const values = filterBlacklistedLines(rawValues, blacklist, blacklistRegex, filterRules);
+          const values = filterBlacklistedLines(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
           const timestamp = new Date().toISOString();
           recordStatus("apis", apiUrl, {
             state: values.length > 0 ? "success" : (rawValues.length ? "filtered" : "empty"),
@@ -884,8 +907,10 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       .forEach(([domain, entry]) => sourceTasks.push(async () => {
         const startedAt = Date.now();
         try {
+          const sourceFilters = getSourceFilters(entry);
+          const sourceBlacklistRegex = getBlacklistRegex(sourceFilters.blacklist);
           const rawValues = await fetchPreferredDomain(domain, options.forceDns === true);
-          const values = filterPreferredIps(rawValues, blacklist, blacklistRegex, filterRules);
+          const values = filterPreferredIps(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
           const timestamp = new Date().toISOString();
           const dnsRecords = rawValues.records || {};
           const dnsErrors = (rawValues.errors || []).reduce((result, item) => {
@@ -983,10 +1008,12 @@ export async function handleRoot(env, sourceSelection, options = {}) {
     }
     // 手动优选是全局补充源：全部数据源模式始终追加；手动选择模式下由优选 API 配置里的
     // “手动优选”来源勾选决定，与其他来源一样经过黑名单、过滤规则和格式校验。
+    const manualFilters = getSourceFilters(null);
+    const manualBlacklistRegex = getBlacklistRegex(manualFilters.blacklist);
     for (const manualEntry of activeManualEntries) {
       const manualLines = manualEntry.content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       if (!manualLines.length) continue;
-      const manualValues = filterPreferredIps(manualLines, blacklist, blacklistRegex, filterRules);
+      const manualValues = filterPreferredIps(manualLines, manualFilters.blacklist, manualBlacklistRegex, manualFilters.filterRules);
       extra.push(...manualValues);
       mergeFilterStats(filterStats, manualValues.filterStats);
       // 手动优选同样登记原始节点，保证“未过滤节点”和来源统计（原始/保留/过滤）与其它来源一致。

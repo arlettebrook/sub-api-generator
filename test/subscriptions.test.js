@@ -140,6 +140,70 @@ test("filters blacklisted API source lines while preserving allowed output", asy
   }
 });
 
+test("uses persisted source filter rules before global rules", async () => {
+  const originalFetch = globalThis.fetch;
+  const sourceKey = "https://api.example/source";
+  const values = {
+    subs: {},
+    apis: {
+      [sourceKey]: {
+        blacklist: ["source-block"],
+        filterRules: ["|"],
+      },
+    },
+    blacklist: ["global-block"],
+    filter_rules: [],
+  };
+  globalThis.fetch = async () => new Response([
+    "1.1.1.1:443#source-block",
+    "2.2.2.2:443#global-block",
+    "3.3.3.3:443#allowed | suffix",
+  ].join("\n"), { status: 200 });
+  const runtime = { KV: { async get(key) { return values[key] ?? null; } } };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime, [{ type: "apis", key: sourceKey }]);
+    assert.deepEqual((await response.text()).split("\n"), [
+      "2.2.2.2:443#global-block",
+      "3.3.3.3:443#allowed",
+    ]);
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("lets request filter overrides take precedence over persisted source rules", async () => {
+  const originalFetch = globalThis.fetch;
+  const sourceKey = "https://api.example/source";
+  const values = {
+    subs: {},
+    apis: {
+      [sourceKey]: {
+        blacklist: ["source-block"],
+        filterRules: [],
+      },
+    },
+    blacklist: ["global-block"],
+    filter_rules: [],
+  };
+  globalThis.fetch = async () => new Response([
+    "1.1.1.1:443#source-block",
+    "2.2.2.2:443#request-block",
+  ].join("\n"), { status: 200 });
+  const runtime = { KV: { async get(key) { return values[key] ?? null; } } };
+  try {
+    clearAggregateCache();
+    const response = await handleRoot(runtime, [{ type: "apis", key: sourceKey }], {
+      blacklist: ["request-block"],
+    });
+    assert.equal(await response.text(), "1.1.1.1:443#source-block");
+  } finally {
+    clearAggregateCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("applies configurable remark filter rules to preferred sources", async () => {
   const originalFetch = globalThis.fetch;
   const source = "vless://00000000-0000-4000-8000-000000000000@8.218.36.133:9010?security=tls&sni=example.com#HK-VIP";

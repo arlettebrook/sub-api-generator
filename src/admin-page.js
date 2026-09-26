@@ -120,11 +120,11 @@ export const adminHTML = `
     <div class="source-raw-process" id="sourceRawProcess" aria-live="polite"></div>
     <details class="source-raw-filters" id="sourceRawFiltersPanel">
       <summary>
-        <span class="source-raw-filters-title">本次查看过滤设置</span>
+        <span class="source-raw-filters-title">数据源过滤设置</span>
         <span class="source-raw-filters-badge" id="sourceRawFilterBadge" hidden>独立规则</span>
       </summary>
       <div class="source-raw-filters-body">
-        <p class="source-raw-filters-hint">这里的黑名单和备注过滤规则仅对当前查看生效，不会修改设置页中的全局配置；备注过滤先执行，黑名单匹配的是清理后的备注。</p>
+        <p class="source-raw-filters-hint">保存后仅作用于该数据源，优选 API 生成时会优先使用；未设置时使用设置页中的全局规则。备注过滤先执行，黑名单匹配的是清理后的备注。</p>
         <div class="source-raw-filters-grid">
           <label class="source-raw-filters-field">
             <span class="source-raw-filters-label">黑名单 <em id="sourceRawBlacklistMeta">0 条</em></span>
@@ -138,7 +138,7 @@ export const adminHTML = `
         <div class="source-raw-filters-actions">
           <span class="source-raw-filters-status" id="sourceRawFilterStatus" aria-live="polite"></span>
           <button class="btn-subtle" type="button" id="resetSourceRawFiltersButton">恢复全局设置</button>
-          <button class="btn-outline" type="button" id="applySourceRawFiltersButton">应用并重新检测</button>
+          <button class="btn-outline" type="button" id="applySourceRawFiltersButton">保存并重新检测</button>
         </div>
       </div>
     </details>

@@ -17,6 +17,7 @@ import {
   normalizeCustomApiData,
   normalizeBlacklist,
   normalizeFilterRules,
+  normalizeSourceFilterFields,
   normalizeSettings,
   normalizeKvData,
   normalizeSourceKey,
@@ -27,6 +28,7 @@ import {
   validateApiPathPayload,
   validateBlacklistPayload,
   validateFilterRulesPayload,
+  validateSourceFilterFields,
   validateSettingsPayload,
 } from "./config.js";
 import {
@@ -334,6 +336,75 @@ async function handleGetApis(env) {
   return pagesJsonResponse(normalizeKvData(data, "apis"));
 }
 
+function sourceConfigKey(type) {
+  if (type === "subs") return KV_KEY_SUBS;
+  if (type === "apis") return KV_KEY_APIS;
+  if (type === "domains") return KV_KEY_PREFERRED_DOMAINS;
+  return "";
+}
+
+async function handleGetSourceFilters(request, env) {
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type") || "";
+  const kvKey = sourceConfigKey(type);
+  const key = normalizeSourceKey(type, url.searchParams.get("key"));
+  if (!kvKey || !key) return pagesTextResponse("数据源参数无效", 400);
+  const normalized = normalizeKvData(await env.KV.get(kvKey, "json"), type);
+  const entry = normalized[key];
+  if (!entry) return pagesTextResponse("数据源不存在", 404);
+  return pagesJsonResponse({
+    blacklist: Array.isArray(entry.blacklist) ? entry.blacklist : null,
+    filterRules: Array.isArray(entry.filterRules) ? entry.filterRules : null,
+  });
+}
+
+async function handlePostSourceFilters(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return pagesTextResponse("请求 JSON 无效", 400); }
+  const type = body?.type;
+  const kvKey = sourceConfigKey(type);
+  const key = normalizeSourceKey(type, body?.key);
+  if (!kvKey || !key) return pagesTextResponse("数据源参数无效", 400);
+  const reset = body?.reset === true;
+  let filters = null;
+  if (!reset) {
+    if (!Array.isArray(body?.blacklist) || !Array.isArray(body?.filterRules)) {
+      return pagesTextResponse("请同时提供黑名单和备注过滤规则", 400);
+    }
+    try {
+      filters = validateSourceFilterFields({
+        blacklist: body.blacklist,
+        filterRules: body.filterRules,
+      });
+    } catch (error) {
+      return pagesTextResponse(error.message, 400);
+    }
+  }
+
+  const raw = await env.KV.get(kvKey, "json");
+  const normalized = normalizeKvData(raw, type);
+  if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
+  const configured = isPlainObject(raw) ? { ...raw } : {};
+  const existingKey = Object.keys(configured).find((candidate) => normalizeSourceKey(type, candidate) === key) || key;
+  const entry = isPlainObject(configured[existingKey]) ? { ...configured[existingKey] } : { ...normalized[key] };
+  if (reset) {
+    delete entry.blacklist;
+    delete entry.filterRules;
+  } else {
+    entry.blacklist = filters.blacklist;
+    entry.filterRules = filters.filterRules;
+  }
+  if (existingKey !== key) delete configured[existingKey];
+  configured[key] = entry;
+  await env.KV.put(kvKey, JSON.stringify(configured));
+  subscriptions.clearAggregateCache();
+  return pagesJsonResponse({
+    ok: true,
+    blacklist: Array.isArray(entry.blacklist) ? entry.blacklist : null,
+    filterRules: Array.isArray(entry.filterRules) ? entry.filterRules : null,
+  });
+}
+
 async function getSourceStatusSnapshot(env, restore = true) {
   const [subs, apis, domains, persisted] = await Promise.all([
     env.KV.get(KV_KEY_SUBS, "json"),
@@ -442,6 +513,7 @@ async function handlePostPreferredDomain(request, env) {
       domain,
       enabled,
       remark,
+      ...normalizeSourceFilterFields(previous),
       ...(previous ? {
         records: isPlainObject(previous.records) ? previous.records : { A: [], AAAA: [], CNAME: [] },
         errors: isPlainObject(previous.errors) ? previous.errors : {},
@@ -459,6 +531,7 @@ async function handlePostPreferredDomain(request, env) {
       domain,
       enabled,
       remark,
+      ...normalizeSourceFilterFields(previous),
       records: result.records,
       errors,
       dnsErrorCodes: Object.fromEntries((result.errors || []).map((item) => [item.recordType, item.code || "DNS_ERROR"])),
@@ -1422,6 +1495,10 @@ export default {
         case "/api/apis":
           if (method === "GET") return await handleGetApis(env);
           if (method === "POST") return await handlePostApis(request, env);
+          return pagesMethodNotAllowed("GET, POST");
+        case "/api/source-filters":
+          if (method === "GET") return await handleGetSourceFilters(request, env);
+          if (method === "POST") return await handlePostSourceFilters(request, env);
           return pagesMethodNotAllowed("GET, POST");
         case "/api/source-rename":
           if (method === "POST") return await handleRenameSource(request, env);

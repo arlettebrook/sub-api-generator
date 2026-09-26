@@ -295,9 +295,9 @@ test("keeps source enabled state when loading the admin configuration", () => {
 
 test("renaming configured sources keeps custom API selections in sync", async () => {
   const values = {
-    subs: { "old.example": { remark: "旧订阅", enabled: false } },
-    apis: { "https://old-api.example/data": { remark: "旧 API" } },
-    preferred_domains: { "old-domain.example": { domain: "old-domain.example", remark: "旧域名", records: { A: ["1.2.3.4"], AAAA: [], CNAME: [] } } },
+    subs: { "old.example": { remark: "旧订阅", enabled: false, blacklist: ["sub-block"], filterRules: ["|"] } },
+    apis: { "https://old-api.example/data": { remark: "旧 API", blacklist: ["api-block"], filterRules: ["-VIP"] } },
+    preferred_domains: { "old-domain.example": { domain: "old-domain.example", remark: "旧域名", records: { A: ["1.2.3.4"], AAAA: [], CNAME: [] }, blacklist: ["blocked"], filterRules: ["|"] } },
     custom_apis: {
       selected: {
         enabled: true,
@@ -322,9 +322,13 @@ test("renaming configured sources keeps custom API selections in sync", async ()
   assert.equal(sub.status, 200);
   assert.equal(values.subs["new.example"].remark, "旧订阅");
   assert.equal(values.subs["new.example"].enabled, false);
+  assert.deepEqual(values.subs["new.example"].blacklist, ["sub-block"]);
+  assert.deepEqual(values.subs["new.example"].filterRules, ["|"]);
 
   const api = await rename({ type: "apis", oldKey: "https://old-api.example/data", newKey: "https://new-api.example/data" });
   assert.equal(api.status, 200);
+  assert.deepEqual(values.apis["https://new-api.example/data"].blacklist, ["api-block"]);
+  assert.deepEqual(values.apis["https://new-api.example/data"].filterRules, ["-VIP"]);
 
   const domain = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
     method: "POST", headers,
@@ -333,6 +337,8 @@ test("renaming configured sources keeps custom API selections in sync", async ()
   assert.equal(domain.status, 200);
   assert.equal(values.preferred_domains["new-domain.example"].remark, "新域名");
   assert.equal(values.preferred_domains["new-domain.example"].records.A[0], "1.2.3.4");
+  assert.deepEqual(values.preferred_domains["new-domain.example"].blacklist, ["blocked"]);
+  assert.deepEqual(values.preferred_domains["new-domain.example"].filterRules, ["|"]);
 
   assert.deepEqual(values.custom_apis.selected.sources, [
     { type: "subs", key: "new.example" },
@@ -499,6 +505,65 @@ test("previews a source with nodes, raw content, and filtering statistics", asyn
     assert.equal(result.status.filterStats.inputCount, 2);
     assert.equal(result.status.filterStats.blacklistedCount, 1);
     assert.equal(result.status.filterStats.outputCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("persists source-level filters for preferred API output and can restore global rules", async () => {
+  const sourceKey = "https://source-filter.example/data";
+  const values = {
+    subs: {},
+    apis: { [sourceKey]: { remark: "过滤源" } },
+    preferred_domains: {},
+    blacklist: ["global-block"],
+    filter_rules: [],
+    custom_apis: {
+      source_filter: {
+        enabled: true,
+        sourceMode: "selected",
+        sources: [{ type: "apis", key: sourceKey }],
+      },
+    },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response([
+    "1.1.1.1:443#source-block",
+    "2.2.2.2:443#global-block",
+    "3.3.3.3:443#allowed | suffix",
+  ].join("\n"), { status: 200 });
+  const sourceFilters = (method = "GET", body) => worker.fetch(new Request(
+    "https://example.test/api/source-filters" + (method === "GET" ? `?type=apis&key=${encodeURIComponent(sourceKey)}` : ""),
+    { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) },
+  ), runtime);
+  const output = async () => (await (await worker.fetch(new Request("https://example.test/source_filter"), runtime)).text()).split("\n").filter(Boolean);
+  try {
+    const saved = await sourceFilters("POST", {
+      type: "apis",
+      key: sourceKey,
+      blacklist: ["source-block"],
+      filterRules: ["|"],
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await (await sourceFilters()).json()), {
+      blacklist: ["source-block"],
+      filterRules: ["|"],
+    });
+    assert.deepEqual(await output(), [
+      "2.2.2.2:443#global-block",
+      "3.3.3.3:443#allowed",
+    ]);
+
+    const cleared = await sourceFilters("POST", { type: "apis", key: sourceKey, reset: true });
+    assert.equal(cleared.status, 200);
+    assert.deepEqual((await (await sourceFilters()).json()), {
+      blacklist: null,
+      filterRules: null,
+    });
+    assert.deepEqual(await output(), ["1.1.1.1:443#source-block", "3.3.3.3:443#allowed | suffix"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

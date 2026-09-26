@@ -237,7 +237,7 @@ test("edits and saves the blacklist from settings", async ({ page }, testInfo) =
   await expect(page.locator("#blacklistSaveStatus")).toHaveText("配置已保存");
 });
 
-test("applies per-view blacklist and remark filters from the view dialog", async ({ page }, testInfo) => {
+test("applies source-level blacklist and remark filters from the view dialog", async ({ page }, testInfo) => {
   // 服务端对同一数据源的检测有冷却时间，两个项目并行打开同一个源的查看弹窗会互相触发限流，只在桌面项目执行。
   test.skip(testInfo.project.name === "mobile", "同一数据源的检测冷却无法并行覆盖");
   await login(page);
@@ -262,13 +262,19 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   // 过滤节点按原因分类展示，黑名单单独成组。
   await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category strong")).toHaveText(["黑名单"]);
   await expect(page.locator("#sourceRawFilteredContent .source-raw-filter-category").first()).toHaveAttribute("aria-expanded", "true");
-  // 过滤节点旁标注命中的规则（默认黑名单为空，这里展示本次查看的独立规则）
+  // 过滤节点旁标注命中的规则（默认黑名单为空，这里展示该数据源的独立规则）
   await expect(page.locator("#sourceRawFilteredContent .source-raw-node-rule").first()).toHaveText("黑名单：2.2.2.2");
-  await expect(page.locator("#sourceRawFilterStatus")).toContainText("仅对当前查看生效");
+  await expect(page.locator("#sourceRawFilterStatus")).toContainText("优选 API 会优先使用");
 
-  // 独立规则只作用于当前查看，设置页里的全局黑名单保持不变。
+  // 源级规则不修改设置页里的全局黑名单。
   const globalBlacklist = await page.evaluate(async () => (await (await fetch("/api/blacklist", { cache: "no-store" })).json()));
   expect(globalBlacklist).toEqual([]);
+  const savedSourceFilters = await page.evaluate(async () => {
+    const sources = await (await fetch("/api/apis", { cache: "no-store" })).json();
+    const key = Object.keys(sources)[0];
+    return (await (await fetch("/api/source-filters?type=apis&key=" + encodeURIComponent(key), { cache: "no-store" })).json());
+  });
+  expect(savedSourceFilters.blacklist).toEqual(["2.2.2.2"]);
 
   await page.locator("#resetSourceRawFiltersButton").click();
   await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
@@ -300,6 +306,8 @@ test("applies per-view blacklist and remark filters from the view dialog", async
   await expect(page.locator("#sourceRawHistoryPanel")).toBeVisible();
   await expect(page.locator("#sourceRawHistoryList")).not.toContainText("暂无检测记录");
   await expect(page.locator("#sourceRawHistoryList .source-raw-history-item").first()).toContainText("原始 2");
+  await page.locator("#resetSourceRawFiltersButton").click();
+  await expect(page.locator("#sourceRawFilterBadge")).toBeHidden();
   await page.locator("#sourceRawDialog .dialog-close").click();
   await expect(page.locator("#sourceRawDialog")).not.toBeVisible();
 });

@@ -78,6 +78,7 @@ export function normalizeKvData(data, sourceType) {
     } else if (isPlainObject(value)) {
       const normalizedEntry = {
         remark: typeof value.remark === "string" ? value.remark : "",
+        ...normalizeSourceFilterFields(value),
       };
       if (typeof value.enabled === "boolean") normalizedEntry.enabled = value.enabled;
       if (sourceType === "domains") {
@@ -145,6 +146,22 @@ export function normalizeFilterRules(data) {
     if (normalized.length >= MAX_FILTER_RULES) break;
   }
   return normalized;
+}
+
+export function normalizeSourceFilterFields(value) {
+  if (!isPlainObject(value)) return {};
+  return {
+    ...(Array.isArray(value.blacklist) ? { blacklist: normalizeBlacklist(value.blacklist) } : {}),
+    ...(Array.isArray(value.filterRules) ? { filterRules: normalizeFilterRules(value.filterRules) } : {}),
+  };
+}
+
+export function validateSourceFilterFields(value) {
+  if (!isPlainObject(value)) throw new Error("源过滤规则配置无效");
+  return {
+    ...(value.blacklist !== undefined ? { blacklist: validateBlacklistPayload(value.blacklist) } : {}),
+    ...(value.filterRules !== undefined ? { filterRules: validateFilterRulesPayload(value.filterRules) } : {}),
+  };
 }
 
 export function validateFilterRulesPayload(body) {
@@ -274,6 +291,7 @@ export function validateConfigPayload(body, sourceType) {
       remark: typeof value.remark === "string" ? value.remark.slice(0, 200) : "",
       // 订阅源/优选域名的启用状态需要随配置保存，不能在保存时被剥离。
       ...(typeof value.enabled === "boolean" ? { enabled: value.enabled } : {}),
+      ...validateSourceFilterFields(value),
     };
   }
   return normalized;
