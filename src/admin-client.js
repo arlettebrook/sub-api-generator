@@ -729,8 +729,8 @@ function parsePreviewJsonHeader(value) {
 
 function renderPreviewDataStatus() {
   if (!previewDataStatusEl) return;
-  // 节点数量只保留工具栏里的单一徽标，状态行不再重复输出「原始 / 过滤 / 保留」，
-  // 避免与「共 N 个节点」重复并挤压查看方式切换器。
+  // 节点数量只在状态行保留单一徽标，不再重复输出「原始 / 过滤 / 保留」，
+  // 避免重复提示并挤压查看方式切换器。
   if (previewDataStatsEl) previewDataStatsEl.textContent = '';
   const cache = previewDataMeta.cache === 'hit' ? '缓存命中' : previewDataMeta.cache === 'miss' ? '刚刚检测' : '';
   previewDataCacheEl.textContent = cache;

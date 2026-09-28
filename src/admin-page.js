@@ -219,7 +219,7 @@ export const adminHTML = `
 <!-- ADMIN_SECTION:overview:START -->
 <!-- ==================== 优选节点预览 ==================== -->
 <div class="card" id="previewSection">
-  <h3 class="preview-card-heading"><span class="preview-card-title">🌐 优选API数据预览</span><span class="nodes-count" id="nodesCount">共 0 个节点</span></h3>
+  <h3>🌐 优选API数据预览</h3>
   <div class="toolbar preview-toolbar">
     <div class="preview-toolbar-main">
       <select class="preview-api-select" id="previewApiSelect" onchange="fetchNodes()" aria-label="选择优选API"></select>
@@ -254,6 +254,7 @@ export const adminHTML = `
     <span id="previewDataStats"></span>
     <span id="previewDataCache"></span>
     <span id="previewDataUpdated"></span>
+    <span class="nodes-count" id="nodesCount">共 0 个节点</span>
   </div>
   <details class="nodes-filters-panel">
     <summary>筛选条件</summary>
