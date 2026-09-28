@@ -220,23 +220,35 @@ export const adminHTML = `
 <!-- ==================== 优选节点预览 ==================== -->
 <div class="card" id="previewSection">
   <h3>🌐 优选API数据预览</h3>
-  <div class="toolbar">
-    <select id="previewApiSelect" onchange="fetchNodes()" aria-label="选择优选API"></select>
-    <button class="btn-primary" onclick="fetchNodes()" aria-label="刷新节点数据">🔄 刷新数据</button>
-    <button class="btn-outline" onclick="copySubUrl(event)" title="复制优选API" aria-label="复制优选 API 地址">
-      <span>📋</span> 复制优选API
-    </button>
-    <button class="btn-outline" onclick="copyNodeData(event)" title="复制当前筛选后的优选API数据" aria-label="复制当前筛选结果">
-      <span>📝</span> 复制优选API数据
-    </button>
-    <button class="btn-outline" onclick="downloadNodeData(event)" title="下载当前筛选后的 API 数据" aria-label="下载 API 数据">
-      <span>⬇️</span> 下载 API 数据
-    </button>
-    <div class="preview-view-toggle" role="group" aria-label="数据查看方式">
-      <button class="btn-subtle active" type="button" data-preview-mode="nodes" aria-pressed="true">节点结果</button>
-      <button class="btn-subtle" type="button" data-preview-mode="api" aria-pressed="false">API 数据</button>
+  <div class="toolbar preview-toolbar">
+    <div class="preview-toolbar-main">
+      <select class="preview-api-select" id="previewApiSelect" onchange="fetchNodes()" aria-label="选择优选API"></select>
+      <button class="btn-primary preview-refresh-button" onclick="fetchNodes()" aria-label="刷新节点数据">🔄 刷新数据</button>
     </div>
-    <span class="nodes-count" id="nodesCount">共 0 个节点</span>
+    <div class="preview-toolbar-actions" role="group" aria-label="优选 API 操作">
+      <button class="btn-outline" onclick="copySubUrl(event)" title="复制优选API" aria-label="复制优选 API 地址">
+        <span aria-hidden="true">📋</span>
+        <span class="preview-action-label preview-action-label-full">复制优选API</span>
+        <span class="preview-action-label preview-action-label-compact">复制地址</span>
+      </button>
+      <button class="btn-outline" onclick="copyNodeData(event)" title="复制当前筛选后的优选API数据" aria-label="复制当前筛选结果">
+        <span aria-hidden="true">📝</span>
+        <span class="preview-action-label preview-action-label-full">复制优选API数据</span>
+        <span class="preview-action-label preview-action-label-compact">复制数据</span>
+      </button>
+      <button class="btn-outline" onclick="downloadNodeData(event)" title="下载当前筛选后的 API 数据" aria-label="下载 API 数据">
+        <span aria-hidden="true">⬇️</span>
+        <span class="preview-action-label preview-action-label-full">下载 API 数据</span>
+        <span class="preview-action-label preview-action-label-compact">下载数据</span>
+      </button>
+    </div>
+    <div class="preview-toolbar-meta">
+      <div class="preview-view-toggle" role="group" aria-label="数据查看方式">
+        <button class="btn-subtle active" type="button" data-preview-mode="nodes" aria-pressed="true">节点结果</button>
+        <button class="btn-subtle" type="button" data-preview-mode="api" aria-pressed="false">API 数据</button>
+      </div>
+      <span class="nodes-count" id="nodesCount">共 0 个节点</span>
+    </div>
   </div>
   <div class="preview-data-status" id="previewDataStatus" role="status" aria-live="polite">
     <span id="previewDataModeHint">节点结果：卡片展示</span>

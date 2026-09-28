@@ -4258,6 +4258,61 @@ export const adminStyle = `
     background: var(--bg-tertiary);
   }
 
+  .preview-toolbar {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) auto;
+    gap: 10px 12px;
+  }
+
+  .preview-toolbar-main,
+  .preview-toolbar-actions,
+  .preview-toolbar-meta {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .preview-toolbar-main {
+    gap: 8px;
+  }
+
+  .preview-toolbar-main .preview-api-select {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .preview-toolbar-main .preview-refresh-button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .preview-toolbar-actions {
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .preview-toolbar-actions .btn-outline {
+    white-space: nowrap;
+  }
+
+  .preview-toolbar-meta {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .preview-toolbar .preview-view-toggle {
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
+
+  .preview-action-label-compact {
+    display: none;
+  }
   /* 列表工具栏：桌面端保持一行，空间不足时优先压缩搜索框和下拉框，按钮不收缩 */
   .list-toolbar {
     flex-wrap: nowrap;
@@ -5467,14 +5522,70 @@ export const adminStyle = `
       margin-bottom: 12px;
       padding-bottom: 10px;
     }
-    .preview-view-toggle {
-      grid-column: 1 / -1;
+    .preview-toolbar {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+    .preview-toolbar-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+    }
+    .preview-toolbar-main .preview-api-select {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+    }
+    .preview-toolbar-main .preview-refresh-button {
+      min-width: 0;
+      height: 36px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+    .preview-toolbar-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .preview-toolbar-actions .btn-outline {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      padding: 0 6px;
+      font-size: 12px;
+    }
+    .preview-toolbar-meta {
+      display: grid;
+      grid-column: auto;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      padding-top: 8px;
+    }
+    .preview-toolbar .preview-view-toggle {
+      grid-column: auto;
       width: 100%;
       margin-left: 0;
     }
-    .preview-view-toggle .btn-subtle {
+    .preview-toolbar .preview-view-toggle .btn-subtle {
       flex: 1;
+      min-height: 32px;
+      padding: 0 8px;
+      font-size: 12px;
     }
+    .preview-toolbar-meta .nodes-count {
+      width: auto;
+      margin: 0;
+      text-align: right;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .preview-action-label-full {
+      display: none;
+    }
+    .preview-action-label-compact {
+      display: inline;
+    }
+
     .nodes-filters {
       grid-template-columns: 1fr 1fr;
       gap: 8px;
