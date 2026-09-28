@@ -2614,32 +2614,45 @@ export const adminStyle = `
   .preview-view-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 0;
-    margin-left: auto;
+    gap: 2px;
+    margin-left: 0;
+    padding: 3px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
   }
 
   .preview-view-toggle .btn-subtle {
-    min-height: 32px;
-    padding: 0 10px;
-    border-radius: 0;
+    min-height: 28px;
+    padding: 0 12px;
+    border-color: transparent;
+    border-radius: 7px;
+    background: transparent;
   }
 
-  .preview-view-toggle .btn-subtle:first-child {
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  }
-
+  .preview-view-toggle .btn-subtle:first-child,
   .preview-view-toggle .btn-subtle:last-child {
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    margin-left: -1px;
+    border-radius: 7px;
+    margin-left: 0;
   }
 
-  .preview-view-toggle .btn-subtle.active {
-    border-color: var(--accent-primary);
+  .preview-view-toggle .btn-subtle:hover,
+  .preview-view-toggle .btn-subtle:focus-visible {
+    border-color: var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    box-shadow: none;
+  }
+
+  .preview-view-toggle .btn-subtle.active,
+  .preview-view-toggle .btn-subtle.active:hover,
+  .preview-view-toggle .btn-subtle.active:focus-visible {
+    border-color: var(--accent-border);
     background: var(--accent-light);
     color: var(--accent-primary);
     font-weight: 600;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--accent-primary) 14%, transparent);
   }
-
   .preview-api-data {
     min-height: 180px;
     max-height: min(62vh, 680px);
@@ -4265,8 +4278,7 @@ export const adminStyle = `
   }
 
   .preview-toolbar-main,
-  .preview-toolbar-actions,
-  .preview-toolbar-meta {
+  .preview-toolbar-actions {
     display: flex;
     align-items: center;
     min-width: 0;
@@ -4298,16 +4310,46 @@ export const adminStyle = `
   }
 
   .preview-toolbar-meta {
+    display: flex;
     grid-column: 1 / -1;
-    justify-content: space-between;
-    gap: 12px;
+    align-items: center;
+    min-width: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 10px;
     padding-top: 10px;
     border-top: 1px solid var(--border-color);
   }
 
   .preview-toolbar .preview-view-toggle {
     flex: 0 0 auto;
+  }
+
+  .preview-toolbar-meta .nodes-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
     margin-left: 0;
+    padding: 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .preview-toolbar-meta .nodes-count::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-light);
   }
 
   .preview-action-label-compact {
@@ -5555,30 +5597,42 @@ export const adminStyle = `
       font-size: 12px;
     }
     .preview-toolbar-meta {
-      display: grid;
+      display: flex;
       grid-column: auto;
-      grid-template-columns: minmax(0, 1fr) auto;
+      flex-wrap: nowrap;
       gap: 8px;
       padding-top: 8px;
     }
     .preview-toolbar .preview-view-toggle {
-      grid-column: auto;
-      width: 100%;
-      margin-left: 0;
+      width: auto;
+      flex: 1 1 auto;
+      min-width: 0;
     }
     .preview-toolbar .preview-view-toggle .btn-subtle {
-      flex: 1;
-      min-height: 32px;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 30px;
       padding: 0 8px;
-      font-size: 12px;
-    }
-    .preview-toolbar-meta .nodes-count {
-      width: auto;
-      margin: 0;
-      text-align: right;
       font-size: 12px;
       white-space: nowrap;
     }
+    .preview-toolbar-meta .nodes-count {
+      flex: 0 0 auto;
+      align-self: center;
+      width: auto;
+      min-height: 30px;
+      margin-left: 0;
+      padding: 0 10px;
+      font-size: 11px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .preview-toolbar-meta .nodes-count::before {
+      width: 5px;
+      height: 5px;
+      box-shadow: 0 0 0 2px var(--accent-light);
+    }
+
     .preview-action-label-full {
       display: none;
     }
