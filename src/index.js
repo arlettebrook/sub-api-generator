@@ -1412,7 +1412,7 @@ function resolveAdminPage(path, settings) {
 function shouldCamouflageRedirect(path, method, settings) {
   if (!settings.enabled) return false;
   if (method !== "GET" && method !== "HEAD") return false;
-  if (path.startsWith("/api/") || path === "/login" || path === "/logout" || path === "/admin.css" || path === "/admin-client.js") return false;
+  if (path.startsWith("/api/") || path === "/admin.css" || path === "/admin-client.js") return false;
   return resolveAdminPage(path, settings) === null;
 }
 
@@ -1461,9 +1461,6 @@ export default {
       const logoutRedirect = settings.enabled && settings.accessPath ? `/${settings.accessPath}` : "/";
       return auth.handleLogout(request, logoutRedirect);
     }
-    if (path === "/login" || path === "/logout") {
-      return pagesMethodNotAllowed("POST");
-    }
     if (method === "GET" && !adminRoute) {
       const customApiResponse = await handleCustomApiPath(path, env);
       if (customApiResponse) return customApiResponse;
@@ -1471,6 +1468,10 @@ export default {
 
     if (shouldCamouflageRedirect(path, method, settings)) {
       return redirectResponse(request, settings.redirectUrl, { "cache-control": "no-store" });
+    }
+
+    if (path === "/login" || path === "/logout") {
+      return pagesMethodNotAllowed("POST");
     }
 
     // ========== 未认证统一返回登录页 ==========

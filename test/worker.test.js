@@ -103,6 +103,26 @@ test("keeps camouflage disabled by default and supports a private admin path", a
   assert.equal(standardAdmin.headers.get("location"), "https://example.com/landing");
 });
 
+test("camouflages built-in authentication pages when enabled", async () => {
+  const runtime = env({
+    KV: createKv({
+      settings: {
+        enabled: true,
+        accessPath: "private-entry",
+        redirectUrl: "https://example.com/landing",
+      },
+    }),
+  });
+
+  for (const method of ["GET", "HEAD"]) {
+    for (const path of ["/login", "/logout"]) {
+      const response = await worker.fetch(new Request(`https://example.test${path}`, { method }), runtime);
+      assert.equal(response.status, 303);
+      assert.equal(response.headers.get("location"), "https://example.com/landing");
+    }
+  }
+});
+
 test("serves separate responsive admin pages", async () => {
   const hash = await sha256Hex("secret");
   for (const [path, page] of [["/admin", "overview"], ["/admin/manage", "manage"], ["/admin/custom-apis", "customApis"], ["/admin/settings", "settings"], ["/admin/subs", "subs"], ["/admin/apis", "apis"]]) {
