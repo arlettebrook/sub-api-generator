@@ -219,7 +219,7 @@ export const adminHTML = `
 <!-- ADMIN_SECTION:overview:START -->
 <!-- ==================== 优选节点预览 ==================== -->
 <div class="card" id="previewSection">
-  <h3>🌐 优选API数据预览</h3>
+  <h3 class="preview-card-heading"><span class="preview-card-title">🌐 优选API数据预览</span><span class="nodes-count" id="nodesCount">共 0 个节点</span></h3>
   <div class="toolbar preview-toolbar">
     <div class="preview-toolbar-main">
       <select class="preview-api-select" id="previewApiSelect" onchange="fetchNodes()" aria-label="选择优选API"></select>
@@ -244,10 +244,9 @@ export const adminHTML = `
     </div>
     <div class="preview-toolbar-meta">
       <div class="preview-view-toggle" role="group" aria-label="数据查看方式">
-        <button class="btn-subtle active" type="button" data-preview-mode="nodes" aria-pressed="true">节点结果</button>
         <button class="btn-subtle" type="button" data-preview-mode="api" aria-pressed="false">API 数据</button>
+        <button class="btn-subtle active" type="button" data-preview-mode="nodes" aria-pressed="true">节点结果</button>
       </div>
-      <span class="nodes-count" id="nodesCount">共 0 个节点</span>
     </div>
   </div>
   <div class="preview-data-status" id="previewDataStatus" role="status" aria-live="polite">

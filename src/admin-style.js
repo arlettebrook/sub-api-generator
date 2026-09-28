@@ -2728,6 +2728,11 @@ export const adminStyle = `
     color: var(--border-hover);
   }
 
+  /* 空状态项不再渲染占位与多余分隔点 */
+  .preview-data-status span:empty {
+    display: none;
+  }
+
   .source-raw-dialog {
     width: min(960px, calc(100vw - 32px));
     max-height: calc(100vh - 48px);
@@ -4271,6 +4276,14 @@ export const adminStyle = `
     background: var(--bg-tertiary);
   }
 
+  .preview-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
   .preview-toolbar {
     display: grid;
     grid-template-columns: minmax(260px, 1fr) auto;
@@ -4314,17 +4327,18 @@ export const adminStyle = `
     grid-column: 1 / -1;
     align-items: center;
     min-width: 0;
-    justify-content: flex-start;
+    justify-content: center;
     flex-wrap: wrap;
     gap: 8px 10px;
     padding-top: 10px;
     border-top: 1px solid var(--border-color);
   }
 
+  /* 查看方式切换器固定在元信息行居中，不再被节点数徽标挤压 */
   .preview-toolbar .preview-view-toggle {
-    flex: 1 1 auto;
+    flex: 0 1 320px;
+    width: min(100%, 320px);
     min-width: 0;
-    max-width: 320px;
   }
 
   .preview-toolbar .preview-view-toggle .btn-subtle {
@@ -4332,13 +4346,13 @@ export const adminStyle = `
     min-width: 0;
   }
 
-  .preview-toolbar-meta .nodes-count {
+  .preview-card-heading .nodes-count {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     flex: 0 0 auto;
     min-height: 32px;
-    margin-left: 0;
+    margin-left: auto;
     padding: 0 10px;
     border: 1px solid var(--border-color);
     border-radius: 999px;
@@ -4350,7 +4364,7 @@ export const adminStyle = `
     white-space: nowrap;
   }
 
-  .preview-toolbar-meta .nodes-count::before {
+  .preview-card-heading .nodes-count::before {
     content: '';
     flex: 0 0 auto;
     width: 6px;
@@ -5609,13 +5623,15 @@ export const adminStyle = `
       grid-column: auto;
       flex-wrap: nowrap;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       gap: 8px;
       padding-top: 8px;
     }
+    /* 移动端切换器同样居中，并铺满可用宽度，扩大点按区域 */
     .preview-toolbar .preview-view-toggle {
       width: auto;
-      flex: 1 1 auto;
+      flex: 0 1 320px;
+      max-width: 100%;
       min-width: 0;
     }
     .preview-toolbar .preview-view-toggle .btn-subtle {
@@ -5626,18 +5642,18 @@ export const adminStyle = `
       font-size: 12px;
       white-space: nowrap;
     }
-    .preview-toolbar-meta .nodes-count {
+    .preview-card-heading .nodes-count {
       flex: 0 0 auto;
       align-self: center;
       width: auto;
       min-height: 30px;
-      margin-left: 0;
+      margin-left: auto;
       padding: 0 10px;
       font-size: 11px;
       text-align: left;
       white-space: nowrap;
     }
-    .preview-toolbar-meta .nodes-count::before {
+    .preview-card-heading .nodes-count::before {
       width: 5px;
       height: 5px;
       box-shadow: 0 0 0 2px var(--accent-light);
