@@ -729,19 +729,13 @@ function parsePreviewJsonHeader(value) {
 
 function renderPreviewDataStatus() {
   if (!previewDataStatusEl) return;
-  const stats = previewDataMeta.filterStats;
-  if (stats && Number.isFinite(Number(stats.inputCount))) {
-    const input = Number(stats.inputCount) || 0;
-    const output = Number(stats.outputCount) || 0;
-    const filtered = Math.max(0, input - output);
-    previewDataStatsEl.textContent = \`原始 \${input} · 过滤 \${filtered} · 保留 \${output}\`;
-  } else {
-    previewDataStatsEl.textContent = '';
-  }
+  // 节点数量只保留工具栏里的单一徽标，状态行不再重复输出「原始 / 过滤 / 保留」，
+  // 避免与「共 N 个节点」重复并挤压查看方式切换器。
+  if (previewDataStatsEl) previewDataStatsEl.textContent = '';
   const cache = previewDataMeta.cache === 'hit' ? '缓存命中' : previewDataMeta.cache === 'miss' ? '刚刚检测' : '';
   previewDataCacheEl.textContent = cache;
   previewDataUpdatedEl.textContent = previewDataMeta.generatedAt ? '更新时间：' + formatSourceTime(previewDataMeta.generatedAt) : '';
-  previewDataStatusEl.hidden = !(previewDataStatsEl.textContent || cache || previewDataUpdatedEl.textContent);
+  previewDataStatusEl.hidden = !(cache || previewDataUpdatedEl.textContent);
 }
 
 function setPreviewDataMode(mode) {

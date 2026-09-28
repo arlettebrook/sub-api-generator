@@ -4322,13 +4322,21 @@ export const adminStyle = `
   }
 
   .preview-toolbar .preview-view-toggle {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 320px;
+  }
+
+  .preview-toolbar .preview-view-toggle .btn-subtle {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .preview-toolbar-meta .nodes-count {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    flex: 0 0 auto;
     min-height: 32px;
     margin-left: 0;
     padding: 0 10px;
@@ -5600,6 +5608,8 @@ export const adminStyle = `
       display: flex;
       grid-column: auto;
       flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-start;
       gap: 8px;
       padding-top: 8px;
     }
@@ -5680,9 +5690,11 @@ export const adminStyle = `
       font-size: 12px;
     }
     .preview-data-status {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 4px 12px;
       margin-top: -6px;
       line-height: 1.4;
     }
