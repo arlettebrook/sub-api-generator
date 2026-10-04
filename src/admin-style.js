@@ -4882,7 +4882,6 @@ export const adminStyle = `
       padding: calc(16px + env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) calc(84px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
     }
     .card,
-    .admin-nav,
     button,
     input,
     select,
@@ -5317,7 +5316,9 @@ export const adminStyle = `
       padding: 4px;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
-      background: var(--surface-solid);
+      background: var(--bg-secondary);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
       border-color: var(--border-color);
       box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
       isolation: isolate;
