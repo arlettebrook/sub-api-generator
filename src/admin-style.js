@@ -216,20 +216,22 @@ export const adminStyle = `
     position: fixed;
     right: max(16px, calc((100vw - 1180px) / 2), env(safe-area-inset-right, 0px));
     bottom: max(28px, env(safe-area-inset-bottom, 0px));
-    z-index: 1000;
+    z-index: 999; /* 导航栏为 1000，过渡重叠时保持在按钮上层 */
     width: 48px;
     height: 48px;
     padding: 0;
     border-radius: 50%;
-    border: 1px solid var(--border-hover);
-    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
     color: var(--text-secondary);
-    box-shadow: 0 8px 20px rgba(15, 23, 42, .2), inset 0 1px 0 rgba(255, 255, 255, .08);
+    box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, .08);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transform: translateY(10px);
-    transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s, box-shadow .2s ease, color .2s ease, background .2s ease, border-color .2s ease;
+    transition: opacity .2s ease, transform .2s ease, bottom .3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear .2s, box-shadow .2s ease, color .2s ease, background .2s ease, border-color .2s ease;
   }
 
   .scroll-top-button:hover {
@@ -5276,6 +5278,9 @@ export const adminStyle = `
       width: 46px;
       height: 46px;
     }
+    .scroll-top-button.is-nav-offset {
+      bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
     .scroll-top-button:hover,
     .scroll-top-button:active {
       transform: translateY(0);
@@ -5335,7 +5340,8 @@ export const adminStyle = `
     }
     @media (prefers-reduced-motion: reduce) {
       .page-shell > .admin-nav,
-      .page-shell > .admin-nav.is-nav-hidden {
+      .page-shell > .admin-nav.is-nav-hidden,
+      .scroll-top-button {
         transition: none;
       }
     }

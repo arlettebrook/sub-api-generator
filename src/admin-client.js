@@ -6807,11 +6807,17 @@ let adminNavElement = null;
 let adminNavLastScrollY = 0;
 let adminNavHidden = false;
 let adminNavFrame = 0;
+const adminNavAutoHideQuery = typeof window.matchMedia === 'function'
+  ? window.matchMedia('(max-width: 768px), (max-device-width: 768px)')
+  : null;
 
 function setAdminNavHidden(hidden) {
   const nav = adminNavElement || document.querySelector('.page-shell > .admin-nav');
   if (!nav) return;
   adminNavElement = nav;
+  // 同步返回顶部按钮：导航栏隐藏时贴近底部，出现时抬高让位
+  const topButton = scrollTopButtonElement || $('scrollTopButton');
+  if (topButton) topButton.classList.toggle('is-nav-offset', hidden);
   if (adminNavHidden === hidden) return;
   adminNavHidden = hidden;
   nav.classList.toggle('is-nav-hidden', hidden);
@@ -6826,6 +6832,10 @@ function updateAdminNavVisibility() {
   const nav = adminNavElement || document.querySelector('.page-shell > .admin-nav');
   if (!nav) return;
   adminNavElement = nav;
+  if (adminNavAutoHideQuery && !adminNavAutoHideQuery.matches) {
+    setAdminNavHidden(false);
+    return;
+  }
   const scrollY = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
   const delta = scrollY - adminNavLastScrollY;
   adminNavLastScrollY = scrollY;
@@ -6859,6 +6869,12 @@ function initAdminNavAutoHide() {
   nav.dataset.autoHideBound = 'true';
   adminNavElement = nav;
   resetAdminNav();
+  const handleViewportChange = () => resetAdminNav();
+  if (typeof adminNavAutoHideQuery?.addEventListener === 'function') {
+    adminNavAutoHideQuery.addEventListener('change', handleViewportChange);
+  } else if (typeof adminNavAutoHideQuery?.addListener === 'function') {
+    adminNavAutoHideQuery.addListener(handleViewportChange);
+  }
   window.addEventListener('scroll', scheduleAdminNavUpdate, { passive: true });
 }
 

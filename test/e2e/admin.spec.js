@@ -593,6 +593,7 @@ test.describe("mobile navigation", () => {
   test("hides the nav bar when scrolling down and shows it when scrolling up", async ({ page }) => {
     await login(page);
     const nav = page.locator(".admin-nav");
+    const scrollTopButton = page.locator("#scrollTopButton");
     await expect(nav).toBeVisible();
     await page.evaluate(() => {
       const spacer = document.createElement("div");
@@ -603,9 +604,20 @@ test.describe("mobile navigation", () => {
     });
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
     await expect(nav).toHaveClass(/is-nav-hidden/);
+    await expect(scrollTopButton).toHaveClass(/is-nav-offset/);
+    await expect(scrollTopButton).toBeVisible();
+    await expect(scrollTopButton).toHaveCSS("backdrop-filter", "blur(12px)");
+    await expect.poll(() => scrollTopButton.evaluate((element) => parseFloat(getComputedStyle(element).bottom))).toBeLessThan(30);
+    const layers = await page.evaluate(() => ({
+      button: Number(getComputedStyle(document.getElementById("scrollTopButton")).zIndex),
+      nav: Number(getComputedStyle(document.querySelector(".admin-nav")).zIndex),
+    }));
+    expect(layers.button).toBeLessThan(layers.nav);
     await page.evaluate(() => window.scrollTo(0, 500));
     await expect(nav).not.toHaveClass(/is-nav-hidden/);
+    await expect(nav).toHaveAttribute("aria-hidden", "false");
     await expect(nav).toBeVisible();
+    await expect(scrollTopButton).not.toHaveClass(/is-nav-offset/);
     await page.evaluate(() => window.scrollTo(0, 0));
     await expect(nav).toBeVisible();
   });
