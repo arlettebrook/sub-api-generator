@@ -4879,7 +4879,7 @@ export const adminStyle = `
       background-attachment: scroll;
     }
     .page-shell {
-      padding: 8px 8px calc(84px + env(safe-area-inset-bottom, 0px));
+      padding: calc(16px + env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) calc(84px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
     }
     .card,
     .admin-nav,
@@ -5304,9 +5304,9 @@ export const adminStyle = `
     .page-shell > .admin-nav {
       position: fixed !important;
       top: auto !important;
-      right: 8px;
+      right: max(8px, env(safe-area-inset-right, 0px));
       bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
-      left: 8px;
+      left: max(8px, env(safe-area-inset-left, 0px));
       width: auto;
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -5317,9 +5317,26 @@ export const adminStyle = `
       padding: 4px;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
+      background: var(--surface-solid);
+      border-color: var(--border-color);
       box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
       isolation: isolate;
       touch-action: manipulation;
+      transform: translateY(0);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0s linear 0s;
+    }
+    .page-shell > .admin-nav.is-nav-hidden {
+      transform: translateY(calc(100% + 28px));
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0s linear 0.3s;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .page-shell > .admin-nav,
+      .page-shell > .admin-nav.is-nav-hidden {
+        transition: none;
+      }
     }
     .admin-nav::-webkit-scrollbar { display: none; }
     .admin-nav a {

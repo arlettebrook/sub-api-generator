@@ -589,4 +589,24 @@ test.describe("mobile navigation", () => {
     expect(box.width).toBeLessThanOrEqual(390);
     await expect(page.locator('a[data-nav-page="settings"]')).toBeVisible();
   });
+
+  test("hides the nav bar when scrolling down and shows it when scrolling up", async ({ page }) => {
+    await login(page);
+    const nav = page.locator(".admin-nav");
+    await expect(nav).toBeVisible();
+    await page.evaluate(() => {
+      const spacer = document.createElement("div");
+      spacer.id = "e2e-nav-scroll-spacer";
+      spacer.style.height = "2200px";
+      document.body.appendChild(spacer);
+      window.scrollTo(0, 900);
+    });
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+    await expect(nav).toHaveClass(/is-nav-hidden/);
+    await page.evaluate(() => window.scrollTo(0, 500));
+    await expect(nav).not.toHaveClass(/is-nav-hidden/);
+    await expect(nav).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(nav).toBeVisible();
+  });
 });

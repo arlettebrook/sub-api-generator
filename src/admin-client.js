@@ -6727,6 +6727,7 @@ async function navigateToPage(url, { historyMode = 'push', restoreUrl = window.l
     currentRouteUrl = window.location.href;
     window.scrollTo({ top: 0, behavior: 'auto' });
     updateScrollTopButton();
+    resetAdminNav();
   } catch (error) {
     if (error.name !== 'AbortError') {
       if (historyMode === 'none') {
@@ -6801,6 +6802,66 @@ function initScrollTopButton() {
   updateScrollTopButton();
 }
 
+// 导航栏滚动自动隐藏：向下滚动隐藏，向上滚动 / 回到顶部重新出现
+let adminNavElement = null;
+let adminNavLastScrollY = 0;
+let adminNavHidden = false;
+let adminNavFrame = 0;
+
+function setAdminNavHidden(hidden) {
+  const nav = adminNavElement || document.querySelector('.page-shell > .admin-nav');
+  if (!nav) return;
+  adminNavElement = nav;
+  if (adminNavHidden === hidden) return;
+  adminNavHidden = hidden;
+  nav.classList.toggle('is-nav-hidden', hidden);
+  nav.setAttribute('aria-hidden', String(hidden));
+  nav.querySelectorAll('a').forEach((link) => {
+    if (hidden) link.setAttribute('tabindex', '-1');
+    else link.removeAttribute('tabindex');
+  });
+}
+
+function updateAdminNavVisibility() {
+  const nav = adminNavElement || document.querySelector('.page-shell > .admin-nav');
+  if (!nav) return;
+  adminNavElement = nav;
+  const scrollY = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+  const delta = scrollY - adminNavLastScrollY;
+  adminNavLastScrollY = scrollY;
+  const threshold = 6;
+  if (scrollY <= 8) {
+    setAdminNavHidden(false);
+    return;
+  }
+  if (delta > threshold && scrollY > 80) setAdminNavHidden(true);
+  else if (delta < -threshold) setAdminNavHidden(false);
+}
+
+function scheduleAdminNavUpdate() {
+  if (adminNavFrame) return;
+  const callback = () => {
+    adminNavFrame = 0;
+    updateAdminNavVisibility();
+  };
+  if (typeof window.requestAnimationFrame === 'function') adminNavFrame = window.requestAnimationFrame(callback);
+  else adminNavFrame = window.setTimeout(callback, 16);
+}
+
+function resetAdminNav() {
+  adminNavLastScrollY = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+  setAdminNavHidden(false);
+}
+
+function initAdminNavAutoHide() {
+  const nav = document.querySelector('.page-shell > .admin-nav');
+  if (!nav || nav.dataset.autoHideBound === 'true') return;
+  nav.dataset.autoHideBound = 'true';
+  adminNavElement = nav;
+  resetAdminNav();
+  window.addEventListener('scroll', scheduleAdminNavUpdate, { passive: true });
+}
+
 // 页面初始化
 window.addEventListener('DOMContentLoaded', () => {
   const page = document.body.dataset.page || 'overview';
@@ -6847,6 +6908,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('themeSwitch')?.addEventListener('click', toggleTheme);
   $('logoutButton')?.addEventListener('click', logout);
   initScrollTopButton();
+  initAdminNavAutoHide();
   initTheme();
   loadActivePage(page);
 });
