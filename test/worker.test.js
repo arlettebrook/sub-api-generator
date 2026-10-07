@@ -1219,10 +1219,118 @@ test("limits concurrent custom API previews independently", async () => {
     assert.equal(responses.filter((response) => response.status === 200).length, 2);
     assert.equal(responses.filter((response) => response.status === 429).length, 1);
     const busy = responses.find((response) => response.status === 429);
-    assert.equal((await busy.json()).code, "BUSY");
+    const busyBody = await busy.json();
+    assert.equal(busyBody.code, "BUSY");
+    // 前端依赖该字段做退避重试，缺失时会退化成“网络错误”提示。
+    assert.ok(Number(busyBody.retryAfterMs) > 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("reclaims preview slots that outlive the max duration", async () => {
+  // 每个预览路径使用独立上游源，避免订阅层合并同名源的并发请求而干扰并发计数。
+  const paths = ["stale_preview_a", "stale_preview_b", "stale_preview_c"];
+  const sourceKeys = Object.fromEntries(paths.map((path) => [path, "https://stale-preview-" + path.slice(-1) + ".example/data"]));
+  const values = {
+    apis: Object.fromEntries(paths.map((path) => [sourceKeys[path], { remark: "超时占用测试源" }])),
+    subs: {},
+    custom_apis: Object.fromEntries(paths.map((path) => [path, {
+      enabled: true,
+      sourceMode: "selected",
+      sources: [{ type: "apis", key: sourceKeys[path] }],
+    }])),
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  const realNow = Date.now;
+  const baseNow = realNow();
+  const pending = [];
+  const request = (path) => worker.fetch(new Request("https://example.test/api/custom-api-preview", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ path }),
+  }), runtime);
+  try {
+    // 让前两个上游请求一直挂起，模拟被取消/中断后没有执行 finally 的预览请求。
+    globalThis.fetch = (input) => {
+      const url = typeof input === "string" ? input : String(input?.url || input);
+      if (url.includes("stale-preview-c")) return Promise.resolve(new Response("8.8.8.8:443#recovered", { status: 200 }));
+      return new Promise((resolve) => { pending.push(resolve); });
+    };
+    const stuck = [request(paths[0]), request(paths[1])];
+    for (let i = 0; i < 200 && pending.length < 2; i += 1) await new Promise((resolve) => setTimeout(resolve, 1));
+    assert.equal(pending.length, 2);
+    // custom 作用域并发上限为 2，此时第三个预览应被判为繁忙。
+    const busy = await request(paths[2]);
+    assert.equal(busy.status, 429);
+    assert.equal((await busy.json()).code, "BUSY");
+    // 时间超过最长占用时间后，过期名额应被回收，后续预览不再被永久卡住。
+    Date.now = () => baseNow + 60000;
+    const recovered = await request(paths[2]);
+    assert.equal(recovered.status, 200);
+    // 放行挂起的请求，避免遗留未决任务。
+    for (const resolve of pending) resolve(new Response("8.8.8.8:443#drained", { status: 200 }));
+    await Promise.allSettled(stuck);
+  } finally {
+    Date.now = realNow;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("releases the preview slot as soon as the client cancels", async () => {
+  // 关闭弹窗或切换查看会 abort 请求；服务端必须立即归还并发名额，
+  // 否则反复查看会把名额耗尽，之后一直返回“检测任务繁忙”。
+  const keys = ["https://abort-a.example/data", "https://abort-b.example/data", "https://abort-c.example/data", "https://abort-d.example/data"];
+  const values = {
+    subs: {},
+    apis: Object.fromEntries(keys.map((key) => [key, { remark: "取消占用测试源" }])),
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const originalFetch = globalThis.fetch;
+  const pending = [];
+  globalThis.fetch = () => new Promise((resolve) => { pending.push(resolve); });
+  const preview = (key, signal) => worker.fetch(new Request("https://example.test/api/source-raw", {
+    method: "POST",
+    headers: { Cookie: `auth=${hash}`, "content-type": "application/json" },
+    body: JSON.stringify({ type: "apis", key }),
+    ...(signal ? { signal } : {}),
+  }), runtime);
+  try {
+    const controllers = [new AbortController(), new AbortController(), new AbortController()];
+    const stuck = controllers.map((controller, index) => preview(keys[index], controller.signal));
+    for (let i = 0; i < 200 && pending.length < 3; i += 1) await new Promise((resolve) => setTimeout(resolve, 1));
+    assert.equal(pending.length, 3);
+    // source 作用域并发上限为 3，此时第 4 个查看应被判为繁忙。
+    const busy = await preview(keys[3]);
+    assert.equal(busy.status, 429);
+    assert.equal((await busy.json()).code, "BUSY");
+    // 取消其中一个查看后名额立即归还，后续查看不再被判为繁忙。
+    controllers[0].abort();
+    globalThis.fetch = async () => new Response("1.1.1.1:443#ok", { status: 200 });
+    const recovered = await preview(keys[3]);
+    assert.equal(recovered.status, 200);
+    // 放行挂起的请求，避免遗留未决任务；重复归还名额不应把并发计数减成负数。
+    for (const resolve of pending) resolve(new Response("1.1.1.1:443#ok", { status: 200 }));
+    await Promise.allSettled(stuck);
+    const afterDrain = await preview(keys[3]);
+    assert.equal(afterDrain.status, 429);
+    assert.equal((await afterDrain.json()).code, "RATE_LIMITED");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("treats busy preview responses as a retriable soft failure on the client", () => {
+  // 查看弹窗被重复/快速触发时会拿到 BUSY（并发上限）而不是源本身出错：
+  // 前端必须自动退避重试，并且不把数据源状态改写成“网络错误”。
+  assert.match(adminClientScript, /error\?\.code === 'RATE_LIMITED' \|\| error\?\.code === 'BUSY'/);
+  assert.match(adminClientScript, /检测任务繁忙，/);
+  assert.match(adminClientScript, /本次检测受限：/);
+  // 只清理本次请求自己的控制器，避免旧请求在 finally 里清空新请求的 AbortController。
+  assert.match(adminClientScript, /if \(sourceRawRequest === controller\) sourceRawRequest = null;/);
 });
 
 test("reads and updates blacklist configuration", async () => {

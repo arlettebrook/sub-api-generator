@@ -76,10 +76,12 @@ function makeAssetVersion(...contents) {
 const ADMIN_ASSET_VERSION = makeAssetVersion(adminStyle, adminClientScript);
 const previewActive = new Map();
 const previewRecent = new Map();
-const previewActiveByScope = new Map();
 const PREVIEW_MAX_CONCURRENT = 4;
 const PREVIEW_SCOPE_LIMITS = { source: 3, custom: 2 };
 const PREVIEW_COOLDOWN_MS = 2500;
+// 单次预览的最长占用时间。客户端取消（关闭/切换查看）或运行时中断都可能让请求来不及执行 finally，
+// 超时后强制回收名额，避免并发计数被永久占满而持续返回“检测任务繁忙”。
+const PREVIEW_MAX_DURATION_MS = 30000;
 const HISTORY_DEFAULT_LIMIT = 10;
 const HISTORY_MAX_LIMIT = 50;
 const historySchemaPromises = new WeakMap();
@@ -229,21 +231,48 @@ function parseJsonArray(value) {
   }
 }
 
+function previewScopeCount(scope) {
+  let total = 0;
+  for (const entry of previewActive.values()) if (entry.scope === scope) total += entry.count;
+  return total;
+}
+
+function previewTotalCount() {
+  let total = 0;
+  for (const entry of previewActive.values()) total += entry.count;
+  return total;
+}
+
+// 清理已超过最长占用时间的预览名额，以及早已过期的冷却记录。
+function prunePreviewState(now) {
+  for (const [guardKey, entry] of previewActive) {
+    if (now - entry.startedAt >= PREVIEW_MAX_DURATION_MS) previewActive.delete(guardKey);
+  }
+  for (const [guardKey, at] of previewRecent) {
+    if (now - at >= PREVIEW_COOLDOWN_MS) previewRecent.delete(guardKey);
+  }
+}
+
 function acquirePreviewProtection(scope, key) {
   const guardKey = scope + ':' + key;
   const now = Date.now();
+  prunePreviewState(now);
   const last = previewRecent.get(guardKey) || 0;
   if (now - last < PREVIEW_COOLDOWN_MS) return { error: pagesJsonResponse({ error: "检测过于频繁，请稍后重试", code: "RATE_LIMITED", retryAfterMs: PREVIEW_COOLDOWN_MS - (now - last) }, 429) };
-  const scopeActive = previewActiveByScope.get(scope) || 0;
-  if (previewActive.size >= PREVIEW_MAX_CONCURRENT || scopeActive >= (PREVIEW_SCOPE_LIMITS[scope] || PREVIEW_MAX_CONCURRENT)) return { error: pagesJsonResponse({ error: "检测任务繁忙，请稍后重试", code: "BUSY" }, 429) };
+  if (previewTotalCount() >= PREVIEW_MAX_CONCURRENT || previewScopeCount(scope) >= (PREVIEW_SCOPE_LIMITS[scope] || PREVIEW_MAX_CONCURRENT)) {
+    return { error: pagesJsonResponse({ error: "检测任务繁忙，请稍后重试", code: "BUSY", retryAfterMs: 1200 }, 429) };
+  }
   previewRecent.set(guardKey, now);
-  previewActive.set(guardKey, (previewActive.get(guardKey) || 0) + 1);
-  previewActiveByScope.set(scope, scopeActive + 1);
+  const existing = previewActive.get(guardKey);
+  previewActive.set(guardKey, existing ? { ...existing, count: existing.count + 1 } : { scope, count: 1, startedAt: now });
+  let released = false;
   return { release() {
-    const count = (previewActive.get(guardKey) || 1) - 1;
-    if (count > 0) previewActive.set(guardKey, count); else previewActive.delete(guardKey);
-    const nextScopeActive = (previewActiveByScope.get(scope) || 1) - 1;
-    if (nextScopeActive > 0) previewActiveByScope.set(scope, nextScopeActive); else previewActiveByScope.delete(scope);
+    if (released) return;
+    released = true;
+    const entry = previewActive.get(guardKey);
+    if (!entry) return;
+    if (entry.count > 1) previewActive.set(guardKey, { ...entry, count: entry.count - 1 });
+    else previewActive.delete(guardKey);
   } };
 }
 
@@ -801,6 +830,8 @@ async function handleSourceRaw(request, env) {
   if (!Object.prototype.hasOwnProperty.call(normalized, key)) return pagesTextResponse("数据源不存在", 404);
   const guard = acquirePreviewProtection('source', type + ':' + key);
   if (guard.error) return guard.error;
+  // 客户端取消（关闭/切换查看）时立即归还名额，避免被中断的请求占满并发上限。
+  if (request.signal) request.signal.addEventListener('abort', () => guard.release(), { once: true });
   subscriptions.clearAggregateCache();
   try {
     const startedAt = Date.now();
@@ -881,6 +912,8 @@ async function handleCustomApiPreview(request, env) {
   if (!entry) return pagesTextResponse("优选 API 不存在", 404);
   const guard = acquirePreviewProtection('custom', path);
   if (guard.error) return guard.error;
+  // 客户端取消（关闭/切换查看）时立即归还名额，避免被中断的请求占满并发上限。
+  if (request.signal) request.signal.addEventListener('abort', () => guard.release(), { once: true });
   try {
   let sourceSelection = entry.sources;
   let includeManual;

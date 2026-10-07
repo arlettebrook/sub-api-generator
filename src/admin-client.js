@@ -5032,6 +5032,18 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
   const isManagedSource = type === 'subs' || type === 'apis' || type === 'domains';
   const normalizedKey = isManagedSource ? normalizeSourceKeyClient(type, key) : key;
   const previousStatus = isManagedSource ? getSourceStatus(type, key) : { state: 'idle', nodeCount: 0, rawNodeCount: 0 };
+  // 限流（RATE_LIMITED/BUSY）或请求被取消都不代表数据源本身有问题：
+  // 这类软失败只提示本次查看，不覆盖源的健康状态，必要时回滚到发起本次查看前的状态。
+  const restoreSourceRawStatus = () => {
+    if (!isManagedSource) return;
+    const fallback = previousStatus && previousStatus.state && previousStatus.state !== 'checking'
+      ? previousStatus
+      : (cachedResult?.status || previousStatus);
+    sourceStatuses[type] ||= {};
+    sourceStatuses[type][normalizedKey] = { ...fallback };
+    if (type === 'domains') setPreferredDomainStatus(normalizedKey, fallback);
+    refreshRenderedSourceStatuses([{ type, key }]);
+  };
   if (isManagedSource) {
     sourceStatuses[type] ||= {};
     sourceStatuses[type][normalizedKey] = { ...previousStatus, state: 'checking', error: '' };
@@ -5133,18 +5145,31 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     if (isManagedSource) refreshRenderedSourceStatuses([{ type, key }]);
     if (copy) copy.disabled = sourceRawNodes.length === 0 && sourceRawFilteredNodes.length === 0 && sourceRawUnfilteredNodes.length === 0;
   } catch (error) {
-    if (error?.name === 'AbortError') return;
+    if (error?.name === 'AbortError') {
+      // 关闭弹窗或切换到其它数据源时，把本次查看置为“检测中”的状态还原，避免卡片一直停留。
+      if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) restoreSourceRawStatus();
+      return;
+    }
     if (sourceRawSelection?.type !== type || sourceRawSelection?.key !== key) return;
-    // 服务端为同一查看对象设置了检测冷却，等冷却结束后自动重试一次，避免“应用并重新检测”直接失败。
-    if (error?.code === 'RATE_LIMITED' && retryDepth < 1) {
-      const waitMs = Math.min(10000, Math.max(600, error.retryAfterMs || 2600));
-      renderSourceRawCacheStatus('检测过于频繁，' + Math.ceil(waitMs / 1000) + ' 秒后自动重试…', 'checking');
+    // 检测冷却（RATE_LIMITED）与并发上限（BUSY）都属于可重试的软失败，等一会儿自动重试一次，
+    // 这样“多次点击查看”不会直接把数据源标记成网络错误。
+    if ((error?.code === 'RATE_LIMITED' || error?.code === 'BUSY') && retryDepth < 1) {
+      const waitMs = Math.min(10000, Math.max(600, error.retryAfterMs || (error.code === 'BUSY' ? 1200 : 2600)));
+      renderSourceRawCacheStatus((error.code === 'BUSY' ? '检测任务繁忙，' : '检测过于频繁，') + Math.ceil(waitMs / 1000) + ' 秒后自动重试…', 'checking');
       sourceRawRetryTimer = setTimeout(() => {
         sourceRawRetryTimer = null;
         if (sourceRawSelection?.type === type && sourceRawSelection?.key === key) {
           void openSourceRawDialog(type, key, true, retryDepth + 1);
         }
       }, waitMs + 150);
+      return;
+    }
+    if (error?.code === 'RATE_LIMITED' || error?.code === 'BUSY') {
+      // 重试后依然被限流：只提示本次查看受限，保持数据源原有的健康状态。
+      restoreSourceRawStatus();
+      renderSourceRawCacheStatus(cachedResult
+        ? '本次检测受限：' + (error.message || '请稍后重试') + '；当前显示最近一次检测结果：' + formatSourceRawTime(cachedResult.savedAt)
+        : '本次检测受限：' + (error.message || '请稍后重试'), 'warning');
       return;
     }
     const failedStatus = { ...previousStatus, state: 'network-error', error: error.message || '检测失败' };
@@ -5165,8 +5190,9 @@ async function openSourceRawDialog(type, key, preserveState = false, retryDepth 
     }
     if (isManagedSource) refreshRenderedSourceStatuses([{ type, key }]);
   } finally {
+    // 只清理本次请求自己的引用；快速重复查看时旧请求不能把新请求的控制器置空。
+    if (sourceRawRequest === controller) sourceRawRequest = null;
     if (sourceRawSelection?.type === type && sourceRawSelection?.key === key) {
-      sourceRawRequest = null;
       if (reload) {
         reload.disabled = false;
         reload.onclick = () => openSourceRawDialog(type, key);
