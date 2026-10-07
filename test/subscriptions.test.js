@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearAggregateCache, fetchPreferredSubs, filterPreferredIps, handleRoot, parsePreferredIpLine } from "../src/subscriptions.js";
+import { clearAggregateCache, fetchPreferredSubs, filterPreferredIps, handleRoot, normalizeManualNodeLine, parsePreferredIpLine } from "../src/subscriptions.js";
 
 test("filters invalid and duplicate nodes", () => {
   const values = filterPreferredIps([
@@ -21,6 +21,20 @@ test("filters invalid and duplicate nodes", () => {
   ]);
   assert.equal(values.filterStats.invalidCount, 1);
   assert.equal(values.filterStats.remarkCount, 1);
+});
+
+test("normalizes manual preferred nodes with default port and optional remark", () => {
+  // 省略端口时默认补 443，省略备注也能识别。
+  assert.equal(normalizeManualNodeLine("www.example.com"), "www.example.com:443");
+  assert.equal(normalizeManualNodeLine("www.example.com#香港"), "www.example.com:443#香港");
+  assert.equal(normalizeManualNodeLine("  openai.com#AI  "), "openai.com:443#AI");
+  assert.equal(normalizeManualNodeLine("1.2.3.4"), "1.2.3.4:443");
+  assert.equal(normalizeManualNodeLine("[2001:db8::1]"), "[2001:db8::1]:443");
+  // 已写端口 / 备注的行保持原样。
+  assert.equal(normalizeManualNodeLine("1.2.3.4:8443#企业"), "1.2.3.4:8443#企业");
+  assert.equal(normalizeManualNodeLine("[2001:db8::1]:8443#v6"), "[2001:db8::1]:8443#v6");
+  // 只写地址但不是 IP/域名（没有点）时保持原样，交给过滤流程判为无效。
+  assert.equal(normalizeManualNodeLine("not-an-entry"), "not-an-entry");
 });
 
 test("parses Base64 responses from preferred subscription providers", async () => {

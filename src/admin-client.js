@@ -2568,8 +2568,9 @@ async function addPreferredDomain() {
 }
 
 // ======================== 手动优选管理 ========================
-// 与 subscriptions.js 的 NODE_MATCH_REGEX 保持一致：地址:端口 才算有效条目。
-const MANUAL_NODE_REGEX = /(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+):(\\d+)/;
+// 与 subscriptions.js 的 NODE_MATCH_REGEX 保持一致：地址[:端口][#备注]，省略端口时默认 443，缺失备注也能识别。
+const MANUAL_NODE_REGEX = /(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+)(?::(\\d+))?/;
+const MANUAL_IP_LITERAL_REGEX = /^(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\\])$/;
 let preferredManualSavedContent = '';
 let preferredManualDirty = false;
 let preferredManualDialogResolver = null;
@@ -2594,12 +2595,17 @@ function preferredManualLines(value) {
 }
 
 function parseManualNodeLine(line) {
-  const hashIndex = line.indexOf('#');
-  const base = hashIndex >= 0 ? line.slice(0, hashIndex).trim() : line;
-  const remark = hashIndex >= 0 ? line.slice(hashIndex + 1).trim() : '';
+  const text = String(line || '').trim();
+  const hashIndex = text.indexOf('#');
+  const base = (hashIndex >= 0 ? text.slice(0, hashIndex) : text).trim();
+  const remark = hashIndex >= 0 ? text.slice(hashIndex + 1).trim() : '';
   const match = MANUAL_NODE_REGEX.exec(base);
   if (!match) return null;
-  return { host: match[1], port: match[2], remark };
+  const host = match[1];
+  const port = match[2] || '';
+  // 只写地址时要求它像 IP 或域名，避免把无效文本当成节点；未写端口统一按 443 处理。
+  if (!port && !MANUAL_IP_LITERAL_REGEX.test(host) && !host.includes('.')) return null;
+  return { host, port: port || '443', remark };
 }
 
 function updatePreferredManualMeta() {
@@ -2622,7 +2628,7 @@ function updatePreferredManualMeta() {
   if (status) {
     status.hidden = !invalidIndexes.length;
     status.textContent = invalidIndexes.length
-      ? '第 ' + invalidIndexes.slice(0, 10).join('、') + ' 行无法识别（缺少地址或端口），保存后不会参与优选 API 输出。'
+      ? '第 ' + invalidIndexes.slice(0, 10).join('、') + ' 行无法识别（缺少有效地址），保存后不会参与优选 API 输出。'
       : '';
   }
   const selectedOption = $('preferredManualSelect')?.querySelector('option:checked');

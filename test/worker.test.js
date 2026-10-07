@@ -1912,6 +1912,18 @@ test("serves custom API output from manual preferred entries alone", async () =>
   assert.equal(await response.text(), "104.156.239.15:443#manual1");
 });
 
+test("serves manual preferred entries without explicit port or remark", async () => {
+  const values = {
+    preferred_manual: { content: "www.example.com\nopenai.com#ai\n1.2.3.4:8443\nnot-an-entry" },
+    custom_apis: { manual_only: { enabled: true, remark: "", sourceMode: "all", sources: [] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const response = await worker.fetch(new Request("https://example.test/manual_only"), runtime);
+  assert.equal(response.status, 200);
+  // 省略端口默认 443、省略备注也能识别；无效行被丢弃。
+  assert.equal(await response.text(), "www.example.com:443\nopenai.com:443#ai\n1.2.3.4:8443");
+});
+
 test("disabling a preferred domain hides it from custom API output", async () => {
   // 三个路径分别验证禁用前后及重新启用后的正式输出。
   const paths = ["all_api_a", "all_api_b", "all_api_c"];

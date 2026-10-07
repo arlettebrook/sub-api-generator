@@ -336,7 +336,7 @@ export const adminHTML = `
     <summary>
       <div>
       <h3>✍️ 手动优选管理</h3>
-      <p class="section-caption">维护手动优选节点，每行一条“地址:端口#备注”；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
+      <p class="section-caption">维护手动优选节点，每行一条“地址[:端口][#备注]”，省略端口时默认 443，省略备注也能识别；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
       </div>
     </summary>
     <div class="source-status-panel-body">
