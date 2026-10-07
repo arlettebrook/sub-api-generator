@@ -443,7 +443,7 @@ export const adminHTML = `
         <label class="form-field">
           <span>访问路径</span>
           <span class="path-input"><b>/</b><input id="newCustomApiPath" placeholder="例如 my-api" autocomplete="off" /></span>
-          <small id="newCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
+          <small id="newCustomApiPathHint">仅支持字母、数字、@、短横线和下划线。</small>
         </label>
         <label class="form-field">
           <span>API 名称 / 备注</span>
@@ -469,7 +469,7 @@ export const adminHTML = `
         <label class="form-field">
           <span>访问路径</span>
           <span class="path-input"><b>/</b><input id="editCustomApiPath" placeholder="例如 my-api" autocomplete="off" /></span>
-          <small id="editCustomApiPathHint">仅支持字母、数字、短横线和下划线。</small>
+          <small id="editCustomApiPathHint">仅支持字母、数字、@、短横线和下划线。</small>
         </label>
         <label class="form-field">
           <span>API 名称 / 备注</span>

@@ -49,7 +49,7 @@ export const FILTER_REASON_CATEGORIES = Object.freeze([
   Object.freeze({ key: "other", label: "其他" }),
 ]);
 
-const API_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
+const API_PATH_REGEX = /^[A-Za-z0-9_@-]{1,128}$/;
 const RESERVED_API_PATHS = new Set(["admin", "api", "login", "logout"]);
 const SETTINGS_PATH_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
 

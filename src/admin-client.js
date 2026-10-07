@@ -2146,7 +2146,7 @@ function normalizeCustomApiPath(value) {
 
 function validateCustomApiPath(path, currentPath = '') {
   if (!path) return '请输入访问路径';
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(path)) return '仅支持字母、数字、短横线和下划线，最长 128 个字符';
+  if (!/^[A-Za-z0-9_@-]{1,128}$/.test(path)) return '仅支持字母、数字、@、短横线和下划线，最长 128 个字符';
   if (['admin', 'api', 'login', 'logout'].includes(path.toLowerCase())) return '该路径为系统保留路径';
   if (path !== currentPath && customApis[path]) return '访问路径已存在';
   return '';
@@ -3687,7 +3687,7 @@ function openCustomApiEditDialog(path) {
   if (prefixInput) prefixInput.value = entry.prefix || '';
   if (suffixStrategyInput) suffixStrategyInput.value = entry.suffixStrategy || 'skip';
   if (hint) {
-    hint.textContent = '仅支持字母、数字、短横线和下划线。';
+    hint.textContent = '仅支持字母、数字、@、短横线和下划线。';
     hint.className = '';
   }
   const url = $('editCustomApiUrl');
@@ -3826,7 +3826,7 @@ function initCustomApiForm() {
     const path = normalizeCustomApiPath(pathInput.value);
     const error = path ? validateCustomApiPath(path) : '';
     pathInput.setAttribute('aria-invalid', error ? 'true' : 'false');
-    hint.textContent = error || '仅支持字母、数字、短横线和下划线。';
+    hint.textContent = error || '仅支持字母、数字、@、短横线和下划线。';
     hint.className = error ? 'input-hint error' : '';
   };
   pathInput.addEventListener('input', updateHint);
@@ -3849,7 +3849,7 @@ function initCustomApiForm() {
     const path = normalizeCustomApiPath(editPathInput.value);
     const error = path ? validateCustomApiPath(path, editingCustomApiPath) : '';
     editPathInput.setAttribute('aria-invalid', error ? 'true' : 'false');
-    editHint.textContent = error || '仅支持字母、数字、短横线和下划线。';
+    editHint.textContent = error || '仅支持字母、数字、@、短横线和下划线。';
     editHint.className = error ? 'input-hint error' : '';
     const url = $('editCustomApiUrl');
     if (url && path) url.textContent = window.location.origin + '/' + path;
@@ -3895,7 +3895,7 @@ function resetCustomApiForm() {
   }
   if (remarkInput) remarkInput.value = '';
   if (hint) {
-    hint.textContent = '仅支持字母、数字、短横线和下划线。';
+    hint.textContent = '仅支持字母、数字、@、短横线和下划线。';
     hint.className = '';
   }
   renderNewCustomApiSources();

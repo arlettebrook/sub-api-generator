@@ -253,6 +253,16 @@ test("creates and serves custom API access paths", async () => {
   assert.equal(publicResponse.status, 500);
   assert.match(await publicResponse.text(), /KV 未配置 subs/);
 
+  const atSaveResponse = await worker.fetch(new Request("https://example.test/api/custom-apis", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ "/@MikuNaNChannel": { enabled: true } }),
+  }), runtime);
+  assert.equal(atSaveResponse.status, 200);
+  const atPublicResponse = await worker.fetch(new Request("https://example.test/@MikuNaNChannel"), runtime);
+  assert.equal(atPublicResponse.status, 500);
+  assert.match(await atPublicResponse.text(), /KV 未配置 subs/);
+
   const invalidSource = await worker.fetch(new Request("https://example.test/api/custom-apis", {
     method: "POST",
     headers,

@@ -161,6 +161,9 @@ test("validates custom API access paths", () => {
   });
   assert.throws(() => validateApiPathPayload({ "admin": true }), /访问路径无效/);
   assert.throws(() => validateApiPathPayload({ "bad/path": true }), /访问路径无效/);
+  assert.deepEqual(Object.keys(validateApiPathPayload({ "/@MikuNaNChannel": true })), ["@MikuNaNChannel"]);
+  assert.deepEqual(Object.keys(validateApiPathPayload({ "@channel": true })), ["@channel"]);
+  assert.throws(() => validateApiPathPayload({ "bad@path/x": true }), /访问路径无效/);
   assert.deepEqual(validateApiPathPayload({
     first: { enabled: true },
     second: { enabled: true, sources: null },

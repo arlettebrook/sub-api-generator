@@ -123,6 +123,9 @@ test("navigates to the custom API page and selects data sources", async ({ page 
   await page.locator("#newCustomApiSources").getByRole("button", { name: "清空" }).click();
   await page.locator("#newCustomApiPath").fill("bad path");
   await expect(page.locator("#newCustomApiPathHint")).toHaveClass(/error/);
+  await page.locator("#newCustomApiPath").fill("@MikuNaNChannel");
+  await expect(page.locator("#newCustomApiPathHint")).not.toHaveClass(/error/);
+  await expect(page.locator("#newCustomApiPathHint")).toContainText("仅支持字母、数字、@、短横线和下划线。");
   const customPath = "preview-api-" + Date.now().toString(36) + "-" + testInfo.project.name;
   await page.locator("#newCustomApiPath").fill(customPath);
   const customPreviewSource = page.locator("#newCustomApiSources .source-option").filter({ hasText: "优选 API 测试源" });
