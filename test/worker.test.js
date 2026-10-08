@@ -1448,7 +1448,7 @@ test("backs up and restores all configuration data", async () => {
   const subsResponse = await worker.fetch(new Request("https://example.test/api/subs", { headers: authHeaders }), restoreRuntime);
   assert.deepEqual(await subsResponse.json(), { "sub.example/a": { remark: "sub" } });
   const settingsResponse = await worker.fetch(new Request("https://example.test/api/settings", { headers: authHeaders }), restoreRuntime);
-  assert.deepEqual(await settingsResponse.json(), { enabled: false, accessPath: "old-entry", redirectUrl: "/" });
+  assert.deepEqual(await settingsResponse.json(), { enabled: false, accessPath: "old-entry", redirectUrl: "/", ipRemark: { enabled: false, endpoint: "", template: "{country} {isp}" } });
 
   const invalidResponse = await worker.fetch(new Request("https://example.test/api/restore", {
     method: "POST",
@@ -2370,6 +2370,116 @@ test("resolves preferred domain CNAME chains to deduped IPs", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("adds auto remarks to preferred domain IPs when enabled", async () => {
+  const values = {
+    subs: {},
+    apis: {},
+    preferred_domains: { "remark-edge.example.com": { domain: "remark-edge.example.com", remark: "边缘域名" } },
+    custom_apis: { remark_api: { enabled: true, sourceMode: "selected", sources: [{ type: "domains", key: "remark-edge.example.com" }] } },
+    settings: { enabled: false, accessPath: "", redirectUrl: "/", ipRemark: { enabled: true, endpoint: "", template: "{country} {isp}" } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const originalFetch = globalThis.fetch;
+  const lookupBodies = [];
+  globalThis.fetch = async (resource, init) => {
+    const url = new URL(String(resource));
+    if (url.hostname === "cloudflare-dns.com") {
+      const type = url.searchParams.get("type");
+      const answers = type === "A" ? [{ type: 1, data: "203.0.113.10" }] : [];
+      return new Response(JSON.stringify({ Status: 0, Answer: answers }), { status: 200 });
+    }
+    if (url.hostname === "ip-api.com") {
+      const ips = JSON.parse(init.body);
+      lookupBodies.push(ips);
+      return new Response(JSON.stringify(ips.map((ip) => ({ status: "success", query: ip, country: "美国", isp: "Cloudflare, Inc." }))), { status: 200 });
+    }
+    return originalFetch(resource, init);
+  };
+  try {
+    const response = await worker.fetch(new Request("https://example.test/remark_api"), runtime);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.text()).split("\n").filter(Boolean), ["203.0.113.10:443#美国 Cloudflare, Inc."]);
+    assert.deepEqual(lookupBodies, [["203.0.113.10"]]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("keeps preferred domain IPs bare when auto remark is disabled", async () => {
+  const values = {
+    subs: {},
+    apis: {},
+    preferred_domains: { "plain-edge.example.com": { domain: "plain-edge.example.com", remark: "" } },
+    custom_apis: { plain_api: { enabled: true, sourceMode: "selected", sources: [{ type: "domains", key: "plain-edge.example.com" }] } },
+    settings: { enabled: false, accessPath: "", redirectUrl: "/", ipRemark: { enabled: false, endpoint: "", template: "{country} {isp}" } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const originalFetch = globalThis.fetch;
+  let lookupCalled = false;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    if (url.hostname === "cloudflare-dns.com") {
+      const type = url.searchParams.get("type");
+      const answers = type === "A" ? [{ type: 1, data: "203.0.113.20" }] : [];
+      return new Response(JSON.stringify({ Status: 0, Answer: answers }), { status: 200 });
+    }
+    if (url.hostname === "ip-api.com") { lookupCalled = true; return new Response("[]", { status: 200 }); }
+    return originalFetch(resource);
+  };
+  try {
+    const response = await worker.fetch(new Request("https://example.test/plain_api"), runtime);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.text()).split("\n").filter(Boolean), ["203.0.113.20:443"]);
+    assert.equal(lookupCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("persists camouflage and auto-remark settings independently", async () => {
+  const runtime = env({ KV: createKv({}) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+
+  // 先保存伪装首页设置。
+  const first = await worker.fetch(new Request("https://example.test/api/settings", {
+    method: "POST", headers, body: JSON.stringify({ enabled: true, accessPath: "/secure-admin/", redirectUrl: "https://example.com/landing" }),
+  }), runtime);
+  assert.equal(first.status, 200);
+
+  // 再单独保存自动备注设置，不应覆盖已经保存的伪装设置。
+  const second = await worker.fetch(new Request("https://example.test/api/settings", {
+    method: "POST", headers, body: JSON.stringify({ ipRemark: { enabled: true, endpoint: "", template: "{city}" } }),
+  }), runtime);
+  assert.equal(second.status, 200);
+  assert.deepEqual(await second.json(), {
+    enabled: true,
+    accessPath: "secure-admin",
+    redirectUrl: "https://example.com/landing",
+    ipRemark: { enabled: true, endpoint: "", template: "{city}" },
+  });
+
+  const read = await worker.fetch(new Request("https://example.test/api/settings", { headers }), runtime);
+  assert.deepEqual(await read.json(), {
+    enabled: true,
+    accessPath: "secure-admin",
+    redirectUrl: "https://example.com/landing",
+    ipRemark: { enabled: true, endpoint: "", template: "{city}" },
+  });
+
+  // 反过来只提交伪装字段，同样保留已保存的自动备注设置。
+  const third = await worker.fetch(new Request("https://example.test/api/settings", {
+    method: "POST", headers, body: JSON.stringify({ enabled: false, accessPath: "", redirectUrl: "/" }),
+  }), runtime);
+  assert.equal(third.status, 200);
+  assert.deepEqual(await third.json(), {
+    enabled: false,
+    accessPath: "",
+    redirectUrl: "/",
+    ipRemark: { enabled: true, endpoint: "", template: "{city}" },
+  });
 });
 
 test("rejects invalid blacklist payloads", async () => {

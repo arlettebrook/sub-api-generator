@@ -24,10 +24,22 @@ export const SOURCE_MODE_SELECTED = "selected";
 
 export const DEFAULT_BLACKLIST = [];
 export const DEFAULT_FILTER_RULES = [];
+// 优选 IP 自动备注：接口地址留空时使用 ip-api.com 的批量接口。
+export const DEFAULT_IP_REMARK_ENDPOINT = "http://ip-api.com/batch";
+export const DEFAULT_IP_REMARK_TEMPLATE = "{country} {isp}";
+// 备注模板可用占位符，与 ip-info.js 解析出的字段一一对应。
+export const IP_REMARK_TEMPLATE_FIELDS = Object.freeze(["country", "countryCode", "region", "city", "isp", "org", "as"]);
+export const MAX_IP_REMARK_ENDPOINT_LENGTH = 512;
+export const MAX_IP_REMARK_TEMPLATE_LENGTH = 120;
 export const DEFAULT_SETTINGS = {
   enabled: false,
   accessPath: "",
   redirectUrl: "/",
+  ipRemark: {
+    enabled: false,
+    endpoint: "",
+    template: DEFAULT_IP_REMARK_TEMPLATE,
+  },
 };
 
 // 过滤原因的唯一元数据来源。后端记录 reason，管理端按同一份元数据
@@ -224,27 +236,90 @@ function normalizeRedirectUrl(value) {
   return parsed.toString();
 }
 
+export function defaultIpRemarkSettings() {
+  return { enabled: false, endpoint: "", template: DEFAULT_IP_REMARK_TEMPLATE };
+}
+
+export function defaultSettings() {
+  return { enabled: false, accessPath: "", redirectUrl: DEFAULT_SETTINGS.redirectUrl, ipRemark: defaultIpRemarkSettings() };
+}
+
+function normalizeIpRemarkEndpoint(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw new Error("优选 IP 接口地址必须是字符串");
+  const endpoint = value.trim();
+  if (!endpoint) return "";
+  if (endpoint.length > MAX_IP_REMARK_ENDPOINT_LENGTH) throw new Error(`优选 IP 接口地址不能超过 ${MAX_IP_REMARK_ENDPOINT_LENGTH} 个字符`);
+  if (/[\u0000-\u001F\u007F]/u.test(endpoint)) throw new Error("优选 IP 接口地址不能包含换行或控制字符");
+  let parsed;
+  try { parsed = new URL(endpoint); } catch { throw new Error("优选 IP 接口地址无效"); }
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("优选 IP 接口地址必须是 http(s) 地址");
+  return endpoint;
+}
+
+function normalizeIpRemarkTemplate(value) {
+  if (value === undefined || value === null) return DEFAULT_IP_REMARK_TEMPLATE;
+  if (typeof value !== "string") throw new Error("优选 IP 备注模板必须是字符串");
+  const template = value.trim();
+  if (!template) return DEFAULT_IP_REMARK_TEMPLATE;
+  if (template.length > MAX_IP_REMARK_TEMPLATE_LENGTH) throw new Error(`优选 IP 备注模板不能超过 ${MAX_IP_REMARK_TEMPLATE_LENGTH} 个字符`);
+  if (/[\u0000-\u001F\u007F]/u.test(template)) throw new Error("优选 IP 备注模板不能包含换行或控制字符");
+  return template;
+}
+
+export function normalizeIpRemarkSettings(data) {
+  const source = isPlainObject(data) ? data : {};
+  try {
+    return {
+      enabled: source.enabled === true,
+      endpoint: normalizeIpRemarkEndpoint(source.endpoint),
+      template: normalizeIpRemarkTemplate(source.template),
+    };
+  } catch {
+    return defaultIpRemarkSettings();
+  }
+}
+
+export function validateIpRemarkSettings(data) {
+  const source = isPlainObject(data) ? data : {};
+  return {
+    enabled: source.enabled === true,
+    endpoint: normalizeIpRemarkEndpoint(source.endpoint),
+    template: normalizeIpRemarkTemplate(source.template),
+  };
+}
+
 export function normalizeSettings(data) {
-  if (!isPlainObject(data)) return { ...DEFAULT_SETTINGS };
+  if (!isPlainObject(data)) return defaultSettings();
   const source = isPlainObject(data.camouflage) ? data.camouflage : data;
+  // 伪装首页字段在根对象上，自动备注字段在 ipRemark 上，两者互不影响。
+  const ipRemarkSource = isPlainObject(data.ipRemark) ? data.ipRemark : (isPlainObject(source.ipRemark) ? source.ipRemark : null);
   try {
     return {
       enabled: source.enabled === true,
       accessPath: normalizeSettingsPath(source.accessPath),
       redirectUrl: normalizeRedirectUrl(source.redirectUrl),
+      ipRemark: ipRemarkSource ? normalizeIpRemarkSettings(ipRemarkSource) : defaultIpRemarkSettings(),
     };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return defaultSettings();
   }
 }
 
-export function validateSettingsPayload(body) {
+// 伪装首页表单只提交根字段，自动备注表单只提交 ipRemark，未提交的部分沿用已有配置。
+export function validateSettingsPayload(body, existing = null) {
   if (!isPlainObject(body)) throw new Error("设置必须是 JSON 对象");
-  const source = isPlainObject(body.camouflage) ? body.camouflage : body;
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(body, key);
+  const current = normalizeSettings(existing);
+  const hasIpRemark = hasOwn("ipRemark");
+  const hasCamouflage = isPlainObject(body.camouflage) || ["enabled", "accessPath", "redirectUrl"].some(hasOwn);
+  if (!hasCamouflage && !hasIpRemark) throw new Error("设置内容无效");
+  const camouflageSource = isPlainObject(body.camouflage) ? body.camouflage : (hasCamouflage ? body : {});
   return {
-    enabled: source.enabled === true,
-    accessPath: normalizeSettingsPath(source.accessPath),
-    redirectUrl: normalizeRedirectUrl(source.redirectUrl),
+    enabled: hasCamouflage ? camouflageSource.enabled === true : current.enabled,
+    accessPath: hasCamouflage ? normalizeSettingsPath(camouflageSource.accessPath) : current.accessPath,
+    redirectUrl: hasCamouflage ? normalizeRedirectUrl(camouflageSource.redirectUrl) : current.redirectUrl,
+    ipRemark: hasIpRemark ? validateIpRemarkSettings(body.ipRemark) : current.ipRemark,
   };
 }
 

@@ -586,7 +586,7 @@ export const adminHTML = `
   <div class="section-heading settings-page-heading">
     <div>
       <h3>🧹 数据处理设置</h3>
-      <p class="section-caption">管理节点过滤关键词和备注清理规则，修改后会影响后续数据预览结果。</p>
+      <p class="section-caption">管理节点过滤关键词、备注清理规则、伪装首页和优选 IP 自动备注，修改后会影响后续数据预览结果。</p>
     </div>
   </div>
   <div class="settings-list">
@@ -757,11 +757,43 @@ export const adminHTML = `
         </div>
       </dialog>
     </div>
+    <div class="setting-block" id="ipRemarkSettings">
+      <div class="setting-block-heading">
+        <div class="setting-copy">
+          <h4>优选 IP 自动备注</h4>
+          <p>优选域名解析出的 IP 默认没有备注。启用后会查询 IP 归属地，为没有备注的 IP 自动补上备注；查询结果按 IP 缓存 7 天，不会每次都请求接口。</p>
+        </div>
+        <div class="setting-heading-actions">
+          <label class="source-switch camouflage-enable-field">
+            <input id="ipRemarkEnabled" type="checkbox" />
+            <span class="source-switch-track" aria-hidden="true"></span>
+            <span class="source-switch-text">启用自动备注</span>
+          </label>
+          <span class="section-summary" id="ipRemarkSummary">未启用</span>
+        </div>
+      </div>
+      <div class="camouflage-settings-grid">
+        <label class="form-field">
+          <span>查询接口地址</span>
+          <input id="ipRemarkEndpoint" type="text" maxlength="512" placeholder="留空使用 http://ip-api.com/batch" autocomplete="off" />
+          <small>留空使用 ip-api.com 批量接口。地址中含 <code>{ip}</code> 时按单个 IP 请求，否则按批量接口 POST 一个 IP 数组。</small>
+        </label>
+        <label class="form-field">
+          <span>备注模板</span>
+          <input id="ipRemarkTemplate" type="text" maxlength="120" placeholder="{country} {isp}" autocomplete="off" />
+          <small>可用占位符：{country}、{countryCode}、{region}、{city}、{isp}、{org}、{as}；查不到的占位符会自动省略。</small>
+        </label>
+      </div>
+      <div class="settings-inline-footer">
+        <span class="save-status" id="ipRemarkSaveStatus">配置已保存</span>
+        <button class="btn-primary" id="saveIpRemarkButton" type="button" onclick="saveIpRemarkSettings()" disabled>💾 保存自动备注设置</button>
+      </div>
+    </div>
     <div class="setting-block" id="backupSettings">
       <div class="setting-block-heading">
         <div class="setting-copy">
           <h4>备份与恢复</h4>
-          <p>一键备份全部配置数据（订阅源、API 源、优选域名、手动优选、优选 API、黑名单、过滤规则和伪装设置）为 JSON 文件，文件名带有备份时刻的北京时间；恢复时会覆盖文件中包含的对应配置。</p>
+          <p>一键备份全部配置数据（订阅源、API 源、优选域名、手动优选、优选 API、黑名单、过滤规则、伪装设置和自动备注设置）为 JSON 文件，文件名带有备份时刻的北京时间；恢复时会覆盖文件中包含的对应配置。</p>
         </div>
         <span class="section-summary" id="backupSummary"></span>
       </div>

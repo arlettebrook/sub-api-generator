@@ -1,4 +1,4 @@
-import { FILTER_REASON_CATEGORIES, FILTER_REASON_META } from "./config.js";
+import { DEFAULT_IP_REMARK_TEMPLATE, FILTER_REASON_CATEGORIES, FILTER_REASON_META } from "./config.js";
 import { REMARK_SYMBOL_REGEX, matchRemarkRules } from "./remark-rules.js";
 
 const FILTER_REASON_META_JSON = JSON.stringify(FILTER_REASON_META);
@@ -14,6 +14,7 @@ const ADMIN_PREAMBLE = [
   `const FILTER_REASON_CATEGORIES = ${FILTER_REASON_CATEGORIES_JSON};`,
   `const FILTER_REASON = ${FILTER_REASON_KEYS_JSON};`,
   `const REMARK_SYMBOL_REGEX = new RegExp(${JSON.stringify(REMARK_SYMBOL_REGEX.source)}, ${JSON.stringify(REMARK_SYMBOL_REGEX.flags)});`,
+  `const DEFAULT_IP_REMARK_TEMPLATE = ${JSON.stringify(DEFAULT_IP_REMARK_TEMPLATE)};`,
   matchRemarkRules.toString(),
   "",
 ].join("\n");
@@ -212,7 +213,7 @@ function adminUrl(suffix = '') {
 }
 
 function hasUnsavedChanges() {
-  return customApisDirty || blacklistDirty || filterRulesDirty || camouflageDirty || subsDirty || apisDirty || preferredManualDirty || subsSavePending > 0 || apisSavePending > 0;
+  return customApisDirty || blacklistDirty || filterRulesDirty || camouflageDirty || ipRemarkDirty || subsDirty || apisDirty || preferredManualDirty || subsSavePending > 0 || apisSavePending > 0;
 }
 
 function responseError(label, response) {
@@ -5674,6 +5675,103 @@ function initCamouflageSettings() {
   enabled.dataset.bound = 'true';
 }
 
+// ======================== 优选 IP 自动备注 ========================
+let ipRemarkSettings = { enabled: false, endpoint: '', template: DEFAULT_IP_REMARK_TEMPLATE };
+let savedIpRemarkSettings = { ...ipRemarkSettings };
+let ipRemarkDirty = false;
+
+function normalizeIpRemarkSettingsClient(value) {
+  const source = value && typeof value === 'object' && value.ipRemark && typeof value.ipRemark === 'object' ? value.ipRemark : value;
+  if (!source || typeof source !== 'object') return { enabled: false, endpoint: '', template: DEFAULT_IP_REMARK_TEMPLATE };
+  return {
+    enabled: source.enabled === true,
+    endpoint: typeof source.endpoint === 'string' ? source.endpoint.trim() : '',
+    template: typeof source.template === 'string' && source.template.trim() ? source.template.trim() : DEFAULT_IP_REMARK_TEMPLATE,
+  };
+}
+
+function sameIpRemarkSettings(left, right) {
+  return left.enabled === right.enabled && left.endpoint === right.endpoint && left.template === right.template;
+}
+
+function updateIpRemarkSummary() {
+  const summary = $('ipRemarkSummary');
+  if (summary) summary.textContent = ipRemarkSettings.enabled ? '已启用' : '未启用';
+  const status = $('ipRemarkSaveStatus');
+  const button = $('saveIpRemarkButton');
+  if (status) { status.textContent = ipRemarkDirty ? '有未保存的修改' : '配置已保存'; status.classList.toggle('dirty', ipRemarkDirty); }
+  if (button) button.disabled = !ipRemarkDirty;
+}
+
+function setIpRemarkDirty(dirty = true) {
+  ipRemarkDirty = dirty;
+  updateIpRemarkSummary();
+}
+
+function renderIpRemarkSettings() {
+  const enabled = $('ipRemarkEnabled');
+  const endpoint = $('ipRemarkEndpoint');
+  const template = $('ipRemarkTemplate');
+  if (enabled) enabled.checked = ipRemarkSettings.enabled;
+  if (endpoint) endpoint.value = ipRemarkSettings.endpoint;
+  if (template) template.value = ipRemarkSettings.template;
+  clearInputError(endpoint);
+  updateIpRemarkSummary();
+}
+
+async function loadIpRemarkSettings() {
+  try {
+    ipRemarkSettings = normalizeIpRemarkSettingsClient(await readJsonResponse('/api/settings', '优选 IP 自动备注设置'));
+    savedIpRemarkSettings = { ...ipRemarkSettings };
+    setIpRemarkDirty(false);
+    renderIpRemarkSettings();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+function readIpRemarkSettingsForm() {
+  return normalizeIpRemarkSettingsClient({
+    enabled: $('ipRemarkEnabled')?.checked,
+    endpoint: $('ipRemarkEndpoint')?.value || '',
+    template: $('ipRemarkTemplate')?.value || '',
+  });
+}
+
+async function saveIpRemarkSettings() {
+  const button = $('saveIpRemarkButton');
+  const next = readIpRemarkSettingsForm();
+  setButtonBusy(button, true);
+  try {
+    const response = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ ipRemark: next }) });
+    if (!response.ok) throw responseError('优选 IP 自动备注设置保存', response);
+    ipRemarkSettings = normalizeIpRemarkSettingsClient(await response.json());
+    savedIpRemarkSettings = { ...ipRemarkSettings };
+    setIpRemarkDirty(false);
+    renderIpRemarkSettings();
+    showToast('优选 IP 自动备注设置已保存', 'success');
+  } catch (error) {
+    setIpRemarkDirty(true);
+    showToast(error.message || '优选 IP 自动备注设置保存失败', 'error', saveIpRemarkSettings);
+  } finally {
+    setButtonBusy(button, false);
+    if (button) button.disabled = !ipRemarkDirty;
+  }
+}
+
+function initIpRemarkSettings() {
+  const enabled = $('ipRemarkEnabled');
+  const endpoint = $('ipRemarkEndpoint');
+  const template = $('ipRemarkTemplate');
+  if (!enabled || enabled.dataset.bound === 'true') return;
+  [enabled, endpoint, template].forEach((element) => element?.addEventListener('input', () => {
+    ipRemarkSettings = readIpRemarkSettingsForm();
+    setIpRemarkDirty(!sameIpRemarkSettings(ipRemarkSettings, savedIpRemarkSettings));
+    clearInputError(element);
+  }));
+  enabled.dataset.bound = 'true';
+}
+
 let filterRules = [];
 let savedFilterRules = [];
 let filterRulesSearchTerm = '';
@@ -6003,7 +6101,7 @@ const pageIntros = {
   apis: '管理额外 API 源，维护地址和备注。',
   manage: '统一管理优选订阅源、API 源和手动优选节点。',
   customApis: '创建并管理优选 API 的访问路径。',
-  settings: '管理节点过滤关键词和备注清理规则，修改后会影响后续数据预览结果。'
+  settings: '管理节点过滤关键词、备注清理规则和优选 IP 自动备注，修改后会影响后续数据预览结果。'
 };
 let pageNavigationRequest = null;
 let currentRouteUrl = window.location.href;
@@ -6244,7 +6342,7 @@ const BACKUP_SECTION_LABELS = {  subs: '订阅源',
   filterRules: '过滤规则',
   preferredDomains: '优选域名',
   preferredManual: '手动优选',
-  settings: '伪装设置',
+  settings: '伪装设置与自动备注',
 };
 
 // 备份文件名统一使用北京时间（UTC+8），与服务端 WebDAV 备份保持一致。
@@ -6684,6 +6782,8 @@ function loadActivePage(page) {
     initSettingsEnhancements();
     initCamouflageSettings();
     void loadCamouflageSettings();
+    initIpRemarkSettings();
+    void loadIpRemarkSettings();
     initBlacklistForm();
     void loadBlacklist();
     initFilterRulesForm();

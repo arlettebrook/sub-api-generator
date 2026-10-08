@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  DEFAULT_IP_REMARK_TEMPLATE,
+  defaultIpRemarkSettings,
   getRuntimeConfig,
   normalizeBlacklist,
   normalizeFilterRules,
+  normalizeIpRemarkSettings,
   normalizeSettings,
   normalizeKvData,
   normalizeSourceFilterFields,
@@ -12,6 +15,7 @@ import {
   validateApiPathPayload,
   validateConfigPayload,
   validateBlacklistPayload,
+  validateIpRemarkSettings,
   validateSourceFilterFields,
   validateSettingsPayload,
 } from "../src/config.js";
@@ -221,6 +225,7 @@ test("normalizes camouflage settings with a disabled default", () => {
     enabled: false,
     accessPath: "",
     redirectUrl: "/",
+    ipRemark: { enabled: false, endpoint: "", template: DEFAULT_IP_REMARK_TEMPLATE },
   });
   assert.deepEqual(validateSettingsPayload({
     enabled: true,
@@ -230,7 +235,55 @@ test("normalizes camouflage settings with a disabled default", () => {
     enabled: true,
     accessPath: "secure-admin",
     redirectUrl: "https://example.com/landing",
+    ipRemark: { enabled: false, endpoint: "", template: DEFAULT_IP_REMARK_TEMPLATE },
   });
   assert.throws(() => validateSettingsPayload({ enabled: true, accessPath: "bad/path" }), /管理入口路径无效/);
   assert.throws(() => validateSettingsPayload({ redirectUrl: "javascript:alert(1)" }), /跳转地址无效/);
+});
+
+test("normalizes and validates preferred IP auto-remark settings", () => {
+  assert.deepEqual(normalizeSettings(null).ipRemark, { enabled: false, endpoint: "", template: DEFAULT_IP_REMARK_TEMPLATE });
+  // 空模板回退到默认值，接口地址去掉首尾空白。
+  assert.deepEqual(normalizeIpRemarkSettings({ enabled: true, endpoint: "  https://ip.example/lookup  ", template: "   " }), {
+    enabled: true,
+    endpoint: "https://ip.example/lookup",
+    template: DEFAULT_IP_REMARK_TEMPLATE,
+  });
+  // 非法接口地址会被安全地回退成默认值，不抛错。
+  assert.deepEqual(normalizeIpRemarkSettings({ enabled: true, endpoint: "ftp://nope" }), defaultIpRemarkSettings());
+  assert.deepEqual(normalizeIpRemarkSettings({ enabled: true, endpoint: "not a url" }), defaultIpRemarkSettings());
+  // 保存流程使用严格校验，非法输入抛出中文错误。
+  assert.throws(() => validateIpRemarkSettings({ endpoint: "ftp://nope" }), /http\(s\)/);
+  assert.throws(() => validateIpRemarkSettings({ endpoint: "https://bad\n.example" }), /控制字符/);
+  assert.throws(() => validateIpRemarkSettings({ endpoint: 123 }), /字符串/);
+  assert.throws(() => validateIpRemarkSettings({ template: "x".repeat(200) }), /备注模板不能超过/);
+  assert.deepEqual(validateIpRemarkSettings({ enabled: true, endpoint: "", template: "{city} {isp}" }), {
+    enabled: true,
+    endpoint: "",
+    template: "{city} {isp}",
+  });
+});
+
+test("merges camouflage and auto-remark settings without clobbering each other", () => {
+  const existing = {
+    enabled: true,
+    accessPath: "secure-admin",
+    redirectUrl: "https://example.com/landing",
+    ipRemark: { enabled: true, endpoint: "http://ip-api.com/batch", template: "{country} {isp}" },
+  };
+  // 只提交伪装字段时保留已有的自动备注配置。
+  assert.deepEqual(validateSettingsPayload({ enabled: false, accessPath: "", redirectUrl: "/" }, existing), {
+    enabled: false,
+    accessPath: "",
+    redirectUrl: "/",
+    ipRemark: { enabled: true, endpoint: "http://ip-api.com/batch", template: "{country} {isp}" },
+  });
+  // 只提交 ipRemark 时保留已有的伪装配置。
+  assert.deepEqual(validateSettingsPayload({ ipRemark: { enabled: true, endpoint: "", template: "{city}" } }, existing), {
+    enabled: true,
+    accessPath: "secure-admin",
+    redirectUrl: "https://example.com/landing",
+    ipRemark: { enabled: true, endpoint: "", template: "{city}" },
+  });
+  assert.throws(() => validateSettingsPayload({}, existing), /设置内容无效/);
 });

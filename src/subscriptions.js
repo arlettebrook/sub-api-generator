@@ -8,13 +8,16 @@ import {
   KV_KEY_FILTER_RULES,
   KV_KEY_PREFERRED_DOMAINS,
   KV_KEY_PREFERRED_MANUAL,
+  KV_KEY_SETTINGS,
   KV_KEY_SUBS,
   normalizeFilterRules,
   normalizeBlacklist,
+  normalizeIpRemarkSettings,
   normalizeKvData,
   normalizeSourceKey,
 } from "./config.js";
 import { textResponse, withSecurityHeaders } from "./http.js";
+import { applyIpRemarks } from "./ip-info.js";
 import { matchRemarkRules } from "./remark-rules.js";
 
 const OUTBOUND_TIMEOUT_MS = 15000;
@@ -336,12 +339,16 @@ export async function resolvePreferredDomainRecords(domain, { force = false } = 
   return { records: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, merged[name] || []])), errors, providers };
 }
 
-async function fetchPreferredDomain(domain, force = false) {
-  const result = await resolvePreferredDomainRecords(domain, { force });
+async function fetchPreferredDomain(domain, options = {}) {
+  // 兼容旧的布尔参数写法：fetchPreferredDomain(domain, true) 等同于 force。
+  const opts = typeof options === "boolean" ? { force: options } : (options || {});
+  const result = await resolvePreferredDomainRecords(domain, { force: opts.force === true });
   const { records: resolvedRecords, errors, providers } = result;
   const records = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, (resolvedRecords[name] || []).map((value) => value.replace(/\.+$/, ""))]));
   // CNAME 已在解析阶段展开成 IP，输出节点只取 A/AAAA，避免把域名当成优选 IP。
-  const values = ["A", "AAAA"].flatMap((name) => (records[name] || []).map((value) => `${name === "AAAA" ? `[${value}]` : value}:443`));
+  const resolvedValues = ["A", "AAAA"].flatMap((name) => (records[name] || []).map((value) => `${name === "AAAA" ? `[${value}]` : value}:443`));
+  // 解析出来的 IP 默认没有备注，按设置查询归属地自动补上，再进入统一的过滤/去重流程。
+  const values = await applyIpRemarks(resolvedValues, opts.ipRemark);
   if (!values.length && errors.length === DNS_RECORD_TYPES.length) {
     const error = dnsError("DNS_ALL_PROVIDERS_FAILED", errors.map((item) => `${item.recordType}: ${item.message}`).join("；"), { attempts: errors.flatMap((item) => item.attempts || []) });
     error.sourceType = "domains";
@@ -749,7 +756,7 @@ function normalizeManualPreferredConfig(value) {
   });
 }
 
-function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, apiBlacklist, apiFilterRules, outputTransform = {}, manualConfig = [], includeManual = true, includeDisabledSources = false) {
+function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsConfig, blacklist, filterRules, apiBlacklist, apiFilterRules, outputTransform = {}, manualConfig = [], includeManual = true, includeDisabledSources = false, ipRemark = null) {
   return stableSerialize({
     selection: normalizeSourceSelection(sourceSelection),
     subs: subsConfig,
@@ -762,6 +769,7 @@ function makeAggregateCacheKey(sourceSelection, subsConfig, apisConfig, domainsC
     apiBlacklist,
     apiFilterRules,
     outputTransform,
+    ipRemark,
   });
 }
 
@@ -835,13 +843,14 @@ async function allSettledWithConcurrency(tasks, limit = SOURCE_CHECK_CONCURRENCY
 
 export async function handleRoot(env, sourceSelection, options = {}) {
   try {
-    const [subsConfig, apisConfig, domainsConfig, blacklistConfig, filterRulesConfig, manualPreferred] = await Promise.all([
+    const [subsConfig, apisConfig, domainsConfig, blacklistConfig, filterRulesConfig, manualPreferred, settingsConfig] = await Promise.all([
       env.KV.get(KV_KEY_SUBS, "json"),
       env.KV.get(KV_KEY_APIS, "json"),
       env.KV.get(KV_KEY_PREFERRED_DOMAINS, "json"),
       env.KV.get(KV_KEY_BLACKLIST, "json"),
       env.KV.get(KV_KEY_FILTER_RULES, "json"),
       env.KV.get(KV_KEY_PREFERRED_MANUAL, "json"),
+      env.KV.get(KV_KEY_SETTINGS, "json"),
     ]);
     const manualEntries = normalizeManualPreferredConfig(manualPreferred);
     const manualContent = manualEntries.map((entry) => entry.content).filter(Boolean).join("\n");
@@ -874,6 +883,8 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       if (trackStatus) recordSourceStatus(type, key, details);
     };
     const outputTransform = getOutputTransform(options);
+    // 优选域名解析出的 IP 默认没有备注，可按设置自动查询归属地补上备注。
+    const ipRemarkSettings = normalizeIpRemarkSettings(settingsConfig?.ipRemark);
     const selected = Array.isArray(sourceSelection) ? sourceSelection : null;
     // includeManual 由优选 API 的数据源模式决定：全部数据源时包含手动优选，手动选择模式下需显式勾选。
     const includeManual = options.includeManual !== false;
@@ -895,6 +906,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
       activeManualEntries,
       true,
       includeDisabledSources,
+      ipRemarkSettings,
     );
     pruneAggregateCache();
     const cached = aggregateCache.get(cacheKey);
@@ -1043,7 +1055,7 @@ export async function handleRoot(env, sourceSelection, options = {}) {
         try {
           const sourceFilters = getSourceFilters(entry);
           const sourceBlacklistRegex = getBlacklistRegex(sourceFilters.blacklist);
-          const rawValues = await fetchPreferredDomain(domain, options.forceDns === true);
+          const rawValues = await fetchPreferredDomain(domain, { force: options.forceDns === true, ipRemark: ipRemarkSettings });
           const sourceValues = filterPreferredIps(rawValues, sourceFilters.blacklist, sourceBlacklistRegex, sourceFilters.filterRules);
           const values = applyApiStageFilters(sourceValues, "preferred", apiBlacklist, apiBlacklistRegex, apiFilterRules);
           const timestamp = new Date().toISOString();

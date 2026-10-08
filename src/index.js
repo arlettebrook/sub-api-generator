@@ -1051,7 +1051,9 @@ async function handleGetSettings(env) {
 async function handlePostSettings(request, env) {
   let body;
   try {
-    body = validateSettingsPayload(await request.json());
+    // 伪装首页与优选 IP 自动备注共用同一个 KV，按字段合并避免互相覆盖。
+    const [payload, existing] = await Promise.all([request.json(), env.KV.get(KV_KEY_SETTINGS, "json")]);
+    body = validateSettingsPayload(payload, existing);
   } catch (error) {
     throw new Error(`请求 JSON 无效: ${error.message}`);
   }
