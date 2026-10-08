@@ -1072,7 +1072,7 @@ test("previews disabled managed sources", async () => {
   try {
     assert.deepEqual((await (await preview("subs", subKey)).json()).nodes, ["1.1.1.1:443#sub"]);
     assert.deepEqual((await (await preview("apis", apiKey)).json()).nodes, ["2.2.2.2:443#api"]);
-    assert.deepEqual((await (await preview("domains", domainKey)).json()).nodes, ["3.3.3.3:443", "[2001:db8::3]:443", "disabled.example.net:443"]);
+    assert.deepEqual((await (await preview("domains", domainKey)).json()).nodes, ["3.3.3.3:443", "[2001:db8::3]:443"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2240,8 +2240,8 @@ test("uses DNS provider failover and short cache with classified errors", async 
     const first = await resolvePreferredDomainRecords("failover-cache.example");
     assert.deepEqual(first.providers, { A: "google", AAAA: "google", CNAME: "google" });
     assert.deepEqual(first.records.A, ["192.0.2.10"]);
-    assert.equal(requests.filter((host) => host === "cloudflare-dns.com").length, 3);
-    assert.equal(requests.filter((host) => host === "dns.google").length, 3);
+    assert.equal(requests.filter((host) => host === "cloudflare-dns.com").length, 6);
+    assert.equal(requests.filter((host) => host === "dns.google").length, 6);
     const requestCount = requests.length;
     const second = await resolvePreferredDomainRecords("failover-cache.example");
     assert.deepEqual(second.records, first.records);
@@ -2302,8 +2302,8 @@ test("uses preferred domains as selectable live sources with port 443", async ()
   try {
     const response = await worker.fetch(new Request("https://example.test/domain_api", { headers: { Cookie: `auth=${hash}` } }), runtime);
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.text()).split("\n"), ["1.2.3.4:443", "[2001:db8::1]:443", "target.example.net:443"]);
-    assert.deepEqual(requests.sort(), ["A", "AAAA", "CNAME"]);
+    assert.deepEqual((await response.text()).split("\n"), ["1.2.3.4:443", "[2001:db8::1]:443"]);
+    assert.deepEqual(requests.sort(), ["A", "A", "AAAA", "AAAA", "CNAME", "CNAME"]);
 
     requests.length = 0;
     const statusResponse = await worker.fetch(new Request("https://example.test/api/source-status/check", {
@@ -2319,7 +2319,54 @@ test("uses preferred domains as selectable live sources with port 443", async ()
       AAAA: ["2001:db8::1"],
       CNAME: ["target.example.net"],
     });
-    assert.deepEqual(requests.sort(), ["A", "AAAA", "CNAME"]);
+    assert.deepEqual(requests.sort(), ["A", "A", "AAAA", "AAAA", "CNAME", "CNAME"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("resolves preferred domain CNAME chains to deduped IPs", async () => {
+  const domain = "pref.example.com";
+  const values = {
+    subs: {},
+    apis: {},
+    preferred_domains: {},
+    custom_apis: { chain_api: { enabled: true, remark: "", sourceMode: "selected", sources: [{ type: "domains", key: domain }] } },
+  };
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+  // pref -> mid -> edge，且 edge 反向指回 mid，用来验证多级解析不会死循环。
+  const zone = {
+    [domain]: { A: [], AAAA: ["2001:db8::1"], CNAME: ["mid.example.net."] },
+    "mid.example.net": { A: ["1.2.3.4"], AAAA: [], CNAME: ["edge.example.org."] },
+    "edge.example.org": { A: ["1.2.3.4", "5.6.7.8"], AAAA: ["2001:db8::1"], CNAME: ["mid.example.net."] },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (resource) => {
+    const url = new URL(String(resource));
+    if (url.hostname !== "cloudflare-dns.com") return originalFetch(resource);
+    const name = (url.searchParams.get("name") || "").toLowerCase();
+    const type = url.searchParams.get("type");
+    const code = type === "A" ? 1 : type === "AAAA" ? 28 : 5;
+    const entries = zone[name]?.[type] || [];
+    return new Response(JSON.stringify({ Status: 0, Answer: entries.map((data) => ({ type: code, data })) }), { status: 200 });
+  };
+  try {
+    const added = await worker.fetch(new Request("https://example.test/api/preferred-domains", {
+      method: "POST", headers, body: JSON.stringify({ domain }),
+    }), runtime);
+    assert.equal(added.status, 200);
+    const entry = await added.json();
+    // CNAME 链全部展开成 IP 并去重，CNAME 只作为链路记录保留。
+    assert.deepEqual(entry.records.A, ["1.2.3.4", "5.6.7.8"]);
+    assert.deepEqual(entry.records.AAAA, ["2001:db8::1"]);
+    assert.deepEqual(entry.records.CNAME, ["mid.example.net.", "edge.example.org"]);
+
+    const output = await worker.fetch(new Request("https://example.test/chain_api"), runtime);
+    assert.equal(output.status, 200);
+    // 输出里只有 IP:443，不再出现 CNAME 域名节点，重复 IP 已被去掉。
+    assert.deepEqual((await output.text()).split("\n").filter(Boolean), ["1.2.3.4:443", "5.6.7.8:443", "[2001:db8::1]:443"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

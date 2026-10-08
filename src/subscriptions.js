@@ -20,6 +20,7 @@ import { matchRemarkRules } from "./remark-rules.js";
 const OUTBOUND_TIMEOUT_MS = 15000;
 const DNS_TIMEOUT_MS = 5000;
 const DNS_CACHE_TTL_MS = 30000;
+const DNS_CNAME_MAX_DEPTH = 6;
 const FIXED_UUID = "00000000-0000-4000-8000-000000000000";
 const FIXED_HOST = "example.com";
 const UA_SUBS_FETCH = "v2r" + "ayN/edget" + "unnel (https://github.com/c" + "mliu/edget" + "unnel)";
@@ -240,8 +241,10 @@ async function resolveDnsRecord(domain, recordType, force = false) {
   finally { dnsInflight.delete(cacheKey); }
 }
 
-export async function resolvePreferredDomainRecords(domain, { force = false } = {}) {
-  const records = {};
+// 对单个域名并发查询 A/AAAA/CNAME。查询失败的类型返回空数组并记录错误，
+// 便于展开 CNAME 链时保持容错：单个类型失败不影响其它类型的结果。
+async function resolveDnsRecordSet(domain, force = false) {
+  const records = { A: [], AAAA: [], CNAME: [] };
   const errors = [];
   const providers = {};
   await Promise.all(DNS_RECORD_TYPES.map(async ({ name }) => {
@@ -250,22 +253,95 @@ export async function resolvePreferredDomainRecords(domain, { force = false } = 
       records[name] = result.values;
       providers[name] = result.provider;
     } catch (error) {
-      records[name] = [];
       errors.push({ type: "domains", key: domain, recordType: name, code: classifyDnsError(error), message: error.message || "DNS 查询失败", attempts: error.attempts || [] });
     }
   }));
-  return { records: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, records[name] || []])), errors, providers };
+  return { records, errors, providers };
+}
+
+function normalizeDnsName(value) {
+  return String(value ?? "").trim().replace(/\.+$/, "").toLowerCase();
+}
+
+// 优选域名解析到 CNAME 时继续沿链路向下查询，直到拿到 A/AAAA 的 IP。
+// 结果按 IP 去重，并用 visited 集合截断自引用/循环引用，避免死循环。
+async function resolveCnameChain(rootDomain, rootRecords, force) {
+  const ipv4 = [];
+  const ipv6 = [];
+  const seenIpv4 = new Set();
+  const seenIpv6 = new Set();
+  const addIps = (type, values) => {
+    const list = type === "A" ? ipv4 : ipv6;
+    const seen = type === "A" ? seenIpv4 : seenIpv6;
+    (Array.isArray(values) ? values : []).forEach((value) => {
+      const ip = normalizeDnsName(value);
+      if (!ip || seen.has(ip)) return;
+      seen.add(ip);
+      list.push(ip);
+    });
+  };
+  addIps("A", rootRecords.A);
+  addIps("AAAA", rootRecords.AAAA);
+  const visited = new Set([normalizeDnsName(rootDomain)]);
+  const chain = [];
+  const queue = [];
+  (Array.isArray(rootRecords.CNAME) ? rootRecords.CNAME : []).forEach((value) => {
+    const target = normalizeDnsName(value);
+    if (!target || visited.has(target)) return;
+    visited.add(target);
+    queue.push(target);
+  });
+  let depth = 0;
+  while (queue.length && depth < DNS_CNAME_MAX_DEPTH) {
+    depth += 1;
+    const batch = queue.splice(0, queue.length);
+    const resolved = await Promise.all(batch.map(async (target) => ({ target, set: await resolveDnsRecordSet(target, force) })));
+    for (const { target, set } of resolved) {
+      chain.push(target);
+      addIps("A", set.records.A);
+      addIps("AAAA", set.records.AAAA);
+      (Array.isArray(set.records.CNAME) ? set.records.CNAME : []).forEach((value) => {
+        const next = normalizeDnsName(value);
+        if (!next || visited.has(next)) return;
+        visited.add(next);
+        queue.push(next);
+      });
+    }
+  }
+  return { ipv4, ipv6, chain };
+}
+
+// CNAME 链上的目标同样记入 records.CNAME，按名称去重并保留原始写法（含结尾的点）。
+function mergeCnameChainRecords(records, chain) {
+  const seen = new Set();
+  const merged = [];
+  [...(Array.isArray(records.CNAME) ? records.CNAME : []), ...chain].forEach((value) => {
+    const key = normalizeDnsName(value);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(value);
+  });
+  return merged;
+}
+
+export async function resolvePreferredDomainRecords(domain, { force = false } = {}) {
+  const { records, errors, providers } = await resolveDnsRecordSet(domain, force);
+  // 解析结果里出现 CNAME 时继续解析到 IP，最终只保留去重后的 A/AAAA，CNAME 仅作记录展示。
+  const { ipv4, ipv6, chain } = await resolveCnameChain(domain, records, force);
+  const merged = {
+    A: ipv4,
+    AAAA: ipv6,
+    CNAME: mergeCnameChainRecords(records, chain),
+  };
+  return { records: Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, merged[name] || []])), errors, providers };
 }
 
 async function fetchPreferredDomain(domain, force = false) {
-  const valuesByType = {};
   const result = await resolvePreferredDomainRecords(domain, { force });
   const { records: resolvedRecords, errors, providers } = result;
   const records = Object.fromEntries(DNS_RECORD_TYPES.map(({ name }) => [name, (resolvedRecords[name] || []).map((value) => value.replace(/\.+$/, ""))]));
-  DNS_RECORD_TYPES.forEach(({ name }) => {
-    valuesByType[name] = (records[name] || []).map((value) => `${name === "AAAA" ? `[${value}]` : value}:443`);
-  });
-  const values = DNS_RECORD_TYPES.flatMap(({ name }) => valuesByType[name] || []);
+  // CNAME 已在解析阶段展开成 IP，输出节点只取 A/AAAA，避免把域名当成优选 IP。
+  const values = ["A", "AAAA"].flatMap((name) => (records[name] || []).map((value) => `${name === "AAAA" ? `[${value}]` : value}:443`));
   if (!values.length && errors.length === DNS_RECORD_TYPES.length) {
     const error = dnsError("DNS_ALL_PROVIDERS_FAILED", errors.map((item) => `${item.recordType}: ${item.message}`).join("；"), { attempts: errors.flatMap((item) => item.attempts || []) });
     error.sourceType = "domains";
