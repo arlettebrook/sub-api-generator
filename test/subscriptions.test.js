@@ -30,6 +30,10 @@ test("normalizes manual preferred nodes with default port and optional remark", 
   assert.equal(normalizeManualNodeLine("  openai.com#AI  "), "openai.com:443#AI");
   assert.equal(normalizeManualNodeLine("1.2.3.4"), "1.2.3.4:443");
   assert.equal(normalizeManualNodeLine("[2001:db8::1]"), "[2001:db8::1]:443");
+  // 不带方括号的 IPv6 同样按默认端口 443 处理。
+  assert.equal(normalizeManualNodeLine("2a0a:d687:f001::d8"), "[2a0a:d687:f001::d8]:443");
+  assert.equal(normalizeManualNodeLine("2a0a:d687:f001::d8#IPv6"), "[2a0a:d687:f001::d8]:443#IPv6");
+  assert.equal(normalizeManualNodeLine("1.2.3.4:0443#前导零"), "1.2.3.4:443#前导零");
   // 已写端口 / 备注的行保持原样。
   assert.equal(normalizeManualNodeLine("1.2.3.4:8443#企业"), "1.2.3.4:8443#企业");
   assert.equal(normalizeManualNodeLine("[2001:db8::1]:8443#v6"), "[2001:db8::1]:8443#v6");

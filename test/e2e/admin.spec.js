@@ -501,44 +501,48 @@ test.describe("manual preferred editor", () => {
     const marker = "e2e-" + testInfo.project.name;
     const unsorted = [
       "104.156.239.27:443#" + marker,
+      "104.156.239.15#" + marker,
       "104.156.239.15:443#" + marker,
       "2.2.2.2:8443#" + marker,
+      "[2602:100:1234::d8]:443#v6-" + marker,
+      "2a0a:d687:f001::d8#v6b-" + marker,
     ];
     await textarea.fill(unsorted.join("\n"));
-    await expect(page.locator("#preferredManualStats")).toHaveText("共 3 条");
+    await expect(page.locator("#preferredManualStats")).toHaveText("共 6 条");
 
-    // 一键排序：按 IPv4 各段数值排序，不按字符串比较。
+    // 一键排序：先去重（104.156.239.15 与 104.156.239.15:443 视为同一条），再按 IPv4 各段数值排序，
+    // 同时省略 443 端口，并去掉省略端口时 IPv6 的方括号。
     await page.locator("#preferredManualSortButton").click();
-    await expect(textarea).toHaveValue([
+    const sorted = [
       "2.2.2.2:8443#" + marker,
-      "104.156.239.15:443#" + marker,
-      "104.156.239.27:443#" + marker,
-    ].join("\n"));
+      "104.156.239.15#" + marker,
+      "104.156.239.27#" + marker,
+      "2602:100:1234::d8#v6-" + marker,
+      "2a0a:d687:f001::d8#v6b-" + marker,
+    ];
+    await expect(textarea).toHaveValue(sorted.join("\n"));
+    await expect(page.locator("#preferredManualStats")).toHaveText("共 5 条");
+    await expect(page.locator("#toast")).toContainText("已排序并去除 1 条重复");
 
-    // 保存后刷新页面，内容应从服务端回读（保持排序后的顺序）。
+    // 保存后刷新页面，内容应从服务端回读（保持规范写法和排序后的顺序）。
     await page.locator("#preferredManualSaveButton").click();
     await expect(page.locator("#toast")).toContainText("手动优选已保存");
     await expect(page.locator("#preferredManualSaveButton")).toBeDisabled();
-    const sorted = [
-      "2.2.2.2:8443#" + marker,
-      "104.156.239.15:443#" + marker,
-      "104.156.239.27:443#" + marker,
-    ];
     await page.reload();
     await expect(page.locator("#preferredManualText")).toHaveValue(sorted.join("\n"));
 
-    // 追加粘贴：新条目追加，已存在条目跳过。
+    // 追加粘贴：新条目按规范写法追加，已存在条目跳过；只写地址和不带方括号的 IPv6 都要支持。
     await page.evaluate(async (existing) => {
-      await navigator.clipboard.writeText([existing, "5.6.7.8:443#new-" + existing.split("#")[1]].join("\n"));
+      await navigator.clipboard.writeText([
+        existing,
+        "5.6.7.8:443#new-" + existing.split("#")[1],
+        "2001:db8::5#v6c-" + existing.split("#")[1],
+      ].join("\n"));
     }, "104.156.239.15:443#" + marker);
     await page.locator("#preferredManualAppendButton").click();
-    await expect(textarea).toHaveValue([
-      "2.2.2.2:8443#" + marker,
-      "104.156.239.15:443#" + marker,
-      "104.156.239.27:443#" + marker,
-      "5.6.7.8:443#new-" + marker,
-    ].join("\n"));
-    await expect(page.locator("#toast")).toContainText("已追加 1 条，跳过 1 条重复");
+    const appended = sorted.concat(["5.6.7.8#new-" + marker, "2001:db8::5#v6c-" + marker]);
+    await expect(textarea).toHaveValue(appended.join("\n"));
+    await expect(page.locator("#toast")).toContainText("已追加 2 条，跳过 1 条重复");
 
     // 复制：剪贴板内容与文本框一致（Windows 剪贴板会把换行规范成 CRLF，先归一再比较）。
     await page.locator("#preferredManualSaveButton").click();
@@ -548,18 +552,18 @@ test.describe("manual preferred editor", () => {
     await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n"))
       .toBe(await textarea.inputValue());
 
-    // 覆盖粘贴：用剪贴板内容整体替换（使用页面自定义确认弹窗）。
+    // 覆盖粘贴：用剪贴板内容整体替换（使用页面自定义确认弹窗），同样整理成规范写法。
     const savedValue = await textarea.inputValue();
     await page.evaluate(async (suffix) => {
-      await navigator.clipboard.writeText(["7.7.7.7:443#over-" + suffix, "8.8.8.8:443#over-" + suffix].join("\n"));
+      await navigator.clipboard.writeText(["[2602:100:1234::d8]:443#over-" + suffix, "7.7.7.7:443#over-" + suffix].join("\n"));
     }, marker);
     await page.locator("#preferredManualOverwriteButton").click();
     await expect(page.locator("#preferredManualDialog")).toBeVisible();
     await expect(page.locator("#preferredManualDialog")).toContainText("确认覆盖内容");
     await page.locator("#confirmPreferredManualDialogButton").click();
     await expect(textarea).toHaveValue([
-      "7.7.7.7:443#over-" + marker,
-      "8.8.8.8:443#over-" + marker,
+      "2602:100:1234::d8#over-" + marker,
+      "7.7.7.7#over-" + marker,
     ].join("\n"));
     await expect(page.locator("#toast")).toContainText("已用剪贴板内容覆盖，共 2 条");
 

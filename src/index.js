@@ -44,6 +44,7 @@ import { adminHTML } from "./admin-page.js";
 import { adminClientScript } from "./admin-client.js";
 import { adminStyle } from "./admin-style.js";
 import { loginPage } from "./login-page.js";
+import { canonicalizeManualNodeLine } from "./manual-nodes.js";
 import {
   DEFAULT_WEBDAV_FILENAME,
   isWebdavConfigured,
@@ -649,8 +650,9 @@ async function handleDeletePreferredDomain(request, env) {
   return pagesJsonResponse({ ok: true });
 }
 
-// 手动优选以整段文本保存，一行一条 `地址:端口#备注`；保存时不逐行强校验，
+// 手动优选以整段文本保存，一行一条 `地址[:端口][#备注]`；保存时不逐行强校验，
 // 无法识别的行只计数提示，不参与优选 API 输出（由 subscriptions 过滤）。
+// 保存时统一整理成规范写法：省略 443 端口，省略端口时 IPv6 去掉方括号。
 function normalizePreferredManualContent(content) {
   if (typeof content !== "string") throw new Error("手动优选内容必须是字符串");
   if (content.length > MAX_MANUAL_ENTRIES * MAX_MANUAL_LINE_LENGTH) {
@@ -667,7 +669,12 @@ function normalizePreferredManualContent(content) {
       throw new Error(`单行内容过长（最多 ${MAX_MANUAL_LINE_LENGTH} 个字符）: ${line.slice(0, 60)}`);
     }
   }
-  return entries.join("\n");
+  return entries.map(canonicalizeManualNodeLine).join("\n");
+}
+
+// 读取历史数据时同样整理成规范写法，让页面上显示的一直是省略 443 端口的形式。
+function canonicalizePreferredManualContent(content) {
+  return String(content ?? "").split("\n").map(canonicalizeManualNodeLine).filter(Boolean).join("\n");
 }
 
 function preferredManualStats(content) {
@@ -719,7 +726,10 @@ async function getPreferredManualSourceSelection(env) {
 
 async function handleGetPreferredManual(env) {
   const data = await env.KV.get(KV_KEY_PREFERRED_MANUAL, "json");
-  if (isPlainObject(data) && typeof data.content === "string") return pagesJsonResponse({ content: data.content, updatedAt: data.updatedAt ?? null, ...preferredManualStats(data.content) });
+  if (isPlainObject(data) && typeof data.content === "string") {
+    const content = canonicalizePreferredManualContent(data.content);
+    return pagesJsonResponse({ content, updatedAt: data.updatedAt ?? null, ...preferredManualStats(content) });
+  }
   let items = {};
   try { items = normalizePreferredManualData(data); } catch { items = {}; }
   if (!Object.keys(items).length) return pagesJsonResponse({ content: "", updatedAt: null, count: 0 });

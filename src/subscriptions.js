@@ -18,6 +18,7 @@ import {
 } from "./config.js";
 import { textResponse, withSecurityHeaders } from "./http.js";
 import { applyIpRemarks } from "./ip-info.js";
+import { normalizeManualNodeLine } from "./manual-nodes.js";
 import { matchRemarkRules } from "./remark-rules.js";
 
 const OUTBOUND_TIMEOUT_MS = 15000;
@@ -32,9 +33,6 @@ const HTTP_PROTOCOL_REGEX = /^https?:\/\//i;
 const NODE_ADDRESS_REGEX = /:\/\/[^@]+@([^?]+)/;
 const NODE_REMARK_REGEX = /#(.+)$/;
 const NODE_MATCH_REGEX = /(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+):(\d+)/;
-const MANUAL_HOST_ONLY_REGEX = /^(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+)$/;
-const MANUAL_IP_LITERAL_REGEX = /^(\[?\d{1,3}(?:\.\d{1,3}){3}\]?|\[[0-9a-fA-F:]+\])$/;
-const MANUAL_DEFAULT_PORT = "443";
 const AGGREGATE_CACHE_TTL_MS = 15000;
 const AGGREGATE_CACHE_MAX_ENTRIES = 128;
 const SOURCE_CHECK_CONCURRENCY = 6;
@@ -109,24 +107,6 @@ function parsePreferredIpLineDetail(line, filterRules = []) {
 function parsePreferredIpLine(line, filterRules = DEFAULT_FILTER_RULES) {
   const parsed = parsePreferredIpLineDetail(line, filterRules);
   return parsed ? parsed.value : null;
-}
-
-// 手动优选条目支持“地址[:端口][#备注]”：省略端口时默认 443，省略备注也能识别。
-// 只写地址的行要求它像 IP 或域名，避免把无效文本当成节点；无法识别的行原样返回，
-// 交由 filterPreferredIps 统一按无效处理。
-function normalizeManualNodeLine(line) {
-  const text = String(line ?? "").trim();
-  if (!text) return "";
-  const hashIndex = text.indexOf("#");
-  const base = (hashIndex >= 0 ? text.slice(0, hashIndex) : text).trim();
-  const remark = hashIndex >= 0 ? text.slice(hashIndex + 1) : "";
-  if (NODE_MATCH_REGEX.test(base)) return text;
-  const hostOnly = MANUAL_HOST_ONLY_REGEX.exec(base);
-  if (!hostOnly) return text;
-  const host = hostOnly[1];
-  if (!MANUAL_IP_LITERAL_REGEX.test(host) && !host.includes(".")) return text;
-  const node = `${host}:${MANUAL_DEFAULT_PORT}`;
-  return remark ? `${node}#${remark}` : node;
 }
 
 function decodeSubscriptionBody(content) {

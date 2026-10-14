@@ -1426,7 +1426,7 @@ test("backs up and restores all configuration data", async () => {
   assert.deepEqual(backup.data.blacklist, ["foo", "bar"]);
   assert.deepEqual(backup.data.filterRules, ["|"]);
   assert.deepEqual(backup.data.preferredDomains["example.com"].records.A, ["1.2.3.4"]);
-  assert.equal(backup.data.preferredManual.content, "5.6.7.8:443#x\n9.9.9.9:443#y");
+  assert.equal(backup.data.preferredManual.content, "5.6.7.8#x\n9.9.9.9#y");
   assert.equal(backup.data.settings.accessPath, "old-entry");
 
   const restoredKv = {};
@@ -1444,7 +1444,7 @@ test("backs up and restores all configuration data", async () => {
   assert.equal(restoreResult.restored.settings, true);
 
   assert.deepEqual(restoredKv.source_status, {});
-  assert.equal(restoredKv.preferred_manual.content, "5.6.7.8:443#x\n9.9.9.9:443#y");
+  assert.equal(restoredKv.preferred_manual.content, "5.6.7.8#x\n9.9.9.9#y");
   const subsResponse = await worker.fetch(new Request("https://example.test/api/subs", { headers: authHeaders }), restoreRuntime);
   assert.deepEqual(await subsResponse.json(), { "sub.example/a": { remark: "sub" } });
   const settingsResponse = await worker.fetch(new Request("https://example.test/api/settings", { headers: authHeaders }), restoreRuntime);
@@ -1837,19 +1837,36 @@ test("saves and serves manual preferred entries", async () => {
   const saved = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
     method: "POST",
     headers,
-    body: JSON.stringify({ content: "  104.156.239.15:443#美国01  \n\n104.156.239.16:8443#美国02\n" }),
+    body: JSON.stringify({
+      content: [
+        "  104.156.239.15:443#美国01  ",
+        "",
+        "104.156.239.16:8443#美国02",
+        "[2602:1a41:d00:d417:a06:407c:798d:7455]:443#v6-443",
+        "2a0a:d687:f001::d8#v6-默认端口",
+        "1.2.3.4",
+      ].join("\n"),
+    }),
   }), runtime);
   assert.equal(saved.status, 200);
   const savedResult = await saved.json();
   assert.equal(savedResult.ok, true);
-  assert.equal(savedResult.content, "104.156.239.15:443#美国01\n104.156.239.16:8443#美国02");
-  assert.equal(savedResult.count, 2);
+  // 保存时统一整理成规范写法：端口 443 省略、省略端口时 IPv6 去掉方括号。
+  const canonicalContent = [
+    "104.156.239.15#美国01",
+    "104.156.239.16:8443#美国02",
+    "2602:1a41:d00:d417:a06:407c:798d:7455#v6-443",
+    "2a0a:d687:f001::d8#v6-默认端口",
+    "1.2.3.4",
+  ].join("\n");
+  assert.equal(savedResult.content, canonicalContent);
+  assert.equal(savedResult.count, 5);
   assert.ok(savedResult.updatedAt > 0);
-  assert.equal(values.preferred_manual.content, "104.156.239.15:443#美国01\n104.156.239.16:8443#美国02");
+  assert.equal(values.preferred_manual.content, canonicalContent);
 
   const readBack = await worker.fetch(new Request("https://example.test/api/preferred-manual", { headers }), runtime);
   const readBackResult = await readBack.json();
-  assert.equal(readBackResult.count, 2);
+  assert.equal(readBackResult.count, 5);
   assert.equal(readBackResult.updatedAt, values.preferred_manual.updatedAt);
 
   const unauthenticated = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
@@ -1866,6 +1883,15 @@ test("saves and serves manual preferred entries", async () => {
     body: JSON.stringify({ content: Array.from({ length: 501 }, (_, i) => `1.2.3.${i % 256}:${40000 + i}#x`).join("\n") }),
   }), runtime);
   assert.equal(tooMany.status, 400);
+
+  // 旧版单列表数据（未规范写法）在读取时也会整理成省略 443 端口的形式。
+  const legacyValues = { preferred_manual: { content: "[2001:db8::1]:443#v6\n8.8.8.8:443#v4", updatedAt: 1730000000000 } };
+  const legacyRuntime = env({ KV: createKv(legacyValues) });
+  const legacyRead = await worker.fetch(new Request("https://example.test/api/preferred-manual", { headers }), legacyRuntime);
+  const legacyResult = await legacyRead.json();
+  assert.equal(legacyResult.content, "2001:db8::1#v6\n8.8.8.8#v4");
+  assert.equal(legacyResult.count, 2);
+  assert.equal(legacyResult.updatedAt, 1730000000000);
 
   const invalid = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
     method: "POST",

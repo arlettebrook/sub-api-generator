@@ -1,4 +1,12 @@
 import { DEFAULT_IP_REMARK_TEMPLATE, FILTER_REASON_CATEGORIES, FILTER_REASON_META } from "./config.js";
+import {
+  canonicalizeManualNodeLine,
+  compareManualEntries,
+  formatManualEntry,
+  isIpv4Literal,
+  isIpv6Literal,
+  parseManualEntry,
+} from "./manual-nodes.js";
 import { REMARK_SYMBOL_REGEX, matchRemarkRules } from "./remark-rules.js";
 
 const FILTER_REASON_META_JSON = JSON.stringify(FILTER_REASON_META);
@@ -15,6 +23,12 @@ const ADMIN_PREAMBLE = [
   `const FILTER_REASON = ${FILTER_REASON_KEYS_JSON};`,
   `const REMARK_SYMBOL_REGEX = new RegExp(${JSON.stringify(REMARK_SYMBOL_REGEX.source)}, ${JSON.stringify(REMARK_SYMBOL_REGEX.flags)});`,
   `const DEFAULT_IP_REMARK_TEMPLATE = ${JSON.stringify(DEFAULT_IP_REMARK_TEMPLATE)};`,
+  isIpv6Literal.toString(),
+  isIpv4Literal.toString(),
+  parseManualEntry.toString(),
+  formatManualEntry.toString(),
+  canonicalizeManualNodeLine.toString(),
+  compareManualEntries.toString(),
   matchRemarkRules.toString(),
   "",
 ].join("\n");
@@ -2569,9 +2583,8 @@ async function addPreferredDomain() {
 }
 
 // ======================== 手动优选管理 ========================
-// 与 subscriptions.js 的 NODE_MATCH_REGEX 保持一致：地址[:端口][#备注]，省略端口时默认 443，缺失备注也能识别。
-const MANUAL_NODE_REGEX = /(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+)(?::(\\d+))?/;
-const MANUAL_IP_LITERAL_REGEX = /^(\\[?\\d{1,3}(?:\\.\\d{1,3}){3}\\]?|\\[[0-9a-fA-F:]+\\])$/;
+// 条目解析和规范化统一复用 manual-nodes.js 的函数（源码已在脚本开头注入）：
+// 一行一条“地址[:端口][#备注]”，省略端口时默认 443，IPv6 可以不带方括号。
 let preferredManualSavedContent = '';
 let preferredManualDirty = false;
 let preferredManualDialogResolver = null;
@@ -2595,20 +2608,6 @@ function preferredManualLines(value) {
   return String(value || '').split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
 }
 
-function parseManualNodeLine(line) {
-  const text = String(line || '').trim();
-  const hashIndex = text.indexOf('#');
-  const base = (hashIndex >= 0 ? text.slice(0, hashIndex) : text).trim();
-  const remark = hashIndex >= 0 ? text.slice(hashIndex + 1).trim() : '';
-  const match = MANUAL_NODE_REGEX.exec(base);
-  if (!match) return null;
-  const host = match[1];
-  const port = match[2] || '';
-  // 只写地址时要求它像 IP 或域名，避免把无效文本当成节点；未写端口统一按 443 处理。
-  if (!port && !MANUAL_IP_LITERAL_REGEX.test(host) && !host.includes('.')) return null;
-  return { host, port: port || '443', remark };
-}
-
 function updatePreferredManualMeta() {
   const textarea = $('preferredManualText');
   const stats = $('preferredManualStats');
@@ -2617,7 +2616,7 @@ function updatePreferredManualMeta() {
   if (!textarea || !stats || !saveButton) return;
   const lines = preferredManualLines(textarea.value);
   const invalidIndexes = [];
-  lines.forEach((line, index) => { if (!parseManualNodeLine(line)) invalidIndexes.push(index + 1); });
+  lines.forEach((line, index) => { if (!parseManualEntry(line)) invalidIndexes.push(index + 1); });
   if (preferredManualItems[preferredManualId]) preferredManualItems[preferredManualId] = { ...preferredManualItems[preferredManualId], name: $('preferredManualName')?.value?.trim() || preferredManualId, content: textarea.value };
   preferredManualDirty = JSON.stringify(preferredManualItems) !== JSON.stringify(preferredManualSavedItems);
   saveButton.disabled = !preferredManualDirty;
@@ -2759,12 +2758,14 @@ async function appendPastePreferredManual() {
   if (text === null) return;
   const pasted = preferredManualLines(text);
   if (!pasted.length) { showToast('剪贴板中没有可追加的条目', 'warning'); return; }
-  const seen = new Set(preferredManualLines(textarea.value));
+  // 去重按规范写法比较：104.156.239.15 与 104.156.239.15:443、[2001:db8::1]:443 与 2001:db8::1 视为同一条。
+  const seen = new Set(preferredManualLines(textarea.value).map((line) => canonicalizeManualNodeLine(line)));
   const added = [];
   for (const line of pasted) {
-    if (seen.has(line)) continue;
-    seen.add(line);
-    added.push(line);
+    const canonical = canonicalizeManualNodeLine(line);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    added.push(canonical);
   }
   if (!added.length) { showToast('没有新增条目，跳过 ' + pasted.length + ' 条重复', 'warning'); return; }
   const current = textarea.value.replace(/\\s+$/, '');
@@ -2775,36 +2776,32 @@ async function appendPastePreferredManual() {
   showToast('已追加 ' + added.length + ' 条' + (pasted.length - added.length ? '，跳过 ' + (pasted.length - added.length) + ' 条重复' : '') + '，保存后生效', 'success');
 }
 
-function compareManualNodeLines(left, right) {
-  const a = parseManualNodeLine(left) || { host: left, port: '', remark: '' };
-  const b = parseManualNodeLine(right) || { host: right, port: '', remark: '' };
-  const ipv4 = /^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$/;
-  const aMatch = ipv4.exec(a.host);
-  const bMatch = ipv4.exec(b.host);
-  if (aMatch && bMatch) {
-    for (let i = 1; i <= 4; i += 1) {
-      const diff = Number(aMatch[i]) - Number(bMatch[i]);
-      if (diff) return diff;
-    }
-  } else {
-    const diff = a.host.localeCompare(b.host, 'zh-CN', { numeric: true });
-    if (diff) return diff;
-  }
-  const portDiff = (Number(a.port) || 0) - (Number(b.port) || 0);
-  if (portDiff) return portDiff;
-  return a.remark.localeCompare(b.remark, 'zh-CN');
-}
-
+// 一键排序：先去重，再按地址、端口和备注排序，同时把条目整理成规范写法
+// （省略 443 端口；省略端口时 IPv6 去掉方括号）。无法识别的行原样保留并排在最后。
 function sortPreferredManual() {
   const textarea = $('preferredManualText');
   if (!textarea) return;
   const lines = preferredManualLines(textarea.value);
   if (lines.length < 2) { showToast('至少需要两条内容才能排序', 'warning'); return; }
   const hadTrailingNewline = /\\n\\s*$/.test(textarea.value);
-  lines.sort(compareManualNodeLines);
-  textarea.value = lines.join('\\n') + (hadTrailingNewline ? '\\n' : '');
+  const seen = new Set();
+  const entries = [];
+  const unrecognized = [];
+  let duplicates = 0;
+  for (const line of lines) {
+    const canonical = canonicalizeManualNodeLine(line);
+    if (seen.has(canonical)) { duplicates += 1; continue; }
+    seen.add(canonical);
+    const entry = parseManualEntry(line);
+    if (entry) entries.push({ canonical, entry });
+    else unrecognized.push(canonical);
+  }
+  entries.sort((a, b) => compareManualEntries(a.entry, b.entry));
+  unrecognized.sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
+  const sorted = entries.map((item) => item.canonical).concat(unrecognized);
+  textarea.value = sorted.join('\\n') + (hadTrailingNewline ? '\\n' : '');
   updatePreferredManualMeta();
-  showToast('已按地址、端口排序，保存后生效', 'success');
+  showToast('已排序' + (duplicates ? '并去除 ' + duplicates + ' 条重复' : '') + '，443 端口与 IPv6 方括号已省略，保存后生效', 'success');
 }
 
 function openPreferredManualDialog({ title, message, input = false, value = '', confirmLabel = '确认' }) {
@@ -2881,7 +2878,7 @@ async function overwritePastePreferredManual() {
     });
     if (!confirmed) return;
   }
-  textarea.value = pasted.join('\\n');
+  textarea.value = pasted.map((line) => canonicalizeManualNodeLine(line)).join('\\n');
   updatePreferredManualMeta();
   showToast('已用剪贴板内容覆盖，共 ' + pasted.length + ' 条，保存后生效', 'success');
 }
