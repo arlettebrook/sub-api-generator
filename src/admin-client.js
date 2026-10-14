@@ -6,7 +6,10 @@ import {
   isIpv4Literal,
   isIpv6Literal,
   ipv6SortKey,
+  manualEntryFamily,
+  normalizeManualPort,
   parseManualEntry,
+  splitIpv6Groups,
 } from "./manual-nodes.js";
 import { REMARK_SYMBOL_REGEX, matchRemarkRules } from "./remark-rules.js";
 
@@ -24,6 +27,15 @@ const ADMIN_PREAMBLE = [
   `const FILTER_REASON = ${FILTER_REASON_KEYS_JSON};`,
   `const REMARK_SYMBOL_REGEX = new RegExp(${JSON.stringify(REMARK_SYMBOL_REGEX.source)}, ${JSON.stringify(REMARK_SYMBOL_REGEX.flags)});`,
   `const DEFAULT_IP_REMARK_TEMPLATE = ${JSON.stringify(DEFAULT_IP_REMARK_TEMPLATE)};`,
+  // 下面这些函数是“源码注入”到浏览器里执行的（.toString()），源码会先经过打包器处理：
+  // Cloudflare Pages/wrangler 用 esbuild 打包 _worker.js，keepNames 默认开启，函数表达式会被
+  // 改写成 `__name(fn, "name")`。页面作用域里没有这个辅助函数，注入的代码一旦引用它就会抛
+  // `ReferenceError: __name is not defined`（手动优选列表会因此加载失败）。这里补一个空实现兜底，
+  // 同时要求注入的函数内部不要再出现函数表达式（见 manual-nodes.js 文件头注释）。
+  `const __name = (fn) => fn;`,
+  normalizeManualPort.toString(),
+  splitIpv6Groups.toString(),
+  manualEntryFamily.toString(),
   isIpv6Literal.toString(),
   isIpv4Literal.toString(),
   ipv6SortKey.toString(),

@@ -9,7 +9,11 @@
 // - 省略备注也能识别；
 // - 无法识别的行原样保留，由过滤流程统一按无效处理。
 // 这些函数同时供服务端和 /admin-client.js 使用：管理页脚本通过函数源码注入，所以函数内部
-// 只能引用这里声明的函数，不要引用模块作用域里的其它变量。
+// 只能引用这里声明的函数，不要引用模块作用域里的其它变量；也不要使用“变量 = 函数表达式”
+// 这类写法（`const f = () => …`、对象字面量里的 `f: () => …` 等）。Cloudflare Pages 用
+// esbuild 打包 _worker.js（keepNames 默认开启）时会把这些函数表达式改写成
+// `__name(fn, "f")`，而注入页面的代码运行在页面作用域，那里没有 __name，调用时会直接抛
+// `ReferenceError: __name is not defined`。需要辅助逻辑就写成顶层函数声明并加进 ADMIN_PREAMBLE。
 
 // IPv6 字面量校验：支持 “::” 缩写、尾部 IPv4 混写（::ffff:1.2.3.4）和 zone id（fe80::1%eth0）。
 function isIpv6Literal(value) {
@@ -26,6 +30,12 @@ function isIpv4Literal(value) {
   return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
 }
 
+// 端口必须是 1-65535 的数字，顺便去掉前导零，避免同一条节点出现多种写法。
+function normalizeManualPort(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 1 && number <= 65535 ? String(number) : null;
+}
+
 // 解析一行手动优选条目：返回 { host, port, remark }（port 为字符串，缺失时补 443），无法识别返回 null。
 function parseManualEntry(line) {
   const text = String(line ?? "").trim();
@@ -35,18 +45,13 @@ function parseManualEntry(line) {
   const remark = hashIndex >= 0 ? text.slice(hashIndex + 1).trim() : "";
   if (!base) return null;
   const defaultPort = "443";
-  // 端口必须是 1-65535 的数字，顺便去掉前导零，避免同一条节点出现多种写法。
-  const normalizePort = (value) => {
-    const number = Number(value);
-    return Number.isInteger(number) && number >= 1 && number <= 65535 ? String(number) : null;
-  };
   // 带方括号的地址（IPv6，同时兼容 [IPv4]）：方括号里是纯地址，端口写在方括号外。
   const bracketed = /^\[([^\]]+)\](?::(\d{1,5}))?$/.exec(base);
   if (bracketed) {
     const host = bracketed[1];
     if (!isIpv6Literal(host) && !isIpv4Literal(host)) return null;
     if (!bracketed[2]) return { host, port: defaultPort, remark };
-    const port = normalizePort(bracketed[2]);
+    const port = normalizeManualPort(bracketed[2]);
     return port ? { host, port, remark } : null;
   }
   // 不带方括号的 IPv6：末尾接的 “:数字” 能当成端口、且前面的部分同样合法时按端口处理，
@@ -54,7 +59,7 @@ function parseManualEntry(line) {
   // 代价是末段恰好是纯数字的地址必须写成 [地址]，否则会被当成长度为 1-65535 的端口。
   const barePort = /^(.+):(\d{1,5})$/.exec(base);
   if (barePort && isIpv6Literal(barePort[1])) {
-    const port = normalizePort(barePort[2]);
+    const port = normalizeManualPort(barePort[2]);
     if (port) return { host: barePort[1], port, remark };
   }
   // 整段是 IPv6 地址时只能使用默认端口 443；其它端口请写方括号。
@@ -68,7 +73,7 @@ function parseManualEntry(line) {
     if (!isIpv4Literal(host) && !host.includes(".")) return null;
     return { host, port: defaultPort, remark };
   }
-  const port = normalizePort(plain[2]);
+  const port = normalizeManualPort(plain[2]);
   return port ? { host, port, remark } : null;
 }
 
@@ -97,6 +102,11 @@ function normalizeManualNodeLine(line) {
   return entry.remark ? `${base}#${entry.remark}` : base;
 }
 
+// 把地址片段按 “:” 拆成非空分组（供 ipv6SortKey 使用）。
+function splitIpv6Groups(part) {
+  return part ? part.split(":").filter(Boolean) : [];
+}
+
 // IPv6 排序键：把地址展开成 8 组、每组 4 位十六进制的定长字符串（等同于 128 位数值），
 // 这样按字符串比较就是按地址数值比较。支持 “::” 缩写、尾部 IPv4 混写和 zone id。
 function ipv6SortKey(value) {
@@ -106,9 +116,8 @@ function ipv6SortKey(value) {
   const doubleIndex = address.indexOf("::");
   const head = doubleIndex >= 0 ? address.slice(0, doubleIndex) : address;
   const tail = doubleIndex >= 0 ? address.slice(doubleIndex + 2) : "";
-  const split = (part) => (part ? part.split(":").filter(Boolean) : []);
-  const headGroups = split(head);
-  let tailGroups = split(tail);
+  const headGroups = splitIpv6Groups(head);
+  let tailGroups = splitIpv6Groups(tail);
   // 尾部 IPv4 混写（::ffff:1.2.3.4）换算成两组十六进制。
   if (tailGroups.length) {
     const last = tailGroups[tailGroups.length - 1];
@@ -129,15 +138,20 @@ function ipv6SortKey(value) {
   if (groups.length !== 8) return null;
   return groups.map((group) => group.padStart(4, "0").toLowerCase()).join("");
 }
+
+// 地址类型分组：0 = IPv4、1 = IPv6、2 = 域名（三类分开排列用）。
+function manualEntryFamily(host, ipv4) {
+  return ipv4 ? 0 : (isIpv6Literal(host) ? 1 : 2);
+}
+
 // 排序：IPv4 按每段数值、IPv6 按 128 位地址数值、域名按自然顺序，再比较端口和备注；三类地址分开排列（IPv4 在前、IPv6 其次、域名最后）。
 function compareManualEntries(left, right) {
   const aHost = String(left?.host ?? "");
   const bHost = String(right?.host ?? "");
   const aIpv4 = isIpv4Literal(aHost);
   const bIpv4 = isIpv4Literal(bHost);
-  const family = (host, ipv4) => (ipv4 ? 0 : isIpv6Literal(host) ? 1 : 2);
-  const aFamily = family(aHost, aIpv4);
-  const bFamily = family(bHost, bIpv4);
+  const aFamily = manualEntryFamily(aHost, aIpv4);
+  const bFamily = manualEntryFamily(bHost, bIpv4);
   if (aFamily !== bFamily) return aFamily - bFamily;
   let hostDiff = 0;
   if (aIpv4 && bIpv4) {
@@ -158,4 +172,4 @@ function compareManualEntries(left, right) {
   return String(left?.remark ?? "").localeCompare(String(right?.remark ?? ""), "zh-CN");
 }
 
-export { canonicalizeManualNodeLine, compareManualEntries, formatManualEntry, ipv6SortKey, isIpv4Literal, isIpv6Literal, normalizeManualNodeLine, parseManualEntry };
+export { canonicalizeManualNodeLine, compareManualEntries, formatManualEntry, ipv6SortKey, isIpv4Literal, isIpv6Literal, manualEntryFamily, normalizeManualNodeLine, normalizeManualPort, parseManualEntry, splitIpv6Groups };
