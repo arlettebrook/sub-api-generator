@@ -4,6 +4,7 @@ import {
   canonicalizeManualNodeLine,
   compareManualEntries,
   formatManualEntry,
+  ipv6SortKey,
   isIpv4Literal,
   isIpv6Literal,
   normalizeManualNodeLine,
@@ -113,5 +114,67 @@ test("sorts entries by address family, address value, port and remark", () => {
     // 域名排在最后，先比端口再比备注。
     "example.com#d",
     "example.com:8443#d",
+  ]);
+});
+
+
+test("parses bare IPv6 entries that carry an inline port", () => {
+  // 用户直接粘贴的写法：不带方括号的 IPv6 末尾可以接端口。
+  assert.deepEqual(parseManualEntry("2a0e:97c0:3f0:1::156b:443"), { host: "2a0e:97c0:3f0:1::156b", port: "443", remark: "" });
+  assert.deepEqual(parseManualEntry("2a0e:97c0:3f0:1::156b:8443"), { host: "2a0e:97c0:3f0:1::156b", port: "8443", remark: "" });
+  assert.deepEqual(parseManualEntry("2a0e:97c0:3f0:1::156b:443#香港"), { host: "2a0e:97c0:3f0:1::156b", port: "443", remark: "香港" });
+  // 去掉 “:端口” 后不是合法 IPv6 时整段按地址解析：末段是纯数字的地址请写方括号。
+  assert.deepEqual(parseManualEntry("2a0e:97c0:3f0:1::1234"), { host: "2a0e:97c0:3f0:1::1234", port: "443", remark: "" });
+  assert.deepEqual(parseManualEntry("2a0e:97c0:3f0:1::156b:0"), { host: "2a0e:97c0:3f0:1::156b:0", port: "443", remark: "" });
+  assert.deepEqual(parseManualEntry("[2a0e:97c0:3f0:1::1234]:8443"), { host: "2a0e:97c0:3f0:1::1234", port: "8443", remark: "" });
+  // IPv4 混写的大小写写法都能识别。
+  assert.deepEqual(parseManualEntry("::FFFF:1.2.3.4"), { host: "::FFFF:1.2.3.4", port: "443", remark: "" });
+});
+
+test("deduplicates equivalent IPv6 writings through the canonical form", () => {
+  // “带 443 端口”“不带端口”“带方括号”都整理成同一条，一键排序因此能去重。
+  const canonical = [...new Set([
+    "2a0e:97c0:3f0:1::156b:443",
+    "2a0e:97c0:3f0:1::156b",
+    "2a0e:97c0:3f0:1::156b",
+    "[2a0e:97c0:3f0:1::156b]:443",
+  ].map((line) => canonicalizeManualNodeLine(line)))];
+  assert.deepEqual(canonical, ["2a0e:97c0:3f0:1::156b"]);
+  assert.equal(canonicalizeManualNodeLine("2a0e:97c0:3f0:1::156b:443"), "2a0e:97c0:3f0:1::156b");
+  // 非 443 端口保留方括号，避免和地址自身的冒号混淆。
+  assert.equal(canonicalizeManualNodeLine("2a0e:97c0:3f0:1::156b:8443"), "[2a0e:97c0:3f0:1::156b]:8443");
+});
+
+test("builds fixed-width IPv6 sort keys for numeric ordering", () => {
+  assert.equal(ipv6SortKey("2a0e:97c0:3f0:1::156b"), "2a0e97c003f00001000000000000156b");
+  assert.equal(ipv6SortKey("2a0e:97c0:3f0:1::46e"), "2a0e97c003f00001000000000000046e");
+  assert.equal(ipv6SortKey("::1"), "00000000000000000000000000000001");
+  // 按 128 位数值比较：46e < 156b（按字符串比较会得出 “156b” < “46e” 的反向结果）。
+  assert.ok(ipv6SortKey("2a0e:97c0:3f0:1::46e") < ipv6SortKey("2a0e:97c0:3f0:1::156b"));
+  // 尾部 IPv4 混写和 zone id 也能展开。
+  assert.equal(ipv6SortKey("::FFFF:1.2.3.4"), "00000000000000000000ffff01020304");
+  assert.equal(ipv6SortKey("fe80::1%eth0"), "fe800000000000000000000000000001");
+  // 非 IPv6 没有排序键，排序时退回字符串比较。
+  assert.equal(ipv6SortKey("104.156.239.15"), null);
+  assert.equal(ipv6SortKey("example.com"), null);
+});
+
+test("keeps IPv4, IPv6 and domain groups separated when sorting", () => {
+  // IPv4 在前、IPv6 其次、域名最后，输入顺序错乱也不会混在一起。
+  const sorted = [
+    "example.com",
+    "2a0e:97c0:3f0:1::156b:443",
+    "104.156.239.15:443#美国",
+    "2a0e:97c0:3f0:1::46e",
+    "1.2.3.4",
+    "www.example.com:8443",
+  ].map((line) => parseManualEntry(line)).sort(compareManualEntries).map(formatManualEntry);
+  assert.deepEqual(sorted, [
+    "1.2.3.4",
+    "104.156.239.15#美国",
+    "2a0e:97c0:3f0:1::46e",
+    "2a0e:97c0:3f0:1::156b",
+    "example.com",
+    "www.example.com:8443",
   ]);
 });

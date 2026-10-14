@@ -5,6 +5,7 @@ import {
   formatManualEntry,
   isIpv4Literal,
   isIpv6Literal,
+  ipv6SortKey,
   parseManualEntry,
 } from "./manual-nodes.js";
 import { REMARK_SYMBOL_REGEX, matchRemarkRules } from "./remark-rules.js";
@@ -25,6 +26,7 @@ const ADMIN_PREAMBLE = [
   `const DEFAULT_IP_REMARK_TEMPLATE = ${JSON.stringify(DEFAULT_IP_REMARK_TEMPLATE)};`,
   isIpv6Literal.toString(),
   isIpv4Literal.toString(),
+  ipv6SortKey.toString(),
   parseManualEntry.toString(),
   formatManualEntry.toString(),
   canonicalizeManualNodeLine.toString(),

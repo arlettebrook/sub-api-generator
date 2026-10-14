@@ -1,6 +1,8 @@
 // 手动优选节点的解析与规范化工具。
 // 约定：一行一条“地址[:端口][#备注]”。
 // - 地址支持 IPv4、域名和 IPv6，IPv6 可以写方括号，也可以不带方括号；
+// - 不带方括号的 IPv6 末尾接 “:端口” 时按端口解析（2a0e:97c0:3f0:1::156b:443 就是
+//   2a0e:97c0:3f0:1::156b 的 443 端口写法，两条算同一条）；末段是纯数字的地址请写方括号；
 // - 省略端口时默认 443；
 // - 端口为 443 时按规范省略不写；省略端口时 IPv6 同时去掉方括号（带其它端口时必须保留
 //   方括号，否则 “地址:端口” 的冒号会和 IPv6 自身的冒号混淆）；
@@ -13,7 +15,8 @@
 function isIpv6Literal(value) {
   const text = String(value ?? "").trim();
   if (!text.includes(":")) return false;
-  const address = text.includes("%") ? text.slice(0, text.indexOf("%")) : text;
+  // 统一转成小写，让 ::FFFF:1.2.3.4 这类 IPv4 混写的大写写法也能识别。
+  const address = (text.includes("%") ? text.slice(0, text.indexOf("%")) : text).toLowerCase();
   return /^(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|::(?:ffff(?::0{1,4})?:)?(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))$/.test(address);
 }
 
@@ -46,7 +49,15 @@ function parseManualEntry(line) {
     const port = normalizePort(bracketed[2]);
     return port ? { host, port, remark } : null;
   }
-  // 不带方括号的 IPv6：整段都是地址，所以只能使用默认端口 443；其它端口请写方括号。
+  // 不带方括号的 IPv6：末尾接的 “:数字” 能当成端口、且前面的部分同样合法时按端口处理，
+  // 这样用户直接粘贴的 2a0e:97c0:3f0:1::156b:443 与不带端口的 2a0e:97c0:3f0:1::156b 是同一条；
+  // 代价是末段恰好是纯数字的地址必须写成 [地址]，否则会被当成长度为 1-65535 的端口。
+  const barePort = /^(.+):(\d{1,5})$/.exec(base);
+  if (barePort && isIpv6Literal(barePort[1])) {
+    const port = normalizePort(barePort[2]);
+    if (port) return { host: barePort[1], port, remark };
+  }
+  // 整段是 IPv6 地址时只能使用默认端口 443；其它端口请写方括号。
   if (isIpv6Literal(base)) return { host: base, port: defaultPort, remark };
   const plain = /^([^:]+)(?::(\d{1,5}))?$/.exec(base);
   if (!plain) return null;
@@ -86,7 +97,39 @@ function normalizeManualNodeLine(line) {
   return entry.remark ? `${base}#${entry.remark}` : base;
 }
 
-// 排序：IPv4 按每段数值、IPv6 按大小写无关的地址字符串、域名按自然顺序，再比较端口和备注。
+// IPv6 排序键：把地址展开成 8 组、每组 4 位十六进制的定长字符串（等同于 128 位数值），
+// 这样按字符串比较就是按地址数值比较。支持 “::” 缩写、尾部 IPv4 混写和 zone id。
+function ipv6SortKey(value) {
+  const text = String(value ?? "").trim();
+  if (!isIpv6Literal(text)) return null;
+  const address = text.includes("%") ? text.slice(0, text.indexOf("%")) : text;
+  const doubleIndex = address.indexOf("::");
+  const head = doubleIndex >= 0 ? address.slice(0, doubleIndex) : address;
+  const tail = doubleIndex >= 0 ? address.slice(doubleIndex + 2) : "";
+  const split = (part) => (part ? part.split(":").filter(Boolean) : []);
+  const headGroups = split(head);
+  let tailGroups = split(tail);
+  // 尾部 IPv4 混写（::ffff:1.2.3.4）换算成两组十六进制。
+  if (tailGroups.length) {
+    const last = tailGroups[tailGroups.length - 1];
+    if (last.includes(".")) {
+      const octets = last.split(".").map((item) => Number(item));
+      if (octets.length !== 4 || octets.some((item) => !Number.isInteger(item) || item < 0 || item > 255)) return null;
+      tailGroups = tailGroups.slice(0, -1).concat([
+        (((octets[0] << 8) | octets[1]) >>> 0).toString(16),
+        (((octets[2] << 8) | octets[3]) >>> 0).toString(16),
+      ]);
+    }
+  }
+  const missing = 8 - headGroups.length - tailGroups.length;
+  if (missing < 0) return null;
+  const groups = doubleIndex >= 0
+    ? headGroups.concat(new Array(missing).fill("0"), tailGroups)
+    : headGroups.concat(tailGroups);
+  if (groups.length !== 8) return null;
+  return groups.map((group) => group.padStart(4, "0").toLowerCase()).join("");
+}
+// 排序：IPv4 按每段数值、IPv6 按 128 位地址数值、域名按自然顺序，再比较端口和备注；三类地址分开排列（IPv4 在前、IPv6 其次、域名最后）。
 function compareManualEntries(left, right) {
   const aHost = String(left?.host ?? "");
   const bHost = String(right?.host ?? "");
@@ -102,9 +145,9 @@ function compareManualEntries(left, right) {
     const bParts = bHost.split(".");
     for (let index = 0; index < 4 && !hostDiff; index += 1) hostDiff = Number(aParts[index]) - Number(bParts[index]);
   } else if (aFamily === 1) {
-    // IPv6 用大小写无关的码位比较，避免依赖运行环境的本地化排序规则。
-    const aKey = aHost.toLowerCase();
-    const bKey = bHost.toLowerCase();
+    // IPv6 按地址数值比较（键是定长十六进制，退化成字符串比较即可，不依赖本地化规则）。
+    const aKey = ipv6SortKey(aHost) || aHost.toLowerCase();
+    const bKey = ipv6SortKey(bHost) || bHost.toLowerCase();
     if (aKey !== bKey) hostDiff = aKey < bKey ? -1 : 1;
   } else {
     hostDiff = aHost.localeCompare(bHost, "zh-CN", { numeric: true });
@@ -115,4 +158,4 @@ function compareManualEntries(left, right) {
   return String(left?.remark ?? "").localeCompare(String(right?.remark ?? ""), "zh-CN");
 }
 
-export { canonicalizeManualNodeLine, compareManualEntries, formatManualEntry, isIpv4Literal, isIpv6Literal, normalizeManualNodeLine, parseManualEntry };
+export { canonicalizeManualNodeLine, compareManualEntries, formatManualEntry, ipv6SortKey, isIpv4Literal, isIpv6Literal, normalizeManualNodeLine, parseManualEntry };

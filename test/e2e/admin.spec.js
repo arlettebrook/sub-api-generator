@@ -505,24 +505,31 @@ test.describe("manual preferred editor", () => {
       "104.156.239.15:443#" + marker,
       "2.2.2.2:8443#" + marker,
       "[2602:100:1234::d8]:443#v6-" + marker,
-      "2a0a:d687:f001::d8#v6b-" + marker,
+      "2a0e:97c0:3f0:1::156b:443#v6b-" + marker,
+      "2a0e:97c0:3f0:1::156b#v6b-" + marker,
+      "2a0e:97c0:3f0:1::46e#v6a-" + marker,
+      "2a0a:d687:f001::d8#v6c-" + marker,
     ];
     await textarea.fill(unsorted.join("\n"));
-    await expect(page.locator("#preferredManualStats")).toHaveText("共 6 条");
+    await expect(page.locator("#preferredManualStats")).toHaveText("共 9 条");
 
-    // 一键排序：先去重（104.156.239.15 与 104.156.239.15:443 视为同一条），再按 IPv4 各段数值排序，
-    // 同时省略 443 端口，并去掉省略端口时 IPv6 的方括号。
+    // 一键排序：先去重（104.156.239.15 与 104.156.239.15:443、2a0e:97c0:3f0:1::156b 与
+    // 2a0e:97c0:3f0:1::156b:443 都视为同一条），再按 IPv4 各段数值、IPv6 的 128 位地址数值排序
+    // （IPv4 一组、IPv6 一组不会混在一起），同时省略 443 端口和省略端口时 IPv6 的方括号。
     await page.locator("#preferredManualSortButton").click();
     const sorted = [
       "2.2.2.2:8443#" + marker,
       "104.156.239.15#" + marker,
       "104.156.239.27#" + marker,
       "2602:100:1234::d8#v6-" + marker,
-      "2a0a:d687:f001::d8#v6b-" + marker,
+      "2a0a:d687:f001::d8#v6c-" + marker,
+      "2a0e:97c0:3f0:1::46e#v6a-" + marker,
+      "2a0e:97c0:3f0:1::156b#v6b-" + marker,
     ];
     await expect(textarea).toHaveValue(sorted.join("\n"));
-    await expect(page.locator("#preferredManualStats")).toHaveText("共 5 条");
-    await expect(page.locator("#toast")).toContainText("已排序并去除 1 条重复");
+    await expect(page.locator("#preferredManualStats")).toHaveText("共 7 条");
+    // 去重 2 条：104.156.239.15:443 与 104.156.239.15，以及 2a0e:97c0:3f0:1::156b:443 与 2a0e:97c0:3f0:1::156b。
+    await expect(page.locator("#toast")).toContainText("已排序并去除 2 条重复");
 
     // 保存后刷新页面，内容应从服务端回读（保持规范写法和排序后的顺序）。
     await page.locator("#preferredManualSaveButton").click();
@@ -536,11 +543,11 @@ test.describe("manual preferred editor", () => {
       await navigator.clipboard.writeText([
         existing,
         "5.6.7.8:443#new-" + existing.split("#")[1],
-        "2001:db8::5#v6c-" + existing.split("#")[1],
+        "2001:db8::5#v6d-" + existing.split("#")[1],
       ].join("\n"));
     }, "104.156.239.15:443#" + marker);
     await page.locator("#preferredManualAppendButton").click();
-    const appended = sorted.concat(["5.6.7.8#new-" + marker, "2001:db8::5#v6c-" + marker]);
+    const appended = sorted.concat(["5.6.7.8#new-" + marker, "2001:db8::5#v6d-" + marker]);
     await expect(textarea).toHaveValue(appended.join("\n"));
     await expect(page.locator("#toast")).toContainText("已追加 2 条，跳过 1 条重复");
 

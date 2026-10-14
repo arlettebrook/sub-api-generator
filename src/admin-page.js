@@ -336,7 +336,7 @@ export const adminHTML = `
     <summary>
       <div>
       <h3>✍️ 手动优选管理</h3>
-      <p class="section-caption">维护手动优选节点，每行一条“地址[:端口][#备注]”，省略端口时默认 443，省略备注也能识别；IPv6 可以不带方括号；端口为 443 时默认省略，保存和“一键排序”都会整理成这种写法；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
+      <p class="section-caption">维护手动优选节点，每行一条“地址[:端口][#备注]”，省略端口时默认 443，省略备注也能识别；IPv6 可以不带方括号，末尾也能直接写端口（2a0e:97c0:3f0:1::156b:443 与 2a0e:97c0:3f0:1::156b 视为同一条）；端口为 443 时默认省略，保存和“一键排序”都会整理成这种写法；“一键排序”会先按规范写法去重，再把 IPv4、IPv6、域名分成三组按地址、端口和备注排序；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
       </div>
     </summary>
     <div class="source-status-panel-body">
@@ -355,7 +355,7 @@ export const adminHTML = `
         <div class="section-heading-actions">
           <button class="btn-outline" type="button" id="preferredManualAppendButton" title="读取剪贴板并追加到列表末尾，自动跳过重复条目并整理成规范写法">📥 追加粘贴</button>
           <button class="btn-outline" type="button" id="preferredManualOverwriteButton" title="读取剪贴板并替换全部内容">📋 覆盖粘贴</button>
-          <button class="btn-outline" type="button" id="preferredManualSortButton" title="去重并整理成规范写法（省略 443 端口与 IPv6 方括号），再按地址、端口和备注排序">⇅ 一键排序</button>
+          <button class="btn-outline" type="button" id="preferredManualSortButton" title="去重并整理成规范写法（省略 443 端口与 IPv6 方括号），再按 IPv4、IPv6、域名分组，按地址、端口和备注排序">⇅ 一键排序</button>
           <button class="btn-outline" type="button" id="preferredManualCopyButton" title="复制全部内容">📋 复制</button>
           <button class="btn-subtle" type="button" id="preferredManualClearButton" title="清空文本框，可通过撤销更改恢复">🗑 一键清空</button>
           <button class="btn-subtle" type="button" id="preferredManualUndoButton" title="恢复到上次保存的内容" disabled>↩ 撤销更改</button>
@@ -368,7 +368,8 @@ export const adminHTML = `
           <textarea id="preferredManualText" rows="10" spellcheck="false" autocomplete="off" placeholder="每行一条，例如：
 104.156.239.15#美国01
 104.156.239.16:8443#美国02
-2a0a:d687:f001::d8#IPv6 默认 443"></textarea>
+2a0a:d687:f001::d8#IPv6 默认 443
+2a0e:97c0:3f0:1::156b:443#IPv6 末尾也可直接写端口"></textarea>
         </label>
         <button class="btn-subtle preview-api-top-button manual-preferred-top-button" id="preferredManualTopButton" type="button" aria-label="返回手动优选数据顶部" aria-hidden="true" tabindex="-1">返回数据顶部</button>
       </div>
