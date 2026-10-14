@@ -559,6 +559,55 @@ test.describe("manual preferred editor", () => {
     await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n"))
       .toBe(await textarea.inputValue());
 
+    // 复制下拉：只复制 IPv4 / IPv6 条目，保留非 443 端口和备注、省略 443 端口，并按规范写法去重。
+    const readClipboard = async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n");
+    const ipv6Entries = [
+      "2602:100:1234::d8#v6-" + marker,
+      "2a0a:d687:f001::d8#v6c-" + marker,
+      "2a0e:97c0:3f0:1::46e#v6a-" + marker,
+      "2a0e:97c0:3f0:1::156b#v6b-" + marker,
+      "2001:db8::5#v6d-" + marker,
+    ];
+    const ipv4Entries = [
+      "2.2.2.2:8443#" + marker,
+      "104.156.239.15#" + marker,
+      "104.156.239.27#" + marker,
+      "5.6.7.8#new-" + marker,
+    ];
+    await page.locator("#preferredManualCopyToggle").click();
+    await expect(page.locator("#preferredManualCopyMenu")).toBeVisible();
+    await page.locator('#preferredManualCopyMenu [data-copy-mode="ipv6"]').click();
+    await expect(page.locator("#preferredManualCopyMenu")).toBeHidden();
+    await expect(page.locator("#toast")).toContainText("已复制 5 条 IPv6 条目");
+    await expect.poll(readClipboard).toBe(ipv6Entries.join("\n"));
+
+    await page.locator("#preferredManualCopyToggle").click();
+    await page.locator('#preferredManualCopyMenu [data-copy-mode="ipv4"]').click();
+    await expect(page.locator("#preferredManualCopyMenu")).toBeHidden();
+    await expect(page.locator("#toast")).toContainText("已复制 4 条 IPv4 条目");
+    await expect.poll(readClipboard).toBe(ipv4Entries.join("\n"));
+
+    // 复制会先整理成规范写法：非 443 端口保留（IPv6 补方括号），443 端口省略。
+    await textarea.fill([
+      "2.2.2.2:8443#copy-" + marker,
+      "[2001:db8::9]:443#copy-" + marker,
+      "2a0e:97c0:3f0:1::156b:8443#copy-" + marker,
+    ].join("\n"));
+    await page.locator("#preferredManualCopyToggle").click();
+    await page.locator('#preferredManualCopyMenu [data-copy-mode="ipv4"]').click();
+    await expect(page.locator("#toast")).toContainText("已复制 1 条 IPv4 条目");
+    await expect.poll(readClipboard).toBe("2.2.2.2:8443#copy-" + marker);
+    await page.locator("#preferredManualCopyToggle").click();
+    await page.locator('#preferredManualCopyMenu [data-copy-mode="ipv6"]').click();
+    await expect(page.locator("#toast")).toContainText("已复制 2 条 IPv6 条目");
+    await expect.poll(readClipboard).toBe([
+      "2001:db8::9#copy-" + marker,
+      "[2a0e:97c0:3f0:1::156b]:8443#copy-" + marker,
+    ].join("\n"));
+    // 还原成已保存的内容，后面的覆盖/清空/撤销流程继续用这份数据。
+    await textarea.fill(appended.join("\n"));
+    await expect(page.locator("#preferredManualSaveButton")).toBeDisabled();
+
     // 覆盖粘贴：用剪贴板内容整体替换（使用页面自定义确认弹窗），同样整理成规范写法。
     const savedValue = await textarea.inputValue();
     await page.evaluate(async (suffix) => {

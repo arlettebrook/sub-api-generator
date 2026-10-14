@@ -3845,6 +3845,58 @@ export const adminStyle = `
   .manual-preferred-toolbar .section-heading-actions > button {
     min-width: 0;
   }
+  /* 复制下拉：主按钮保持一键复制全部，右侧箭头展开“只复制 IPv4 / IPv6”的选项。
+     菜单挂在工具栏容器（而不是按钮）上，窄屏时也不会超出卡片和视口。 */
+  .manual-preferred-toolbar .section-heading-actions {
+    position: relative;
+  }
+
+  .manual-preferred-copy-toggle {
+    padding-inline: 10px;
+    line-height: 1;
+  }
+
+  .manual-preferred-copy-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    display: grid;
+    gap: 2px;
+    min-width: 200px;
+    max-width: 100%;
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--surface-solid);
+    box-shadow: 0 16px 34px color-mix(in srgb, #0f172a 26%, transparent);
+  }
+
+  .manual-preferred-copy-menu[hidden] {
+    display: none;
+  }
+
+  .manual-preferred-copy-menu > button {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .manual-preferred-copy-menu > button:hover,
+  .manual-preferred-copy-menu > button:focus-visible {
+    background: var(--accent-light);
+    color: var(--accent-hover);
+  }
 
   /* 手动优选按钮使用清晰的三级色彩：常规操作、辅助/危险操作、保存操作。 */
   .manual-preferred-toolbar .btn-outline {

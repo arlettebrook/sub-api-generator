@@ -9,6 +9,7 @@ import {
   manualEntryFamily,
   normalizeManualPort,
   parseManualEntry,
+  pickManualNodeLines,
   splitIpv6Groups,
 } from "./manual-nodes.js";
 import { REMARK_SYMBOL_REGEX, matchRemarkRules } from "./remark-rules.js";
@@ -42,6 +43,7 @@ const ADMIN_PREAMBLE = [
   parseManualEntry.toString(),
   formatManualEntry.toString(),
   canonicalizeManualNodeLine.toString(),
+  pickManualNodeLines.toString(),
   compareManualEntries.toString(),
   matchRemarkRules.toString(),
   "",
@@ -2748,19 +2750,83 @@ async function savePreferredManual(trigger = null) {
   }
 }
 
-async function copyPreferredManual() {
+// 复制下拉菜单：主按钮一键复制全部，右侧箭头展开“只复制 IPv4 / IPv6”的选项。
+function bindPreferredManualCopyMenu() {
+  const toggle = $('preferredManualCopyToggle');
+  const menu = $('preferredManualCopyMenu');
+  if (!toggle || !menu || menu.dataset.bound === 'true') return;
+  menu.dataset.bound = 'true';
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setOpen(menu.hidden);
+  });
+  menu.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('[data-copy-mode]');
+    if (!button) return;
+    setOpen(false);
+    toggle.focus();
+    void copyPreferredManual(button.dataset.copyMode);
+  });
+  // 点到菜单以外的任何地方或按 Esc 都收起菜单，避免它一直挂在工具栏上。
+  document.addEventListener('click', (event) => {
+    if (menu.hidden) return;
+    if (menu.contains(event.target) || toggle.contains(event.target)) return;
+    setOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || menu.hidden) return;
+    setOpen(false);
+    toggle.focus();
+  });
+}
+
+// 复制模式：all 是主按钮的全量复制（原样输出）；ipv4/ipv6 只复制对应地址族的条目，
+// 输出整理成规范写法（保留非 443 端口和备注，省略 443 端口），同时按规范写法去重。
+const PREFERRED_MANUAL_COPY_MODES = {
+  all: { label: '全部条目', empty: '暂无可复制的内容' },
+  ipv4: { family: 'ipv4', label: 'IPv4 条目', empty: '当前列表里没有 IPv4 条目' },
+  ipv6: { family: 'ipv6', label: 'IPv6 条目', empty: '当前列表里没有 IPv6 条目' },
+};
+
+// 按复制模式挑选要复制的内容：地址族模式只留该族的条目并整理成规范写法。
+function preferredManualCopyPayload(content, mode) {
+  const spec = PREFERRED_MANUAL_COPY_MODES[mode] || PREFERRED_MANUAL_COPY_MODES.all;
+  if (!spec.family) return { text: content, count: preferredManualLines(content).length, spec };
+  const picked = pickManualNodeLines(content, spec.family);
+  return { text: picked.join('\\n'), count: picked.length, spec };
+}
+
+// 剪贴板 API 不可用（例如非安全上下文）时的兜底：把待复制内容放进临时文本框再执行拷贝。
+function copyTextViaExecCommand(text) {
+  const helper = document.createElement('textarea');
+  helper.value = text;
+  helper.setAttribute('readonly', '');
+  helper.style.position = 'fixed';
+  helper.style.top = '-1000px';
+  helper.style.opacity = '0';
+  document.body.appendChild(helper);
+  helper.select();
+  let copied = false;
+  try { copied = Boolean(document.execCommand?.('copy')); } finally { helper.remove(); }
+  return copied;
+}
+
+async function copyPreferredManual(mode = 'all') {
   const textarea = $('preferredManualText');
   if (!textarea) return;
-  const content = textarea.value;
-  if (!preferredManualLines(content).length) { showToast('暂无可复制的内容', 'warning'); return; }
+  const { text, count, spec } = preferredManualCopyPayload(textarea.value, mode);
+  if (!count) { showToast(spec.empty, 'warning'); return; }
+  const message = mode === 'all' ? '手动优选内容已复制' : '已复制 ' + count + ' 条 ' + spec.label;
   try {
-    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(content);
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
     else throw new Error('unsupported');
-    showToast('手动优选内容已复制', 'success');
+    showToast(message, 'success');
   } catch {
-    textarea.focus();
-    textarea.select();
-    if (document.execCommand?.('copy')) showToast('手动优选内容已复制', 'success');
+    if (copyTextViaExecCommand(text)) showToast(message, 'success');
     else showToast('复制失败：浏览器拒绝了剪贴板访问', 'error');
   }
 }
@@ -2952,6 +3018,7 @@ function initPreferredManualEditor() {
   });
   $('preferredManualSaveButton')?.addEventListener('click', (event) => void savePreferredManual(event.currentTarget));
   $('preferredManualCopyButton')?.addEventListener('click', () => void copyPreferredManual());
+  bindPreferredManualCopyMenu();
   $('preferredManualAppendButton')?.addEventListener('click', () => void appendPastePreferredManual());
   $('preferredManualOverwriteButton')?.addEventListener('click', () => void overwritePastePreferredManual());
   $('preferredManualSortButton')?.addEventListener('click', sortPreferredManual);

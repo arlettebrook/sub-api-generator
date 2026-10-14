@@ -9,6 +9,7 @@ import {
   isIpv6Literal,
   normalizeManualNodeLine,
   parseManualEntry,
+  pickManualNodeLines,
 } from "../src/manual-nodes.js";
 
 test("detects address literals", () => {
@@ -177,4 +178,30 @@ test("keeps IPv4, IPv6 and domain groups separated when sorting", () => {
     "example.com",
     "www.example.com:8443",
   ]);
+});
+
+
+test("picks IPv4 or IPv6 lines for the manual preferred copy menu", () => {
+  const content = [
+    "# 注释行不算条目",
+    "1.1.1.1",
+    "example.com:8443#备用",
+    "104.156.239.15:443#美国",
+    "2a0e:97c0:3f0:1::156b:443",
+    "[2a0e:97c0:3f0:1::156b]:8443#v6",
+    "::1",
+    "1.1.1.1:443",
+    "   ",
+  ].join("\n");
+  // 只留对应地址族，并整理成规范写法：保留非 443 端口和备注、省略 443 端口，
+  // 所以 1.1.1.1 与 1.1.1.1:443、2a0e:97c0:3f0:1::156b:443 与不带端口的写法都会合并成一条。
+  assert.deepEqual(pickManualNodeLines(content, "ipv4"), ["1.1.1.1", "104.156.239.15#美国"]);
+  assert.deepEqual(pickManualNodeLines(content, "ipv6"), [
+    "2a0e:97c0:3f0:1::156b",
+    "[2a0e:97c0:3f0:1::156b]:8443#v6",
+    "::1",
+  ]);
+  // 域名、注释和空行都不属于 IPv4/IPv6。
+  assert.deepEqual(pickManualNodeLines("example.com\n# 注释\n", "ipv4"), []);
+  assert.deepEqual(pickManualNodeLines("", "ipv6"), []);
 });

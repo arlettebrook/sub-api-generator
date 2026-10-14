@@ -102,6 +102,27 @@ function normalizeManualNodeLine(line) {
   return entry.remark ? `${base}#${entry.remark}` : base;
 }
 
+// 复制筛选（管理页“只复制 IPv4 / IPv6”使用）：family 传 "ipv4"/"ipv6" 时只保留该地址族的条目，
+// 输出整理成规范写法（保留非 443 端口和备注、省略 443 端口、省略端口时 IPv6 不带方括号），
+// 所以 1.1.1.1 与 1.1.1.1:443、[::1]:443 与 ::1 这类写法相同的条目会合并，顺序保持原样。
+function pickManualNodeLines(content, family) {
+  const wantIpv6 = family === "ipv6";
+  const seen = new Set();
+  const picked = [];
+  const lines = String(content ?? "").split(/\r?\n/);
+  for (const line of lines) {
+    const entry = parseManualEntry(line);
+    if (!entry) continue;
+    const ipv6 = isIpv6Literal(entry.host);
+    if (wantIpv6 ? !ipv6 : (ipv6 || !isIpv4Literal(entry.host))) continue;
+    const value = canonicalizeManualNodeLine(line);
+    if (seen.has(value)) continue;
+    seen.add(value);
+    picked.push(value);
+  }
+  return picked;
+}
+
 // 把地址片段按 “:” 拆成非空分组（供 ipv6SortKey 使用）。
 function splitIpv6Groups(part) {
   return part ? part.split(":").filter(Boolean) : [];
@@ -172,4 +193,4 @@ function compareManualEntries(left, right) {
   return String(left?.remark ?? "").localeCompare(String(right?.remark ?? ""), "zh-CN");
 }
 
-export { canonicalizeManualNodeLine, compareManualEntries, formatManualEntry, ipv6SortKey, isIpv4Literal, isIpv6Literal, manualEntryFamily, normalizeManualNodeLine, normalizeManualPort, parseManualEntry, splitIpv6Groups };
+export { canonicalizeManualNodeLine, compareManualEntries, formatManualEntry, ipv6SortKey, isIpv4Literal, isIpv6Literal, manualEntryFamily, normalizeManualNodeLine, normalizeManualPort, parseManualEntry, pickManualNodeLines, splitIpv6Groups };

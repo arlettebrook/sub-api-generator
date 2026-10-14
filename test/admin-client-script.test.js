@@ -39,7 +39,7 @@ test("injected function sources survive esbuild keepNames rewriting", () => {
 test("injected preamble works in a page-like scope without module bindings", () => {
   const context = vm.createContext({});
   vm.runInContext(
-    `${preamble}\nglobalThis.__injected = { parseManualEntry, formatManualEntry, canonicalizeManualNodeLine, compareManualEntries, ipv6SortKey, isIpv4Literal, isIpv6Literal, matchRemarkRules };`,
+    `${preamble}\nglobalThis.__injected = { parseManualEntry, formatManualEntry, canonicalizeManualNodeLine, compareManualEntries, ipv6SortKey, isIpv4Literal, isIpv6Literal, pickManualNodeLines, matchRemarkRules };`,
     context,
   );
   const injected = context.__injected;
@@ -54,6 +54,14 @@ test("injected preamble works in a page-like scope without module bindings", () 
   assert.ok(injected.compareManualEntries({ host: "::1" }, { host: "1.1.1.1" }) > 0);
   assert.ok(injected.compareManualEntries({ host: "example.com" }, { host: "::1" }) > 0);
   assert.ok(injected.compareManualEntries({ host: "2a0e:97c0:3f0:1::156b" }, { host: "2a0e:97c0:3f0:1::156a" }) > 0);
+  // 只复制 IPv4 / IPv6：按地址族筛选（域名和无效行不会混进来），输出整理成规范写法——
+  // 保留非 443 端口和备注、省略 443 端口，所以 1.1.1.1 与 1.1.1.1:443 这类写法会自动去重。
+  const copySamples = ["1.1.1.1", "[::1]:8443#v6", "example.com", "1.1.1.1:443", "::1", "not a node"].join("\n");
+  assert.equal(injected.pickManualNodeLines(copySamples, "ipv4").join("|"), "1.1.1.1");
+  assert.equal(injected.pickManualNodeLines(copySamples, "ipv6").join("|"), "[::1]:8443#v6|::1");
+  const copyPorts = "104.156.239.15:443#美国\n2a0e:97c0:3f0:1::156b:8443#备用";
+  assert.equal(injected.pickManualNodeLines(copyPorts, "ipv4").join("|"), "104.156.239.15#美国");
+  assert.equal(injected.pickManualNodeLines(copyPorts, "ipv6").join("|"), "[2a0e:97c0:3f0:1::156b]:8443#备用");
   // 备注规则（含符号分支，走 REMARK_SYMBOL_REGEX）也要能在页面作用域里独立运行。
   assert.equal(JSON.stringify(injected.matchRemarkRules("速度%20不错", ["空格"])), JSON.stringify({ remark: "速度", rule: "空格", original: "速度 不错" }));
   assert.equal(JSON.stringify(injected.matchRemarkRules("测试🙂", ["符号"])), JSON.stringify({ remark: "测试", rule: "符号", original: "测试🙂" }));

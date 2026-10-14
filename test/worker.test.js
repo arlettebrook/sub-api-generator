@@ -147,6 +147,12 @@ test("serves separate responsive admin pages", async () => {
       assert.match(html, /id="preferredManualOverwriteButton"/);
       assert.match(html, /id="preferredManualSortButton"/);
       assert.match(html, /id="preferredManualCopyButton"/);
+      // 复制下拉：只复制 IPv4 / IPv6 的选项由 data-copy-mode 标记，脚本按它挑内容。
+      assert.match(html, /id="preferredManualCopyToggle"/);
+      assert.match(html, /id="preferredManualCopyMenu"/);
+      assert.match(html, /data-copy-mode="ipv4"/);
+      assert.match(html, /data-copy-mode="ipv6"/);
+      assert.ok(!html.includes('data-copy-mode="ipv4-ip"'), "复制菜单不需要“纯地址”模式");
       assert.match(html, /id="preferredManualClearButton"/);
       assert.match(html, /id="preferredManualUndoButton"/);
       assert.match(html, /data-nav-page="manage"/);
