@@ -3846,8 +3846,9 @@ export const adminStyle = `
     min-width: 0;
   }
   /* 复制下拉：主按钮保持一键复制全部，右侧箭头展开“只复制 IPv4 / IPv6”的选项。
-     菜单挂在工具栏容器（而不是按钮）上，窄屏时也不会超出卡片和视口。 */
-  .manual-preferred-toolbar .section-heading-actions {
+     菜单以整行工具栏为定位基准（不是撑满整行的按钮容器，否则会贴到卡片最右侧、和箭头按钮分家），
+     展开时由脚本对齐到箭头按钮下方，并夹在工具栏范围内避免窄屏溢出。 */
+  .manual-preferred-toolbar {
     position: relative;
   }
 
@@ -3858,8 +3859,8 @@ export const adminStyle = `
 
   .manual-preferred-copy-menu {
     position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
+    top: 0;
+    left: 0;
     z-index: 30;
     display: grid;
     gap: 2px;
@@ -5061,6 +5062,12 @@ export const adminStyle = `
       min-width: 0;
       padding-inline: 8px;
       white-space: normal;
+    }
+    /* 箭头按钮不跟着整行按钮一起拉伸，否则窄屏会出现一个空的整格按钮。 */
+    .manual-preferred-toolbar .section-heading-actions > #preferredManualCopyToggle {
+      width: auto;
+      justify-self: start;
+      padding-inline: 10px;
     }
     .manual-preferred-toolbar .section-heading-actions > #preferredManualSaveButton {
       grid-column: 1 / -1;

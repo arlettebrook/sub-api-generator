@@ -576,6 +576,16 @@ test.describe("manual preferred editor", () => {
     ];
     await page.locator("#preferredManualCopyToggle").click();
     await expect(page.locator("#preferredManualCopyMenu")).toBeVisible();
+    // 菜单要贴着箭头按钮展开，并且不超出工具栏（曾经挂在整行容器的右端，会飘到列表上方）。
+    const toggleBox = await page.locator("#preferredManualCopyToggle").boundingBox();
+    const menuBox = await page.locator("#preferredManualCopyMenu").boundingBox();
+    const toolbarBox = await page.locator(".manual-preferred-toolbar").boundingBox();
+    expect(menuBox.y).toBeGreaterThanOrEqual(toggleBox.y + toggleBox.height);
+    expect(menuBox.y - (toggleBox.y + toggleBox.height)).toBeLessThan(40);
+    expect(menuBox.x).toBeLessThanOrEqual(toggleBox.x + toggleBox.width);
+    expect(menuBox.x + menuBox.width).toBeGreaterThanOrEqual(toggleBox.x);
+    expect(menuBox.x).toBeGreaterThanOrEqual(toolbarBox.x - 1);
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(toolbarBox.x + toolbarBox.width + 1);
     await page.locator('#preferredManualCopyMenu [data-copy-mode="ipv6"]').click();
     await expect(page.locator("#preferredManualCopyMenu")).toBeHidden();
     await expect(page.locator("#toast")).toContainText("已复制 5 条 IPv6 条目");

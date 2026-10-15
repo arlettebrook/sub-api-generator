@@ -2756,10 +2756,27 @@ function bindPreferredManualCopyMenu() {
   const menu = $('preferredManualCopyMenu');
   if (!toggle || !menu || menu.dataset.bound === 'true') return;
   menu.dataset.bound = 'true';
+  // 菜单挂在整行工具栏上，展开时对齐到箭头按钮下方；再夹在工具栏范围内，窄屏也不会溢出卡片。
+  const placeMenu = () => {
+    const toolbar = menu.offsetParent;
+    if (!toolbar) return;
+    const toggleRect = toggle.getBoundingClientRect();
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(0, toggleRect.right - toolbarRect.left - menu.offsetWidth),
+      Math.max(0, toolbar.clientWidth - menu.offsetWidth),
+    );
+    menu.style.left = left + 'px';
+    menu.style.top = (toggleRect.bottom - toolbarRect.top + 6) + 'px';
+  };
   const setOpen = (open) => {
     menu.hidden = !open;
     toggle.setAttribute('aria-expanded', String(open));
+    if (open) placeMenu();
   };
+  window.addEventListener('resize', () => {
+    if (!menu.hidden) placeMenu();
+  });
   toggle.addEventListener('click', (event) => {
     event.stopPropagation();
     setOpen(menu.hidden);
