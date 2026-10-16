@@ -3796,6 +3796,71 @@ export const adminStyle = `
     background: var(--bg-secondary);
   }
 
+  /* 写法说明默认收起，标题区只留一行摘要，避免大段文字压住编辑器。 */
+  .section-help {
+    margin: 0 0 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+  }
+
+  .section-help > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .section-help > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .section-help > summary::after {
+    content: '⌄';
+    margin-left: auto;
+    color: var(--text-tertiary);
+    font-size: 16px;
+    line-height: 1;
+    transition: transform .18s ease;
+  }
+
+  .section-help[open] > summary::after {
+    transform: rotate(180deg);
+  }
+
+  .section-help[open] > summary {
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .section-help-list {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 10px 12px 12px 30px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .section-help-list strong {
+    color: var(--text-primary);
+  }
+
+  .section-help-list code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 11px;
+    word-break: break-all;
+  }
+
   /* 手动优选管理：工具栏 + 等宽文本编辑器。 */
   .manual-preferred-listbar {
     display: flex;

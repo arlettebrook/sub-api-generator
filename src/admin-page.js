@@ -336,10 +336,21 @@ export const adminHTML = `
     <summary>
       <div>
       <h3>✍️ 手动优选管理</h3>
-      <p class="section-caption">维护手动优选节点，每行一条“地址[:端口][#备注]”，省略端口时默认 443，省略备注也能识别；IPv6 可以不带方括号，末尾也能直接写端口（2a0e:97c0:3f0:1::156b:443 与 2a0e:97c0:3f0:1::156b 视为同一条）；端口为 443 时默认省略，保存和“一键排序”都会整理成这种写法；“一键排序”会先按规范写法去重，再把 IPv4、IPv6、域名分成三组按地址、端口和备注排序；“复制”按钮右侧的箭头可以只复制 IPv4 或只复制 IPv6（保留非 443 端口和备注，443 端口省略，并自动去重）；全部数据源模式自动追加到输出末尾，手动选择模式需勾选“手动优选”数据源。</p>
+      <p class="section-caption">每行一条“地址[:端口][#备注]”，端口默认 443，IPv6 可不带方括号。</p>
       </div>
     </summary>
     <div class="source-status-panel-body">
+      <details class="section-help" id="preferredManualHelp">
+        <summary>❔ 写法与排序说明</summary>
+        <ul class="section-help-list">
+          <li><strong>端口</strong>：可省略，默认 443；443 端口在保存和“一键排序”后会自动省略。</li>
+          <li><strong>IPv6</strong>：可不带方括号，末尾可直接写端口，<code>2a0e:97c0:3f0:1::156b:443</code> 与 <code>2a0e:97c0:3f0:1::156b</code> 视为同一条。</li>
+          <li><strong>备注</strong>：可省略，格式为 <code>地址[:端口]#备注</code>。</li>
+          <li><strong>一键排序</strong>：先按规范写法去重，再把 IPv4、IPv6、域名分成三组，按地址、端口、备注排序。</li>
+          <li><strong>复制</strong>：主按钮原样复制全部；右侧 ▾ 可只复制 IPv4 或只复制 IPv6（保留非 443 端口和备注，并自动去重）。</li>
+          <li><strong>输出位置</strong>：全部数据源模式自动追加到末尾；手动选择模式需勾选“手动优选”数据源。</li>
+        </ul>
+      </details>
       <div class="manual-preferred-listbar">
         <label class="manual-preferred-select-label">手动优选列表
           <select id="preferredManualSelect" aria-label="选择手动优选列表"></select>
