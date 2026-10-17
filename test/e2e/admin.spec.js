@@ -694,4 +694,31 @@ test.describe("mobile navigation", () => {
     await page.evaluate(() => window.scrollTo(0, 0));
     await expect(nav).toBeVisible();
   });
+
+  test("keeps manual preferred actions in a two-column grid", async ({ page }) => {
+    await login(page);
+    await page.locator('a[data-nav-page="manage"]').click();
+    await expect(page.locator("#preferredManualSection")).toBeVisible();
+
+    // 窄屏下“复制”和右侧箭头合成一个分段按钮，和其它按钮一样只占一格。
+    const group = page.locator(".manual-preferred-copy-group");
+    await expect(group).toHaveCSS("display", "flex");
+    const appendBox = await page.locator("#preferredManualAppendButton").boundingBox();
+    const overwriteBox = await page.locator("#preferredManualOverwriteButton").boundingBox();
+    const sortBox = await page.locator("#preferredManualSortButton").boundingBox();
+    const copyBox = await group.boundingBox();
+    const clearBox = await page.locator("#preferredManualClearButton").boundingBox();
+    const undoBox = await page.locator("#preferredManualUndoButton").boundingBox();
+    const saveBox = await page.locator("#preferredManualSaveButton").boundingBox();
+    const sameRow = (a, b) => Math.abs(a.y - b.y) < 12;
+
+    expect(sameRow(appendBox, overwriteBox)).toBe(true);
+    expect(sameRow(sortBox, copyBox)).toBe(true);
+    expect(sameRow(clearBox, undoBox)).toBe(true);
+    expect(sameRow(copyBox, clearBox)).toBe(false);
+    expect(copyBox.width).toBeGreaterThan(appendBox.width * 0.9);
+    expect(copyBox.x + copyBox.width).toBeLessThanOrEqual(391);
+    expect(saveBox.width).toBeGreaterThan(appendBox.width + overwriteBox.width);
+    expect(sameRow(undoBox, saveBox)).toBe(false);
+  });
 });

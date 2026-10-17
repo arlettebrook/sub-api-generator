@@ -367,12 +367,14 @@ export const adminHTML = `
           <button class="btn-outline" type="button" id="preferredManualAppendButton" title="读取剪贴板并追加到列表末尾，自动跳过重复条目并整理成规范写法">📥 追加粘贴</button>
           <button class="btn-outline" type="button" id="preferredManualOverwriteButton" title="读取剪贴板并替换全部内容">📋 覆盖粘贴</button>
           <button class="btn-outline" type="button" id="preferredManualSortButton" title="去重并整理成规范写法（省略 443 端口与 IPv6 方括号），再按 IPv4、IPv6、域名分组，按地址、端口和备注排序">⇅ 一键排序</button>
-          <button class="btn-outline" type="button" id="preferredManualCopyButton" title="原样复制全部内容；只复制 IPv4 或 IPv6 请点右侧箭头">📋 复制</button>
-          <button class="btn-outline manual-preferred-copy-toggle" type="button" id="preferredManualCopyToggle" aria-haspopup="true" aria-expanded="false" aria-controls="preferredManualCopyMenu" aria-label="更多复制选项" title="更多复制选项：只复制 IPv4 或只复制 IPv6">▾</button>
-          <div class="manual-preferred-copy-menu" id="preferredManualCopyMenu" role="menu" aria-label="复制选项" hidden>
-            <button type="button" role="menuitem" data-copy-mode="ipv4" title="只复制 IPv4 条目：保留非 443 端口和备注，443 端口省略，并自动去重">📋 只复制 IPv4</button>
-            <button type="button" role="menuitem" data-copy-mode="ipv6" title="只复制 IPv6 条目：保留非 443 端口和备注，443 端口省略，并自动去重">📋 只复制 IPv6</button>
-          </div>
+          <span class="manual-preferred-copy-group">
+            <button class="btn-outline" type="button" id="preferredManualCopyButton" title="原样复制全部内容；只复制 IPv4 或 IPv6 请点右侧箭头">📋 复制</button>
+            <button class="btn-outline manual-preferred-copy-toggle" type="button" id="preferredManualCopyToggle" aria-haspopup="true" aria-expanded="false" aria-controls="preferredManualCopyMenu" aria-label="更多复制选项" title="更多复制选项：只复制 IPv4 或只复制 IPv6">▾</button>
+            <div class="manual-preferred-copy-menu" id="preferredManualCopyMenu" role="menu" aria-label="复制选项" hidden>
+              <button type="button" role="menuitem" data-copy-mode="ipv4" title="只复制 IPv4 条目：保留非 443 端口和备注，443 端口省略，并自动去重">📋 只复制 IPv4</button>
+              <button type="button" role="menuitem" data-copy-mode="ipv6" title="只复制 IPv6 条目：保留非 443 端口和备注，443 端口省略，并自动去重">📋 只复制 IPv6</button>
+            </div>
+          </span>
           <button class="btn-subtle" type="button" id="preferredManualClearButton" title="清空文本框，可通过撤销更改恢复">🗑 一键清空</button>
           <button class="btn-subtle" type="button" id="preferredManualUndoButton" title="恢复到上次保存的内容" disabled>↩ 撤销更改</button>
           <button class="btn-primary" type="button" id="preferredManualSaveButton" disabled>💾 保存手动优选</button>

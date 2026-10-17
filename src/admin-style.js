@@ -3907,8 +3907,35 @@ export const adminStyle = `
     gap: 8px;
   }
 
-  .manual-preferred-toolbar .section-heading-actions > button {
+  .manual-preferred-toolbar .section-heading-actions > button,
+  .manual-preferred-copy-group > button {
     min-width: 0;
+  }
+
+  /* “复制”和右侧箭头始终是一个分段按钮：两半贴在一起，共用中间的分隔线。 */
+  .manual-preferred-copy-group {
+    display: inline-flex;
+    align-items: stretch;
+    min-width: 0;
+  }
+
+  .manual-preferred-copy-group > #preferredManualCopyButton {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .manual-preferred-copy-group > #preferredManualCopyToggle {
+    width: 36px;
+    padding-inline: 0;
+    border-left: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  /* 悬停时只换色不抬升，避免分段按钮只抬起其中一半。 */
+  .manual-preferred-copy-group > button:hover,
+  .manual-preferred-copy-group > button:active {
+    transform: none;
   }
   /* 复制下拉：主按钮保持一键复制全部，右侧箭头展开“只复制 IPv4 / IPv6”的选项。
      菜单以整行工具栏为定位基准（不是撑满整行的按钮容器，否则会贴到卡片最右侧、和箭头按钮分家），
@@ -5122,17 +5149,23 @@ export const adminStyle = `
       grid-template-columns: repeat(2, minmax(0, 1fr));
       justify-content: stretch;
     }
-    .manual-preferred-toolbar .section-heading-actions > button {
+    .manual-preferred-toolbar .section-heading-actions > button,
+    .manual-preferred-copy-group > button {
       width: 100%;
       min-width: 0;
       padding-inline: 8px;
       white-space: normal;
     }
-    /* 箭头按钮不跟着整行按钮一起拉伸，否则窄屏会出现一个空的整格按钮。 */
-    .manual-preferred-toolbar .section-heading-actions > #preferredManualCopyToggle {
-      width: auto;
-      justify-self: start;
-      padding-inline: 10px;
+    /* 窄屏下分段按钮和其它按钮一样只占一格，不再让箭头单独占位。 */
+    .manual-preferred-copy-group {
+      display: flex;
+      min-width: 0;
+    }
+    .manual-preferred-copy-group > #preferredManualCopyButton {
+      flex: 1 1 auto;
+    }
+    .manual-preferred-copy-group > #preferredManualCopyToggle {
+      flex: 0 0 auto;
     }
     .manual-preferred-toolbar .section-heading-actions > #preferredManualSaveButton {
       grid-column: 1 / -1;
