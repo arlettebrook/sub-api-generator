@@ -235,7 +235,7 @@ test("creates and serves custom API access paths", async () => {
     body: JSON.stringify({ "/my-api": {
       enabled: true,
       remark: "测试 API",
-      sources: [{ type: "subs", key: "sub.example.com" }, { type: "manual", key: "任意值" }],
+      sources: [{ type: "subs", key: "sub.example.com" }, { type: "manual", key: "manual-ipv6" }],
     } }),
   }), runtime);
   assert.equal(saveResponse.status, 200);
@@ -248,8 +248,8 @@ test("creates and serves custom API access paths", async () => {
       enabled: true,
       remark: "测试 API",
       sourceMode: "selected",
-      // 手动优选是全局唯一数据源，key 统一归一为 manual。
-      sources: [{ type: "subs", key: "sub.example.com" }, { type: "manual", key: "manual" }],
+      // 多列表模式下，手动优选的数据源标识必须保持列表自身的 key。
+      sources: [{ type: "subs", key: "sub.example.com" }, { type: "manual", key: "manual-ipv6" }],
       blacklist: [],
       filterRules: [],
     },
@@ -1952,6 +1952,46 @@ test("serves custom API output from manual preferred entries alone", async () =>
   const response = await worker.fetch(new Request("https://example.test/manual_only"), runtime);
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "104.156.239.15:443#manual1");
+});
+
+test("keeps custom manual preferred list selections in custom APIs", async () => {
+  const values = {};
+  const runtime = env({ KV: createKv(values) });
+  const hash = await sha256Hex("secret");
+  const headers = { Cookie: `auth=${hash}`, "content-type": "application/json" };
+
+  const manualSave = await worker.fetch(new Request("https://example.test/api/preferred-manual", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ items: {
+      manual: { name: "IPV6", content: "2001:db8::1#v6" },
+      "manual-ipv4": { name: "IPV4", content: "1.2.3.4#v4" },
+      "manual-github": { name: "Github（自定义备注）", content: "5.6.7.8#github" },
+    } }),
+  }), runtime);
+  assert.equal(manualSave.status, 200);
+
+  const apiSave = await worker.fetch(new Request("https://example.test/api/custom-apis", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ "github-only": {
+      enabled: true,
+      sourceMode: "selected",
+      sources: [{ type: "manual", key: "manual-github" }],
+    } }),
+  }), runtime);
+  assert.equal(apiSave.status, 200);
+
+  const configResponse = await worker.fetch(new Request("https://example.test/api/custom-apis", {
+    headers: { Cookie: `auth=${hash}` },
+  }), runtime);
+  const config = await configResponse.json();
+  // 保存后重新读取配置时不能把自定义列表 key 归一成默认的 manual。
+  assert.deepEqual(config["github-only"].sources, [{ type: "manual", key: "manual-github" }]);
+
+  const publicResponse = await worker.fetch(new Request("https://example.test/github-only"), runtime);
+  assert.equal(publicResponse.status, 200);
+  assert.equal(await publicResponse.text(), "5.6.7.8:443#github");
 });
 
 test("serves manual preferred entries without explicit port or remark", async () => {

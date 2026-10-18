@@ -9,6 +9,7 @@ import {
   normalizeIpRemarkSettings,
   normalizeSettings,
   normalizeKvData,
+  normalizeCustomApiData,
   normalizeSourceFilterFields,
   normalizeSourceKey,
   readJsonObject,
@@ -175,6 +176,22 @@ test("validates custom API access paths", () => {
     first: { enabled: true, remark: "", sourceMode: "all", sources: [], blacklist: [], filterRules: [] },
     second: { enabled: true, remark: "", sourceMode: "all", sources: [], blacklist: [], filterRules: [] },
   });
+});
+
+test("preserves custom manual preferred list keys in stored API configuration", () => {
+  assert.deepEqual(normalizeCustomApiData({
+    "manual-api": {
+      enabled: true,
+      sourceMode: "selected",
+      sources: [
+        { type: "manual", key: "manual-github" },
+        { type: "manual", key: "manual-ipv4" },
+      ],
+    },
+  })["manual-api"].sources, [
+    { type: "manual", key: "manual-github" },
+    { type: "manual", key: "manual-ipv4" },
+  ]);
 });
 
 test("normalizes optional custom API result suffix settings", () => {

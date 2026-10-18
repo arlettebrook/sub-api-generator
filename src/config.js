@@ -452,7 +452,7 @@ export function normalizeCustomApiData(data) {
         sourceMode,
         sources: sourceMode === SOURCE_MODE_SELECTED && Array.isArray(value.sources)
           ? value.sources.filter((source) => isPlainObject(source) && ["subs", "apis", "domains", "manual"].includes(source.type) && typeof source.key === "string")
-              .map((source) => ({ type: source.type, key: source.type === "manual" ? "manual" : normalizeSourceKey(source.type, source.key) }))
+              .map((source) => ({ type: source.type, key: normalizeSourceKey(source.type, source.key) }))
           : [],
         blacklist: filters.blacklist || [],
         filterRules: filters.filterRules || [],
