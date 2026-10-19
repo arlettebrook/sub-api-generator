@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { adminClientScript } from "../src/admin-client.js";
+import { adminStyle } from "../src/admin-style.js";
 
 // 管理页脚本是把函数源码（Function.prototype.toString()）拼进页面执行的：字符串内容不会经过
 // 打包器，但函数源码会。Cloudflare Pages/wrangler 用 esbuild 打包 _worker.js（keepNames 默认
@@ -65,4 +66,49 @@ test("injected preamble works in a page-like scope without module bindings", () 
   // 备注规则（含符号分支，走 REMARK_SYMBOL_REGEX）也要能在页面作用域里独立运行。
   assert.equal(JSON.stringify(injected.matchRemarkRules("速度%20不错", ["空格"])), JSON.stringify({ remark: "速度", rule: "空格", original: "速度 不错" }));
   assert.equal(JSON.stringify(injected.matchRemarkRules("测试🙂", ["符号"])), JSON.stringify({ remark: "测试", rule: "符号", original: "测试🙂" }));
+});
+
+function namedFunctionSource(script, name) {
+  const marker = `function ${name}(`;
+  const start = script.indexOf(marker);
+  if (start < 0) throw new Error(`missing function ${name}`);
+  const next = script.indexOf("\nfunction ", start + marker.length);
+  return script.slice(start, next < 0 ? script.length : next).trim();
+}
+
+test("manual preferred groups use readable labels without internal IDs", () => {
+  const context = vm.createContext({});
+  const helpers = ["sourceGroupTypeLabel", "sourceGroupDetailFromMeta", "sourceGroupCanCopyAddress", "getNodeSourceLabel"]
+    .map((name) => namedFunctionSource(adminClientScript, name))
+    .join("\n");
+  vm.runInContext(
+    `${helpers}\nglobalThis.__sourceGroupHelpers = { sourceGroupDetailFromMeta, sourceGroupCanCopyAddress, getNodeSourceLabel };`,
+    context,
+  );
+  const helper = context.__sourceGroupHelpers;
+  const manual = { type: "manual", key: "manual-mvbqakev-6xvub", remark: "IPV6" };
+  assert.equal(helper.sourceGroupDetailFromMeta(manual), "手动优选列表");
+  assert.doesNotMatch(helper.sourceGroupDetailFromMeta(manual), /manual-mvbqakev-6xvub/);
+  assert.equal(helper.sourceGroupCanCopyAddress(manual), false);
+  assert.equal(
+    helper.getNodeSourceLabel({ sourceType: "manual", sourceKey: manual.key, sourceRemark: manual.remark }),
+    "手动优选 · IPV6",
+  );
+  assert.doesNotMatch(
+    helper.getNodeSourceLabel({ sourceType: "manual", sourceKey: manual.key, sourceRemark: manual.remark }),
+    /manual-mvbqakev-6xvub/,
+  );
+
+  const subscription = { type: "subs", key: "https://example.com/list.txt", remark: "" };
+  assert.equal(helper.sourceGroupDetailFromMeta(subscription), "订阅源 · https://example.com/list.txt");
+  assert.equal(helper.sourceGroupCanCopyAddress(subscription), true);
+});
+
+test("source group headings align the title left and keep the node count right", () => {
+  // 标题（备注）与下方的来源说明、统计行使用同一缩进；节点数固定在最右侧。
+  assert.match(adminStyle, /\.source-raw-source-heading\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*12px minmax\(0,\s*1fr\) auto;/s);
+  assert.match(adminStyle, /\.source-raw-source-heading strong\s*\{[^}]*grid-column:\s*2;[^}]*text-align:\s*left;/s);
+  assert.match(adminStyle, /\.source-raw-source-heading span\s*\{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s);
+  assert.match(adminStyle, /\.source-raw-source-detail-row\s*\{[^}]*margin:\s*4px 0 2px 18px;/s);
+  assert.match(adminStyle, /\.source-raw-source-stats\s*\{[^}]*margin:\s*0 0 6px 18px;/s);
 });

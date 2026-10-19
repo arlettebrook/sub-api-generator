@@ -826,7 +826,11 @@ function getNodeAvailability(node) {
 }
 function getAvailabilityRank(value) { return value === 'available' ? 0 : value === 'unavailable' ? 1 : 2; }
 function getNodeDuration(node) { const value = Number(getNodeSourceStatus(node)?.durationMs); return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER; }
-function getNodeSourceLabel(node) { return node?.sourceKey ? (node.sourceType === 'apis' ? 'API 源 · ' : '订阅源 · ') + node.sourceKey : '来源未知'; }
+function getNodeSourceLabel(node) {
+  if (!node?.sourceKey) return '来源未知';
+  const name = String(node.sourceRemark || '').trim() || node.sourceKey;
+  return sourceGroupTypeLabel(node.sourceType) + ' · ' + name;
+}
 
 function updateRegionOptions() {
   if (!nodesRegionFilterEl) return;
@@ -842,7 +846,7 @@ function updateNodeFilterOptions() {
   const sources = [...new Map(getPreviewDataNodes().filter((node) => node.sourceKey).map((node) => [node.sourceType + ':' + node.sourceKey, node])).values()];
   nodesSourceFilterEl.innerHTML = '<option value="">全部来源</option>' + sources.map((node) => {
     const value = node.sourceType + ':' + node.sourceKey;
-    const label = (node.sourceType === 'apis' ? 'API 源 · ' : node.sourceType === 'manual' ? '手动优选 · ' : '订阅源 · ') + node.sourceKey;
+    const label = getNodeSourceLabel(node);
     return '<option value="' + value.replace(/"/g, '&quot;') + '">' + label.replace(/</g, '&lt;') + '</option>';
   }).join('');
   if (sources.some((node) => node.sourceType + ':' + node.sourceKey === selected)) nodesSourceFilterEl.value = selected;
@@ -984,7 +988,11 @@ async function fetchNodes(emptyRetry = 0) {
         node.remark = '未命名';
       }
       node.outputValue = outputValue;
-      if (source) { node.sourceType = source.type; node.sourceKey = source.key; }
+      if (source) {
+        node.sourceType = source.type;
+        node.sourceKey = source.key;
+        node.sourceRemark = source.remark || '';
+      }
     });
     currentNodes = nodes;
     updateRegionOptions();
@@ -2102,13 +2110,19 @@ function sourceGroupLabelFromMeta(meta, keepType = false) {
   const type = sourceGroupTypeLabel(meta.type);
   const remark = String(meta.remark || '').trim();
   if (remark) return keepType ? type + ' · ' + remark : remark;
-  const name = sourceGroupShortName(meta.key);
+  const name = meta.type === 'manual' ? '未命名手动列表' : sourceGroupShortName(meta.key);
   return keepType ? type + ' · ' + name : name;
 }
 
 function sourceGroupDetailFromMeta(meta) {
   if (!meta) return '';
+  // 手动优选没有外部地址，列表 ID 只是内部随机标识，不展示给用户。
+  if (meta.type === 'manual') return '手动优选列表';
   return sourceGroupTypeLabel(meta.type) + ' · ' + meta.key;
+}
+
+function sourceGroupCanCopyAddress(meta) {
+  return Boolean(meta?.key) && meta.type !== 'manual';
 }
 
 function sourceGroupKeptCount(id) {
@@ -4835,7 +4849,7 @@ function renderSourceRawResults(view = sourceRawTab) {
         detail.textContent = sourceGroupDetailFromMeta(meta);
         detail.title = detail.textContent;
         detailRow.appendChild(detail);
-        if (meta) {
+        if (sourceGroupCanCopyAddress(meta)) {
           const copyAddress = document.createElement('button');
           copyAddress.type = 'button';
           copyAddress.className = 'source-raw-source-copy';

@@ -3277,15 +3277,18 @@ export const adminStyle = `
   }
 
   .source-raw-source-heading {
-    display: flex;
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
+    justify-content: stretch;
+    column-gap: 6px;
+    row-gap: 3px;
     width: 100%;
     min-width: 0;
+    height: auto;
     padding: 0;
     border: 0;
     background: transparent;
-    gap: 10px;
     color: var(--text-primary);
     font-size: 13px;
     cursor: pointer;
@@ -3303,6 +3306,7 @@ export const adminStyle = `
 
   .source-raw-source-heading-row .source-raw-source-heading {
     flex: 1 1 auto;
+    width: 100%;
   }
 
   .source-raw-source-retry {
@@ -3339,7 +3343,8 @@ export const adminStyle = `
 
   .source-raw-source-heading::before {
     content: '▾';
-    flex: 0 0 12px;
+    grid-column: 1;
+    grid-row: 1;
     color: var(--text-tertiary);
     font-size: 12px;
     text-align: center;
@@ -3350,8 +3355,11 @@ export const adminStyle = `
   }
 
   .source-raw-source-heading strong {
+    grid-column: 2;
+    grid-row: 1;
     min-width: 0;
     overflow: hidden;
+    text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -3362,9 +3370,12 @@ export const adminStyle = `
   }
 
   .source-raw-source-heading span {
-    flex: 0 0 auto;
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
     color: var(--text-tertiary);
     font-size: 11px;
+    white-space: nowrap;
   }
 
   .source-raw-source-detail {
@@ -3412,7 +3423,8 @@ export const adminStyle = `
   }
 
   .source-raw-source-error {
-    flex: 1 1 auto;
+    grid-column: 2 / 4;
+    grid-row: 2;
     color: var(--danger);
     font-size: 11px;
     font-style: normal;
